@@ -126,6 +126,7 @@ class AnalysisInfo:
     clarity: float  # how well chords fit the sound; below MIN_CLARITY the chart is flagged
     chords_reliable: bool
     stems_gain: float | None  # play the stems at 1 / stems_gain to match the recording
+    bpm_hint: float | None = None  # the tempo given with --bpm, when there was one
 
 
 @dataclass(frozen=True)

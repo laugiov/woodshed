@@ -568,7 +568,27 @@
     $("trDown").addEventListener("click", () => app.transposeTo(store.get().transpose - 1));
     $("capoUp").addEventListener("click", () => store.set({ capo: Math.min(7, store.get().capo + 1) }));
     $("capoDown").addEventListener("click", () => store.set({ capo: Math.max(0, store.get().capo - 1) }));
-    for (const [button, menu] of [["mixBtn", "mixMenu"], ["helpBtn", "helpMenu"]]) {
+    // Export: text formats made here with your corrections; MIDI and MusicXML as analysed.
+    const stem = (meta.file.replace(/\.[^.]*$/, "") || "song").replace(/[<>:"/\\|?*]/g, "_");
+    const fileOf = (ext) => (song.view.exports || []).find((f) => f.endsWith("." + ext));
+    const item = (label, detail, attrs) => h("button", { type: "button", class: "item", ...attrs }, h("span", null, label), h("small", null, detail));
+    W.clear(
+      $("exportItems"),
+      item("ChordPro", "With your corrections. Opens in OnSong, SongbookPro and other songbook apps", {
+        "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song), "text/plain"),
+      }),
+      item("Chord timeline (.lab)", "With your corrections. Start, end and chord, for analysis tools", {
+        "data-testid": "export-lab", onclick: () => W.exports.save(stem + ".lab", W.exports.lab(song), "text/plain"),
+      }),
+      item("JSON", "With your corrections. The whole analysis, for developers", {
+        "data-testid": "export-json", onclick: () => W.exports.save(stem + ".json", W.exports.json(song), "application/json"),
+      }),
+      fileOf("mid") ? h("a", { class: "item", href: encodeURI(fileOf("mid")), download: stem + ".mid", "data-testid": "export-midi" }, h("span", null, "MIDI"), h("small", null, "Chords, bass and drums, as analysed (without your corrections)")) : null,
+      fileOf("musicxml") ? h("a", { class: "item", href: encodeURI(fileOf("musicxml")), download: stem + ".musicxml", "data-testid": "export-musicxml" }, h("span", null, "MusicXML"), h("small", null, "Chord symbols and bass line for MuseScore, as analysed (without your corrections)")) : null,
+      item("Print the chart", "One page for the music stand", { "data-testid": "export-print", onclick: () => window.print() }),
+    );
+
+    for (const [button, menu] of [["mixBtn", "mixMenu"], ["helpBtn", "helpMenu"], ["exportBtn", "exportMenu"]]) {
       const anchor = $(button);
       anchor.setAttribute("data-menu-anchor", "1");
       anchor.addEventListener("click", (e) => {

@@ -28,13 +28,6 @@ def test_module_entry_point_runs() -> None:
     assert out.stdout.startswith("woodshed ")
 
 
-def test_a_song_argument_is_refused_until_analysis_exists(capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as exc:
-        cli.main(["song.mp3"])
-    assert exc.value.code == 2
-    assert "not implemented" in capsys.readouterr().err
-
-
 def test_module_entry_point_in_process(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     import runpy
 

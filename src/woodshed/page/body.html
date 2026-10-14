@@ -1,4 +1,5 @@
 <div class="wrap" id="wrap">
+  <div class="pending" id="pending" hidden role="status" data-testid="pending"></div>
   <header class="head">
     <div class="song">
       <div class="brandrow"><span class="brand">woodshed</span></div>
@@ -7,6 +8,7 @@
     </div>
     <div class="head-actions">
       <div class="plays"><span class="label">I play</span><div class="seg-ctl" id="instruments" role="group" aria-label="I play"></div></div>
+      <button class="btn" id="exportBtn" type="button" data-testid="export" aria-haspopup="menu">Export</button>
       <button class="btn stage-btn" id="stageBtn" type="button" data-testid="stage-open" title="Full screen, readable from the music stand (S)">Stage mode</button>
     </div>
   </header>
@@ -91,6 +93,10 @@
   <p class="desk-note" id="mixNote" style="margin: 2px 0 0"></p>
   <h3>Preview sound</h3>
   <div class="seg-ctl" id="soundCtl" role="group" aria-label="Sound of the chord previews"></div>
+</div>
+<div class="menu" id="exportMenu" hidden role="menu" aria-label="Export" data-testid="export-menu">
+  <h3>Export</h3>
+  <div id="exportItems"></div>
 </div>
 <div class="menu" id="helpMenu" hidden role="dialog" aria-label="Shortcuts" data-testid="help-menu">
   <h3>Hands on the instrument</h3>

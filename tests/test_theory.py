@@ -149,3 +149,17 @@ def test_a_major_seventh_keeps_an_upper_case_numeral() -> None:
     assert th.roman(0, "maj7", th.Key(0)) == "Imaj7"
     assert th.roman(9, "m7", th.Key(0)) == "vi7"
     assert th.roman(7, "7", th.Key(0)) == "V7"
+
+
+@pytest.mark.parametrize("mode", ["maj", "min"])
+def test_no_root_in_any_key_needs_a_double_accidental(mode: str) -> None:
+    for tonic in range(12):
+        key = th.Key(tonic, mode)  # type: ignore[arg-type]
+        for pc in range(12):
+            name = th.spell_root(pc, key)
+            assert th.parse_label(name) == (pc, ""), (key, pc, name)
+            assert not name.endswith(("bb", "##")) and len(name) <= 2
+
+
+def test_the_flat_second_of_a_flat_key_is_spelled_plainly() -> None:
+    assert th.spell_root(9, th.Key(8)) == "A"  # bII of Ab: A, not Bbb

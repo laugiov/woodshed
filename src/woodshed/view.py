@@ -34,7 +34,9 @@ def _timed(song: Song) -> list[theory.TimedChord]:
     return [theory.TimedChord(c.pc, c.quality, c.beats) for bar in song.structure.bars for c in bar.chords if c.pc >= 0]
 
 
-def view(song: Song, tracks: list[Track]) -> dict[str, Any]:
+def view(
+    song: Song, tracks: list[Track], pending_seconds: float | None = None, exports: list[str] | None = None
+) -> dict[str, Any]:
     """The `view` block embedded next to the song: everything the page displays but does not compute."""
     timed = _timed(song)
     transpositions = []
@@ -54,6 +56,9 @@ def view(song: Song, tracks: list[Track]) -> dict[str, Any]:
         "romans": {q: [theory.roman(pc, q, song.key) for pc in range(12)] for q in QUALITIES},
         "shapes": theory.SHAPES,
         "tracks": [{"id": t.id, "label": t.label, "file": t.file} for t in tracks],
+        # While the stems are being separated, the page says when to reload.
+        "pending": None if pending_seconds is None else {"eta_seconds": max(1, round(pending_seconds))},
+        "exports": exports or [],  # files in the page folder, as written by the analysis
     }
 
 

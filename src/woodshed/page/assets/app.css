@@ -2,6 +2,15 @@
 [hidden] { display: none !important; }
 /* Shown by the template only when this stylesheet did not load (a page opened from inside a ZIP). */
 .missing-files { display: none !important; }
+@media print {
+  .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot { display: none !important; }
+  body { background: #fff; color: #000; }
+  .main { display: block; }
+  .panel { border: none; box-shadow: none; background: #fff; }
+  .bar.cur, .bar.inloop { background: none; }
+  .cursor { display: none; }
+}
+.pending { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft); color: var(--ink); font-size: 15px; }
 
 /* Layout: the chart is the music stand (hero, left); the instrument desk sits on the right; the player is pinned to the bottom like any audio app. */
 :root {

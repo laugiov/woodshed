@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -35,20 +36,42 @@ class Meter:
     halved: bool
 
 
-def resolve_meter(spec: Spectral, grid: Floats, downbeats: Floats | None, beats_per_bar: int, sevenths: bool) -> Meter:
+def fit_octave(spec: Spectral, grid: Floats, bpm: float) -> tuple[Floats, bool]:
+    """The grid kept, halved or doubled, whichever lands nearest the tempo the musician hears.
+
+    Returns (grid, halved). Halving keeps the more accented of the two beat parities.
+    """
+    tempo = 60.0 / float(np.median(np.diff(grid)))
+    options = {"keep": tempo, "halve": tempo / 2, "double": tempo * 2}
+    best = min(options, key=lambda k: abs(math.log(options[k] / bpm)))
+    if best == "halve":
+        accents = beat_accents(spec, grid)
+        parity = 0 if float(np.median(accents[0::2])) >= float(np.median(accents[1::2])) else 1
+        return grid[parity::2], True
+    if best == "double":
+        return np.sort(np.concatenate([grid, grid[:-1] + np.diff(grid) / 2])), False
+    return grid, False
+
+
+def resolve_meter(
+    spec: Spectral, grid: Floats, downbeats: Floats | None, beats_per_bar: int, sevenths: bool, bpm: float | None = None
+) -> Meter:
     """Tempo octave and bar phase, then one last decoding on the final grid with that phase.
 
     Every correction ends in a fresh decoding, so the chords, the doubts and the bar lines the
-    chart uses all come from the same grid and the same phase.
+    chart uses all come from the same grid and the same phase. `bpm`, the tempo the musician
+    hears, replaces the automatic tempo-octave guess.
     """
+    halved = False
+    if bpm is not None:
+        grid, halved = fit_octave(spec, grid, bpm)
     phase: int | None = None
     if downbeats is not None:
         found, share = meter.phase_from_downbeats(grid, downbeats, beats_per_bar)
         phase = found if share >= MIN_DOWNBEAT_SHARE else None
     decoded = decode(sync(spec, grid), sevenths, beats_per_bar, phase=phase)
 
-    halved = False
-    if downbeats is None:  # beat_this does not double the tempo; librosa sometimes does
+    if downbeats is None and bpm is None:  # beat_this does not double the tempo; librosa sometimes does
         parity = meter.tempo_octave_parity(decoded.labels, decoded.tempo, beat_accents(spec, decoded.beat_times))
         if parity is not None:
             decoded = decode(sync(spec, decoded.beat_times[parity::2]), sevenths, beats_per_bar)
@@ -72,6 +95,7 @@ def analyze(
     offline: bool = False,
     stems_result: stems.Stems | None = None,
     progress: Progress | None = None,
+    bpm: float | None = None,
 ) -> Song:
     """Analyse one recording. With `use_stems`, the stems also give each instrument's part and,
     when beat_this is installed, better beats and downbeats.
@@ -100,7 +124,7 @@ def analyze(
         _, grid = beats.track_librosa(y)
 
     report("chords", 0.0)
-    resolved = resolve_meter(spectral(y), grid, downbeats, beats_per_bar, sevenths)
+    resolved = resolve_meter(spectral(y), grid, downbeats, beats_per_bar, sevenths, bpm)
     decoded = resolved.decoded
     times = decoded.beat_times
 
@@ -146,6 +170,7 @@ def analyze(
             clarity=decoded.clarity,
             chords_reliable=decoded.clarity >= MIN_CLARITY,
             stems_gain=None if separated is None else separated.gain,
+            bpm_hint=bpm,
         ),
         meta=Meta(__version__, time.monotonic() - started),
     )

@@ -12,6 +12,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from woodshed import exports
 from woodshed import song as song_json
 from woodshed import tracks as track_files
 from woodshed.errors import WoodshedError
@@ -72,7 +73,13 @@ def _readable(folder: Path) -> None:
         path.chmod((0o777 if path.is_dir() else 0o666) & ~umask)
 
 
-def build(song: Song, source: str | Path, out_dir: str | Path, stems: Stems | None = None) -> Path:
+def build(
+    song: Song,
+    source: str | Path,
+    out_dir: str | Path,
+    stems: Stems | None = None,
+    pending_seconds: float | None = None,
+) -> Path:
     """Write the page folder for `song` into `out_dir` and return its path.
 
     The folder is assembled next to its final place and renamed in one step: an interrupted build
@@ -85,7 +92,10 @@ def build(song: Song, source: str | Path, out_dir: str | Path, stems: Stems | No
         with resources.as_file(resources.files("woodshed").joinpath("page").joinpath("assets")) as assets:
             shutil.copytree(assets, tmp / "assets")
         tracks = track_files.write_tracks(Path(source), stems, tmp)
-        data = {"song": song_json.to_json(song), "view": view(song, tracks)}
+        # Cleaned once, at the source: the page and every export get valid UTF-8 text.
+        song_data = json.loads(_clean_text(json.dumps(song_json.to_json(song), ensure_ascii=False)))
+        written = [f"exports/{p.name}" for p in exports.write_all(song_data, tmp / "exports")]
+        data = {"song": song_data, "view": view(song, tracks, pending_seconds, written)}
         (tmp / "index.html").write_text(page_html(song, data), encoding="utf-8")
         _readable(tmp)
         try:

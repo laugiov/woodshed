@@ -74,6 +74,19 @@ def common_gain(signals: dict[str, np.ndarray]) -> float:
     return 1.0 if peak <= CEILING else CEILING / peak
 
 
+def _folder(src: Path, model: str) -> Path:
+    return cache_dir() / "stems" / f"{model}-{fingerprint(src)}"
+
+
+def cached(path: str | Path, model: str = MODEL) -> Stems | None:
+    """The stems of this recording if they are already separated, else None (nothing is computed)."""
+    folder = _folder(Path(path).expanduser().resolve(), model)
+    paths = {name: folder / f"{name}.flac" for name in STEM_NAMES}
+    if not _usable(folder, paths):
+        return None
+    return Stems(folder, paths, from_cache=True, gain=_read_gain(folder) or 1.0)
+
+
 def separate(
     path: str | Path,
     *,
@@ -83,13 +96,13 @@ def separate(
 ) -> Stems:
     """Separate drums, bass, other and vocals. Cached: a song is only separated once."""
     src = Path(path).expanduser().resolve()
-    folder = cache_dir() / "stems" / f"{model}-{fingerprint(src)}"
-    paths = {name: folder / f"{name}.flac" for name in STEM_NAMES}
-    if _usable(folder, paths):
-        cached_gain = _read_gain(folder) or 1.0
+    hit = cached(src, model)
+    if hit is not None:
         if progress:
             progress(1.0)
-        return Stems(folder, paths, from_cache=True, gain=cached_gain)
+        return hit
+    folder = _folder(src, model)
+    paths = {name: folder / f"{name}.flac" for name in STEM_NAMES}
     try:  # before decoding: a missing extra must not cost a long decode first
         from demucs.api import LoadModelError, Separator
     except ImportError as exc:

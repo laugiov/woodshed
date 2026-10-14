@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -438,3 +439,84 @@ def test_the_waveform_layer_is_not_rebuilt_while_playing_at_fractional_zoom(brow
     page.wait_for_timeout(1000)
     assert page.evaluate("window.canvases") == 0  # about 60 frames, no rebuild
     context.close()
+
+
+def test_a_page_built_before_its_stems_says_when_to_reload(page: Any, pages_root: str, tmp_path: Path) -> None:
+    from tests import synth
+    from woodshed import analysis, build
+
+    wav = synth.write("pop", tmp_path).wav
+    folder = build.build(analysis.analyze(wav, use_stems=False), wav, tmp_path / "out", None, pending_seconds=120)
+    page.goto((folder / "index.html").as_uri())
+    for _ in range(100):
+        if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
+            break
+        page.wait_for_timeout(25)
+    expect(page.get_by_test_id("pending")).to_be_visible()
+    expect(page.get_by_test_id("pending")).to_contain_text("Reload this page in about 2 min")
+
+
+def test_a_finished_page_has_no_pending_banner(open_page: Any) -> None:
+    o = open_page("pop")
+    expect(o.page.get_by_test_id("pending")).to_be_hidden()
+
+
+def download(o: Any, testid: str) -> str:
+    o.page.get_by_test_id("export").click()
+    with o.page.expect_download() as info:
+        o.page.get_by_test_id(testid).click()
+    path = info.value.path()
+    assert path is not None
+    return Path(path).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", ["pop", "pickup", "waltz", "ballad", "funk"])  # ballad, funk: .lab clipped
+def test_text_exports_from_the_page_equal_the_python_ones(open_page: Any, name: str) -> None:
+    from woodshed import exports
+
+    o = open_page(name, stems=name != "waltz")
+    data = o.js("Woodshed.current.song")
+    assert download(o, "export-chordpro") == exports.chordpro(data)
+    assert download(o, "export-lab") == exports.lab(data)
+
+
+def test_exports_from_the_page_carry_the_corrections(open_page: Any) -> None:
+    import jsonschema
+
+    from woodshed import song
+
+    o = open_page("pickup")
+    o.page.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("pick").first.click()  # G becomes Gm
+    chordpro = download(o, "export-chordpro")
+    assert "Gm" in chordpro and "?" not in chordpro.split("{end_of_grid}")[0].split("\n", 6)[-1]
+    data = json.loads(download(o, "export-json"))
+    jsonschema.validate(data, song.schema())
+    assert data["bars"][0]["chords"][1] == {"pc": 7, "quality": "m", "beats": 1, "doubt": None}
+
+
+def test_midi_and_musicxml_come_from_the_page_folder(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("export").click()
+    for testid, ext in (("export-midi", ".mid"), ("export-musicxml", ".musicxml")):
+        href = o.page.get_by_test_id(testid).get_attribute("href")
+        assert href is not None and href.startswith("exports/") and href.endswith(ext)
+        assert (o.folder / href).is_file()
+
+
+def test_print_opens_the_print_dialog(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("window.print = () => { window.printed = true; }")
+    o.page.get_by_test_id("export").click()
+    o.page.get_by_test_id("export-print").click()
+    assert o.js("window.printed === true")
+
+
+def test_exports_match_python_for_a_half_bpm_and_a_hostile_title(open_page: Any) -> None:
+    from woodshed import exports
+
+    o = open_page("pop")
+    o.js("Woodshed.current.song.bpm = 118.5; Woodshed.current.song.title = 'Live }{x}\\n at <Club>'")
+    data = o.js("Woodshed.current.song")
+    assert download(o, "export-chordpro") == exports.chordpro(data)
+    assert download(o, "export-lab") == exports.lab(data)

@@ -91,6 +91,14 @@
     return {
       render(s) {
         $("songTitle").textContent = meta.title;
+        const pending = song.view.pending;
+        if (pending) {
+          const minutes = Math.max(1, Math.round(pending.eta_seconds / 60));
+          $("pending").textContent =
+            "Separating the instruments on this computer. Reload this page in about " + minutes + " min" +
+            " for the instrument tracks and parts; until then it plays the full mix.";
+          $("pending").hidden = false;
+        }
         renderFacts(s);
         renderInstruments(s);
         renderPath(s);

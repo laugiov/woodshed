@@ -63,6 +63,33 @@ def duration(path: str | Path) -> float:
         raise AudioError(f"{src.name}: could not read its length") from exc
 
 
+# File extensions a songbook folder is scanned for.
+MEDIA = frozenset(
+    [
+        ".mp3",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".oga",
+        ".opus",
+        ".m4a",
+        ".aac",
+        ".aif",
+        ".aiff",
+        ".wma",
+        ".wv",
+        ".ac3",
+        ".mp4",
+        ".m4v",
+        ".mov",
+        ".mkv",
+        ".webm",
+        ".avi",
+        ".mpg",
+        ".ts",
+    ]
+)
+
 # Demuxers for the audio and video files musicians have. Playlist and list formats (hls, concat,
 # m3u, ffconcat) are left out on purpose. The ones ffmpeg can encode are tested in test_audio.py.
 FORMATS = (

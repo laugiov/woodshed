@@ -1,0 +1,333 @@
+"""Exports of a song, from its JSON (schema v1): ChordPro, MIREX .lab, MIDI and MusicXML.
+
+They read the published song format, not the analysis objects, so a page's own data (with the
+listener's corrections) can be exported the same way.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+import struct
+from pathlib import Path
+from typing import Any
+from xml.sax.saxutils import escape
+
+from woodshed import theory
+
+Song = dict[str, Any]
+LAB_QUALITY = {"": "maj", "m": "min", "7": "7", "m7": "min7"}
+PPQ = 480  # MIDI ticks per beat
+STEM_SLOTS = 4  # sixteenths per beat in the parts
+
+
+CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def directive_text(text: str) -> str:
+    """Text inside a ChordPro directive: one line, no braces (they would end the directive)."""
+    return CONTROL.sub("", re.sub(r"[\r\n]+", " ", text)).replace("{", "(").replace("}", ")")
+
+
+def xml_text(text: str) -> str:
+    """Text for XML 1.0: control characters removed, markup escaped."""
+    return escape(CONTROL.sub("", text))
+
+
+def half_up(x: float) -> int:
+    """Rounding as the page does it (JavaScript's Math.round), for identical exports."""
+    return math.floor(x + 0.5)
+
+
+def _key(song: Song) -> theory.Key:
+    return theory.Key(song["key"]["pc"], song["key"]["mode"])
+
+
+def _name(chord: dict[str, Any], key: theory.Key) -> str:
+    return "N.C." if chord["pc"] < 0 else theory.chord_name(chord["pc"], chord["quality"], key)
+
+
+def beat_time(song: Song, b: float) -> float:
+    """Time of beat b counted from the first bar's beat one (extrapolated outside the tracked beats)."""
+    beats = song["beats"]
+    i = song["first_beat"] + b
+    n = len(beats)
+    if 0 <= i <= n - 1 and float(i).is_integer():
+        return float(beats[int(i)])
+    lo = min(max(int(i), 0), n - 2)
+    return float(beats[lo] + (i - lo) * (beats[lo + 1] - beats[lo]))
+
+
+def chord_spans(song: Song) -> list[tuple[int, int, dict[str, Any]]]:
+    """(first beat, beats, chord) for every chord, in beats from the first bar's beat one."""
+    out = []
+    per = song["beats_per_bar"]
+    for u, bar in enumerate(song["bars"]):
+        b = u * per
+        for c in bar["chords"]:
+            out.append((b, c["beats"], c))
+            b += c["beats"]
+    return out
+
+
+# ChordPro: the chart as a grid, with sections and repeats, for songbook apps.
+
+
+def chordpro(song: Song) -> str:
+    key = _key(song)
+    per = song["beats_per_bar"]
+    key_name = theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
+    lines = [
+        "{title: " + directive_text(song["title"]) + "}",
+        "{key: " + key_name + "}",
+        "{tempo: " + str(half_up(song["bpm"])) + "}",
+        "{time: " + f"{per}/4" + "}",
+        "{comment: chords found by woodshed from " + directive_text(song["file"]) + "; check the ones marked ?}",
+        "",
+    ]
+    for group in song["groups"]:
+        lines.append('{start_of_grid label="' + directive_text(group["label"]).replace('"', "'") + '"}')
+        bars = []
+        for u in group["occurrences"][0]:
+            cells: list[str] = []
+            for c in song["bars"][u]["chords"]:
+                name = _name(c, key) + ("?" if c["doubt"] else "")
+                cells += [name] + ["."] * (c["beats"] - 1)
+            bars.append(" ".join(cells))
+        times = len(group["occurrences"])
+        if times > 1:
+            lines.append("|: " + " | ".join(bars) + " :|" + (f" x{times}" if times > 2 else ""))
+        else:
+            lines.append("| " + " | ".join(bars) + " |")
+        lines.append("{end_of_grid}")
+    return "\n".join(lines) + "\n"
+
+
+# MIREX .lab: start, end and chord label, the format of chord-recognition evaluations.
+
+
+def lab(song: Song) -> str:
+    rows: list[tuple[float, float, str]] = []
+    for b, n, c in chord_spans(song):
+        label = "N" if c["pc"] < 0 else theory.SHARP_NAMES[c["pc"]] + ":" + LAB_QUALITY[c["quality"]]
+        duration = float(song["duration"])
+        start, end = max(0.0, beat_time(song, b)), min(duration, beat_time(song, b + n))
+        if start >= duration:
+            break
+        if rows and rows[-1][2] == label:
+            rows[-1] = (rows[-1][0], end, label)
+        else:
+            rows.append((start, end, label))
+    if rows and rows[0][0] > 0:
+        rows.insert(0, (0.0, rows[0][0], "N"))
+    if rows and rows[-1][1] < song["duration"]:
+        rows.append((rows[-1][1], float(song["duration"]), "N"))
+    return "".join(f"{s:.3f} {e:.3f} {label}\n" for s, e, label in rows)
+
+
+# MIDI: chords, bass line and drums on the beat grid, at the song's tempo (type 1, 480 PPQ).
+
+
+def _vlq(n: int) -> bytes:
+    out = [n & 0x7F]
+    n >>= 7
+    while n:
+        out.append((n & 0x7F) | 0x80)
+        n >>= 7
+    return bytes(reversed(out))
+
+
+def _track(events: list[tuple[int, bytes]], name: str) -> bytes:
+    """events: (absolute tick, message bytes); sorted, with note-offs before note-ons at one tick."""
+    data = b"\x00\xff\x03" + _vlq(len(name.encode())) + name.encode()
+    now = 0
+    for tick, msg in sorted(events, key=lambda e: (e[0], e[1][0] & 0xF0 != 0x80)):
+        data += _vlq(tick - now) + msg
+        now = tick
+    data += b"\x00\xff\x2f\x00"
+    return b"MTrk" + struct.pack(">I", len(data)) + data
+
+
+def _note(events: list[tuple[int, bytes]], channel: int, pitch: int, start: int, length: int, velocity: int) -> None:
+    events.append((start, bytes([0x90 | channel, pitch, velocity])))
+    events.append((start + max(1, length), bytes([0x80 | channel, pitch, 0])))
+
+
+def midi(song: Song) -> bytes:
+    per = song["beats_per_bar"]
+    tempo = struct.pack(">I", round(60_000_000 / song["bpm"]))[1:]
+    meta = [(0, b"\xff\x51\x03" + tempo), (0, b"\xff\x58\x04" + bytes([per, 2, 24, 8]))]
+    chords: list[tuple[int, bytes]] = []
+    for b, n, c in chord_spans(song):
+        if c["pc"] >= 0:
+            third = 3 if c["quality"].startswith("m") else 4
+            seventh = (10,) if c["quality"].endswith("7") else ()
+            for interval in (0, third, 7, *seventh):  # close position from the root, around middle C
+                _note(chords, 0, 53 + (c["pc"] - 5) % 12 + interval, b * PPQ, n * PPQ - 10, 80)
+    bass: list[tuple[int, bytes]] = []
+    drums: list[tuple[int, bytes]] = []
+    parts = song["parts"]
+    sixteenth = PPQ // STEM_SLOTS
+    if parts:
+        for u, line in enumerate(parts["bass"]):
+            onsets = [(i, e) for i, e in enumerate(line) if e]
+            for k, (i, e) in enumerate(onsets):
+                end = onsets[k + 1][0] if k + 1 < len(onsets) else len(line)
+                _note(bass, 1, e[0], (u * per) * PPQ + i * sixteenth, (end - i) * sixteenth - 10, 90)
+        groove = parts["groove"]
+        if groove:
+            for u in range(len(song["bars"])):
+                for i in range(per * STEM_SLOTS):
+                    at = (u * per) * PPQ + i * sixteenth
+                    for row, pitch in (("kick", 36), ("snare", 38), ("hat", 42)):
+                        if groove[row][i] > 0.5:
+                            _note(drums, 9, pitch, at, sixteenth // 2, 100 if row != "hat" else 70)
+    else:  # without stems: the root on each chord, so the file still has a bass line
+        for b, n, c in chord_spans(song):
+            if c["pc"] >= 0:
+                _note(bass, 1, 36 + c["pc"], b * PPQ, n * PPQ - 10, 90)
+    programs = [(0, bytes([0xC0, 0])), (0, bytes([0xC1, 33]))]  # piano, finger bass
+    tracks = [
+        _track(meta, song["title"][:120]),
+        _track(programs[:1] + chords, "Chords"),
+        _track(programs[1:] + bass, "Bass"),
+    ]
+    if drums:
+        tracks.append(_track(drums, "Drums"))
+    return b"MThd" + struct.pack(">IHHH", 6, 1, len(tracks), PPQ) + b"".join(tracks)
+
+
+# MusicXML: chord symbols over the bars, and the bass line when there are stems.
+
+KIND = {"": "major", "m": "minor", "7": "dominant", "m7": "minor-seventh"}
+STEPS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def _spelled(pc: int, key: theory.Key) -> tuple[str, int]:
+    name = theory.spell_root(pc, key)
+    return name[0], {"": 0, "#": 1, "b": -1}[name[1:]]
+
+
+def _fifths(key: theory.Key) -> int:
+    major = key.relative_major
+    sharps = {0: 0, 7: 1, 2: 2, 9: 3, 4: 4, 11: 5, 6: 6}
+    flats = {5: -1, 10: -2, 3: -3, 8: -4, 1: -5}
+    return flats[major] if major in flats else sharps[major]
+
+
+def _durations(n: int) -> list[tuple[int, str, bool]]:
+    """A length in sixteenths as tied notes: (sixteenths, type, dotted), longest first."""
+    table = [
+        (16, "whole", False), (12, "half", True), (8, "half", False), (6, "quarter", True),
+        (4, "quarter", False), (3, "eighth", True), (2, "eighth", False), (1, "16th", False),
+    ]  # fmt: skip
+    out = []
+    while n > 0:
+        size, kind, dot = next(t for t in table if t[0] <= n)
+        out.append((size, kind, dot))
+        n -= size
+    return out
+
+
+def _pitch_xml(midi_note: int, key: theory.Key) -> str:
+    step, alter = _spelled(midi_note % 12, key)
+    octave = (midi_note - STEPS[step] - alter) // 12 - 1
+    alter_xml = f"<alter>{alter}</alter>" if alter else ""
+    return f"<pitch><step>{step}</step>{alter_xml}<octave>{octave}</octave></pitch>"
+
+
+def _notes(events: list[tuple[int, int | None]], key: theory.Key, voice: int) -> str:
+    """events: (length in sixteenths, MIDI note or None for a rest), filling a bar."""
+    out = []
+    for length, note in events:
+        pieces = _durations(length)
+        for i, (size, kind, dot) in enumerate(pieces):
+            ties = ""
+            if note is not None and len(pieces) > 1:
+                ties = ('<tie type="stop"/>' if i > 0 else "") + ('<tie type="start"/>' if i < len(pieces) - 1 else "")
+            body = "<rest/>" if note is None else _pitch_xml(note, key)
+            tied = ""
+            if ties:
+                kinds = (["stop"] if i > 0 else []) + (["start"] if i < len(pieces) - 1 else [])
+                tied = "<notations>" + "".join(f'<tied type="{k}"/>' for k in kinds) + "</notations>"
+            dotted = "<dot/>" if dot else ""
+            timing = f"<duration>{size}</duration>{ties}<voice>{voice}</voice><type>{kind}</type>{dotted}"
+            out.append(f"<note>{body}{timing}{tied}</note>")
+    return "".join(out)
+
+
+def musicxml(song: Song) -> str:
+    key = _key(song)
+    per = song["beats_per_bar"]
+    slots = per * STEM_SLOTS
+    parts = song["parts"]
+    attributes = (
+        f"<attributes><divisions>{STEM_SLOTS}</divisions><key><fifths>{_fifths(key)}</fifths>"
+        f"<mode>{'major' if key.mode == 'maj' else 'minor'}</mode></key>"
+        f"<time><beats>{per}</beats><beat-type>4</beat-type></time>"
+    )
+    measures = []
+    for u, bar in enumerate(song["bars"]):
+        xml = [f'<measure number="{u + 1}">']
+        if u == 0:
+            xml.append(attributes + "<clef><sign>F</sign><line>4</line></clef></attributes>")
+        offset = 0
+        for c in bar["chords"]:
+            if c["pc"] >= 0:
+                step, alter = _spelled(c["pc"], key)
+                alter_xml = f"<root-alter>{alter}</root-alter>" if alter else ""
+                xml.append(
+                    f"<harmony><root><root-step>{step}</root-step>{alter_xml}</root><kind>{KIND[c['quality']]}</kind>"
+                )
+                xml.append(f"<offset>{offset * STEM_SLOTS}</offset></harmony>" if offset else "</harmony>")
+            offset += c["beats"]
+        events: list[tuple[int, int | None]] = []
+        if parts:
+            line = parts["bass"][u]
+            onsets = [i for i, e in enumerate(line) if e]
+            if not onsets or onsets[0] > 0:
+                events.append(((onsets[0] if onsets else slots), None))
+            for k, i in enumerate(onsets):
+                end = onsets[k + 1] if k + 1 < len(onsets) else slots
+                events.append((end - i, line[i][0]))
+        else:
+            events.append((slots, None))
+        xml.append(_notes(events, key, 1))
+        xml.append("</measure>")
+        measures.append("".join(xml))
+    title = xml_text(song["title"])
+    part_name = "Bass" if parts else "Chords"
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n'
+        f'<score-partwise version="4.0"><work><work-title>{title}</work-title></work>'
+        "<identification><encoding><software>woodshed</software></encoding></identification>"
+        f'<part-list><score-part id="P1"><part-name>{part_name}</part-name></score-part></part-list>'
+        f'<part id="P1">{"".join(measures)}</part></score-partwise>\n'
+    )
+
+
+def file_stem(song: Song) -> str:
+    """A plain ASCII file name for the exports: safe in any file system and in a page link."""
+    stem = Path(song["file"]).stem.encode("ascii", "ignore").decode()
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")[:80] or "song"
+    return "_" + stem if re.fullmatch(r"(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?", stem, re.IGNORECASE) else stem
+
+
+def write_all(song: Song, folder: Path) -> list[Path]:
+    """Every export of the song into `folder`. The page offers them under the song's own name."""
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = file_stem(song)
+    files = {
+        f"{stem}.cho": chordpro(song).encode("utf-8"),
+        f"{stem}.lab": lab(song).encode("utf-8"),
+        f"{stem}.json": (json.dumps(song, indent=1, ensure_ascii=False) + "\n").encode("utf-8"),
+        f"{stem}.mid": midi(song),
+        f"{stem}.musicxml": musicxml(song).encode("utf-8"),
+    }
+    out = []
+    for name, data in files.items():
+        (folder / name).write_bytes(data)
+        out.append(folder / name)
+    return out

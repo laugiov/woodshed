@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import librosa
@@ -173,7 +174,12 @@ def voicings(other: Audio, grid: Grid, threshold: float = 0.62) -> list[list[int
     """Pitch classes sounding in each bar on the chord instruments, strongest first (up to four)."""
     if _silent(other):
         return [[] for _ in grid.bars]
-    chroma = librosa.feature.chroma_cqt(y=librosa.effects.harmonic(other, margin=4), sr=SR, hop_length=512)
+    harmonic = librosa.effects.harmonic(other, margin=4)
+    with warnings.catch_warnings():
+        # A stem with no pitched content (a hum, a constant) has no tuning to estimate: 0 then.
+        warnings.filterwarnings("ignore", "Trying to estimate tuning from empty frequency set")
+        tuning = float(librosa.estimate_tuning(y=harmonic, sr=SR))
+    chroma = librosa.feature.chroma_cqt(y=harmonic, sr=SR, hop_length=512, tuning=tuning)
     out: list[list[int]] = []
     for i in range(len(grid.bars)):
         a, b = (int(f) for f in librosa.time_to_frames(grid.span(i), sr=SR, hop_length=512))

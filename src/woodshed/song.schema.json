@@ -84,11 +84,12 @@
            "grid_shift": {"type": "number"}}}
       ]
     },
-    "analysis": {"type": "object", "additionalProperties": false, "required": ["beats", "tempo_halved", "stems", "sevenths", "clarity", "chords_reliable", "stems_gain"],
+    "analysis": {"type": "object", "additionalProperties": false, "required": ["beats", "tempo_halved", "stems", "sevenths", "clarity", "chords_reliable", "stems_gain", "bpm_hint"],
                  "properties": {"beats": {"enum": ["librosa", "beat_this"]}, "tempo_halved": {"type": "boolean"},
                                 "stems": {"type": "boolean"}, "sevenths": {"type": "boolean"},
                                 "clarity": {"type": "number", "minimum": 0, "maximum": 1}, "chords_reliable": {"type": "boolean"},
-                                "stems_gain": {"type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 1}}},
+                                "stems_gain": {"type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 1},
+                                "bpm_hint": {"type": ["number", "null"], "exclusiveMinimum": 0}}},
     "meta": {"description": "How this file was made. Not part of the analysis result: it differs between two runs on the same input.",
              "type": "object", "additionalProperties": false, "required": ["version", "seconds"],
              "properties": {"version": {"type": "string"}, "seconds": {"type": "number", "minimum": 0}}}

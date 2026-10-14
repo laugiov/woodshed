@@ -89,8 +89,14 @@ def spell_root(pc: int, key: Key, prefer: Prefer = None) -> str:
     if degree in MAJOR_STEPS:
         return spell(pc, key)
     if degree in LOWERED_DEGREES:
-        return _lower(spell(major + LOWERED_DEGREES[degree], key))
-    return _raise(spell(major + RAISED_DEGREES[degree], key))
+        name = _lower(spell(major + LOWERED_DEGREES[degree], key))
+    else:
+        name = _raise(spell(major + RAISED_DEGREES[degree], key))
+    # A double flat or sharp (Bbb, the bII of Ab) is right on paper but unreadable on a chart:
+    # the plain name of the same note is used instead.
+    if name.endswith(("bb", "##")):
+        return spell(pc, key)
+    return name
 
 
 def chord_name(pc: int, quality: str, key: Key, prefer: Prefer = None) -> str:
