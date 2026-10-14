@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-stems = ["demucs>=4.0.1", "beat-this>=1.1", "torch>=2.4", "torchaudio>=2.4"]
+stems = ["demucs>=4.1", "beat-this>=1.1", "torch>=2.1", "torchaudio>=2.1"]
 bench = ["mir_eval>=0.8"]
 
 [project.scripts]
@@ -87,3 +87,19 @@ branch = true
 fail_under = 85
 show_missing = true
 skip_covered = true
+
+[tool.uv]
+# Demucs pins an old PyTorch on Intel Macs that has no wheels for recent Pythons: the development
+# lock file leaves Intel Macs out (CI runs on Apple silicon), and stops at the newest Python tested.
+# End users are not affected by this.
+environments = ["(sys_platform != 'darwin' or platform_machine != 'x86_64') and python_full_version < '3.15'"]
+
+# Developers and CI get CPU-only PyTorch for the stems extra (the default Linux wheels pull ~5 GB of CUDA).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchaudio = [{ index = "pytorch-cpu" }]

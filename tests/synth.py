@@ -88,7 +88,8 @@ def _hz(midi: float) -> float:
 
 def _tone(freq: float, dur: float, amp: float, rng: np.random.Generator, decay: float = 2.5) -> np.ndarray:
     t = np.arange(int(dur * SR)) / SR
-    env = np.exp(-decay * t) * np.minimum(1.0, t / 0.01)
+    # 10 ms attack, 15 ms release: a hard cut would click, and the click reads as a note onset.
+    env = np.exp(-decay * t) * np.minimum(1.0, t / 0.01) * np.minimum(1.0, (dur - t) / 0.015)
     partials = sum((0.6**k) * np.sin(2 * np.pi * freq * (k + 1) * t + rng.uniform(0, 6.28)) for k in range(6))
     return np.asarray(amp * env * partials)
 
