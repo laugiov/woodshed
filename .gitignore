@@ -1,0 +1,30 @@
+# Environments and caches
+.venv/
+.venvs/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Never published: recordings, references, generated practice rooms
+private/
+*.woodshed/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.opus
+*.m4a
+*.aac
+*.aif
+*.aiff
+*.mp4
+*.mov
+*.webm
