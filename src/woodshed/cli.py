@@ -20,7 +20,7 @@ from woodshed import __version__
 from woodshed.errors import WoodshedError
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTERRUPTED = 0, 1, 2, 130
-COMMANDS = ("chart", "cache")
+COMMANDS = ("chart", "cache", "app")
 
 
 def _meter(parser: argparse.ArgumentParser) -> None:
@@ -34,7 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="woodshed",
         description="Turn a song file into a local practice room: chart, parts and play-along, offline.",
-        epilog="Other commands: 'woodshed chart SONG' prints the text chart; 'woodshed cache' manages the cache.",
+        epilog="Other commands: 'woodshed app' opens your library in the browser; 'woodshed chart SONG' prints"
+        " the text chart; 'woodshed cache' manages the cache.",
     )
     parser.add_argument("--version", action="version", version=f"woodshed {__version__}")
     parser.add_argument(
@@ -73,6 +74,47 @@ def cache_parser() -> argparse.ArgumentParser:
     parser.add_argument("--clear", action="store_true", help="delete the separated stems")
     parser.add_argument("--models", action="store_true", help="with --clear, also delete the downloaded models")
     return parser
+
+
+def app_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="woodshed app", description="A home page for your songs, in the browser: list, add, play."
+    )
+    parser.add_argument(
+        "library", nargs="?", type=Path, default=Path("~/woodshed"), help="the songs folder (default ~/woodshed)"
+    )
+    parser.add_argument("--port", type=int, default=8000, help="port on this computer (default 8000)")
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1: this computer only)"
+    )
+    parser.add_argument("--no-open", action="store_true", help="do not open the browser")
+    parser.add_argument("--no-stems", action="store_true", help="analyse the mix only")
+    parser.add_argument("--offline", action="store_true", help="never download models")
+    parser.add_argument(
+        "--allow-network", action="store_true",
+        help="needed with a --host other than this computer: anyone who reaches the port can use the library",
+    )  # fmt: skip
+    return parser
+
+
+def run_app(argv: Sequence[str]) -> int:
+    parser = app_parser()
+    args = parser.parse_args(argv)
+    from woodshed.app import LOOPBACK, serve
+
+    if args.host not in LOOPBACK and not args.allow_network:
+        parser.error(f"--host {args.host} opens the library to the network: add --allow-network if that is meant")
+    from woodshed.run import Options
+
+    opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False)
+    try:
+        serve(args.library, opts, args.host, args.port, open_browser=not args.no_open)
+    except KeyboardInterrupt:
+        print("woodshed app: stopped", file=sys.stderr)
+    except OSError as exc:  # the port is taken, the folder cannot be written...
+        print(f"woodshed app: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    return EXIT_OK
 
 
 def _check_meter(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -179,5 +221,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     # "chart" and "cache" are commands, unless a file of that name is meant.
     if args and args[0] in COMMANDS and not Path(args[0]).exists():
-        return {"chart": run_chart, "cache": run_cache}[args[0]](args[1:])
+        return {"chart": run_chart, "cache": run_cache, "app": run_app}[args[0]](args[1:])
     return run_pages(args)

@@ -53,6 +53,7 @@ dev = [
     "jsonschema>=4",
     "types-jsonschema",
     "pytest-playwright>=0.7",
+    "pytest-xdist>=3.6",
 ]
 
 [tool.hatch.version]

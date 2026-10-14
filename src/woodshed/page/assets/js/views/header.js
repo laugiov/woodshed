@@ -91,6 +91,8 @@
     return {
       render(s) {
         $("songTitle").textContent = meta.title;
+        // Served by `woodshed app`: the library is one level up. Opened from disk, there is none.
+        $("backLink").hidden = location.protocol === "file:";
         const pending = song.view.pending;
         if (pending) {
           const minutes = Math.max(1, Math.round(pending.eta_seconds / 60));

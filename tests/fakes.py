@@ -20,6 +20,8 @@ def install_fake_torch(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     torch = types.ModuleType("torch")
     torch.hub = hub  # type: ignore[attr-defined]
     torch.from_numpy = lambda a: a  # type: ignore[attr-defined]
+    # Libraries that see "torch" loaded check their arrays against torch.Tensor (scipy does).
+    torch.Tensor = type("Tensor", (), {})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "torch", torch)
     monkeypatch.setitem(sys.modules, "torch.hub", hub)
     return state

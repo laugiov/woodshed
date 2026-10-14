@@ -525,3 +525,14 @@ def test_a_renamed_song_says_where_its_old_page_is(
     capsys.readouterr()
     assert cli.main([str(renamed), "--no-stems", "--no-open"]) == 0
     assert "older page of this recording is left at" in capsys.readouterr().err and (tmp_path / "pop.woodshed").exists()
+
+
+def test_a_new_analysis_revision_rebuilds_old_pages(
+    tmp_path: Path, cache: Path, opened: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    monkeypatch.setattr("woodshed.run.ANALYSIS_REVISION", 999)  # the analysis changed since
+    capsys.readouterr()
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    assert "up to date" not in capsys.readouterr().err

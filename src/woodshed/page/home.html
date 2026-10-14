@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="woodshed-token" content="{{TOKEN}}">
+<title>Library · woodshed</title>
+<link rel="stylesheet" href="/app/assets/fonts.css">
+<link rel="stylesheet" href="/app/assets/app.css">
+</head>
+<body>
+<div class="wrap home" id="wrap">
+  <header class="head">
+    <div class="song">
+      <div class="brandrow"><span class="brand">woodshed</span></div>
+      <h1>Your songs</h1>
+      <div class="facts" id="summary" data-testid="summary"></div>
+    </div>
+    <div class="head-actions">
+      <button class="btn stage-btn" id="addBtn" type="button" data-testid="add">Add songs</button>
+    </div>
+  </header>
+
+  <section class="panel drop" id="drop" data-testid="drop">
+    <input type="file" id="files" multiple hidden data-testid="file-input"
+      accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.aif,.aiff,.wma,.wv,.ac3,.mp4,.m4v,.mov,.mkv,.webm,.avi,.mpg">
+    <p>Drop audio or video files here, or use <b>Add songs</b>. Each one becomes a practice page:
+      first with the full mix (a few seconds), then with every instrument's track.</p>
+    <details class="options">
+      <summary>Options for the next songs</summary>
+      <label>Beats per bar <select id="beats" data-testid="opt-beats"><option>4</option><option>3</option><option>2</option><option>6</option></select></label>
+      <label>Tempo you hear (BPM) <input id="bpm" type="number" min="30" max="300" step="1" placeholder="auto" data-testid="opt-bpm"></label>
+      <label><input id="sevenths" type="checkbox" data-testid="opt-sevenths"> Seventh chords (less reliable)</label>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="label">Library</div>
+    <table class="library" data-testid="library">
+      <thead><tr><th>Song</th><th>Key</th><th>BPM</th><th class="wide">Meter</th><th class="wide">Length</th><th class="wide">To check</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="hint" id="empty" hidden>No song yet: add one above.</p>
+  </section>
+  <footer class="foot"><span>Everything runs on this computer: nothing is uploaded anywhere else.</span></footer>
+</div>
+<div class="toast" id="toast" hidden data-testid="toast"></div>
+<script src="/app/assets/js/core/woodshed.js"></script>
+<script src="/app/assets/js/home/home.js"></script>
+</body>
+</html>

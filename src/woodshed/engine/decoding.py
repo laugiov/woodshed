@@ -20,13 +20,20 @@ Bools = npt.NDArray[np.bool_]
 Mode = Literal["maj", "min"]
 TRIADS = {"": (0, 4, 7), "m": (0, 3, 7)}
 SEVENTHS = {"7": (0, 4, 7, 10), "m7": (0, 3, 7, 10)}
-# A beat is silent below 10% of the amplitude of the loud parts (-20 dB). A soft verse sits around
-# -10 to -15 dB and stays music (see test_a_soft_passage_is_not_erased). An absolute floor was
-# tried and rejected: the beat holding the first note of a song measures like a very soft verse.
+# Silence is judged on the level a quarter of the beat's frames reach, in dBFS, not against the loud parts: a
+# soft verse can sit 25 dB under the chorus and still be music (The Reason: -28 to -34 dBFS).
+# Measured: music never under -35 dBFS, a beat before the first note at -180, a tape hiss at -45.
+SILENCE_DBFS = -50.0
+# Between -50 and -40 dBFS, a beat is silent only if it is also far under the loud parts (a hiss
+# or a room tone between two parts of a loud song).
+QUIET_DBFS = -40.0
 SILENCE_DB = -20.0
-# Digital silence or near silence is silent whatever the rest of the song does. Far below the
-# beat holding a first note (about -33 dBFS on the synthetic songs).
-SILENCE_DBFS = -60.0
+# These levels hold for a song mastered or recorded at a normal level. A recording much quieter
+# overall (a phone, nobody normalised it) moves them down with its own loud parts, or every beat
+# would be "silent". Known limit: noise louder than -40 dBFS (a crowd between two songs) reads
+# as chords; telling it from a soft verse needs more than its level.
+NORMAL_LOUD_DBFS = -20.0
+MAX_SHIFT_DB = 45.0  # quiet recordings are followed down to loud parts at -65 dBFS
 # Median fit of the best triad to the treble chroma, below which the chords are unreliable.
 # Measured: music 0.60 to 0.74 (synthetic songs, Let It Be, a funk cover), drums alone 0.58,
 # white and pink noise 0.53 to 0.54, a solo voice 0.49. A warning only: the margin is thin.
@@ -237,7 +244,12 @@ def decode(
 ) -> Decoded:
     cfg = cfg or Config()
     names, roots, quals, templates = build_chords(sevenths, cfg)
-    silent = (feat.energy_db < SILENCE_DB) | (feat.energy_dbfs < SILENCE_DBFS)
+    loud = float(np.percentile(feat.level_dbfs, 95)) if feat.level_dbfs.size else 0.0
+    # 0 for a normal level, negative for a quiet recording, down to a limit: a file with no
+    # music at all stays silent instead of being treated as a very quiet song.
+    shift = max(-MAX_SHIFT_DB, min(0.0, loud - NORMAL_LOUD_DBFS))
+    level = feat.level_dbfs - shift
+    silent = (level < SILENCE_DBFS) | ((level < QUIET_DBFS) & (feat.energy_db < SILENCE_DB))
     score = _chord_scores(feat, quals, roots, templates, cfg)
 
     # A first pass on triads only, with no prior, sets the key and the bar phase: they must not

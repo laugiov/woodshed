@@ -138,18 +138,44 @@ def test_without_ffmpeg_an_mp3_gets_a_helpful_error(monkeypatch: pytest.MonkeyPa
         audio.load(bad)
 
 
-def test_a_soft_passage_is_not_erased(tmp_path: Path) -> None:
+def typical_dbfs(y: np.ndarray) -> float:
+    frames = y[: y.size // 512 * 512].reshape(-1, 512)
+    return float(20 * np.log10(np.median(np.sqrt(np.mean(frames**2, axis=1))) * np.sqrt(2)))
+
+
+# (-15, -30) held before the fix too (15 dB apart); the -7 cases are the ones The Reason showed.
+@pytest.mark.parametrize(("loud", "soft"), [(-15, -30), (-7, -32), (-7, -35)])
+def test_a_soft_passage_is_not_erased(tmp_path: Path, loud: float, soft: float) -> None:
+    import soundfile as sf
+
+    # A soft verse before a loud chorus, at the levels measured on The Reason: choruses near
+    # -7 dBFS, verses 21 to 28 dB lower (-28 to -35 dBFS). Quiet music, never silence.
+    song = synth.render("pop")
+    half = song.mix.size // 2
+    y = song.mix.copy()
+    loud_part = y[half:] * 10 ** ((loud - typical_dbfs(y[half:])) / 20)
+    y[half:] = np.tanh(loud_part)  # pushed into full scale, softly limited like a master
+    y[:half] *= 10 ** ((soft - typical_dbfs(y[:half])) / 20)
+    wav = tmp_path / "soft.wav"
+    sf.write(wav, y, synth.SR)
+    res = detect(wav, beat_times=song.beats)
+    first_half = [lab for t, lab in zip(res.beat_times, res.labels, strict=True) if 1.2 < t < half / synth.SR]
+    assert first_half and "N" not in first_half
+
+
+def test_a_hiss_between_two_parts_is_still_silence(tmp_path: Path) -> None:
     import soundfile as sf
 
     song = synth.render("pop")
-    half = song.mix.size // 2
-    soft = song.mix.copy()
-    soft[:half] *= 10 ** (-15 / 20)  # the first half 15 dB quieter, like a soft verse
-    wav = tmp_path / "soft.wav"
-    sf.write(wav, soft, synth.SR)
-    res = detect(wav)
-    first_half = [lab for t, lab in zip(res.beat_times, res.labels, strict=True) if 1.2 < t < half / synth.SR]
-    assert first_half and "N" not in first_half
+    gap = song.mix.copy()
+    start, end = int(6.0 * synth.SR), int(8.0 * synth.SR)
+    rng = np.random.default_rng(0)
+    gap[start:end] = rng.standard_normal(end - start) * 10 ** (-48 / 20)  # a tape hiss at about -45 dBFS
+    wav = tmp_path / "gap.wav"
+    sf.write(wav, gap, synth.SR)
+    res = detect(wav, beat_times=song.beats)
+    inside = [lab for t, lab in zip(res.beat_times, res.labels, strict=True) if 6.1 < t < 7.4]
+    assert inside and set(inside) == {"N"}
 
 
 def test_digital_silence_has_no_chords_and_an_unknown_key() -> None:
@@ -158,3 +184,26 @@ def test_digital_silence_has_no_chords_and_an_unknown_key() -> None:
     y = np.zeros(synth.SR * 8, dtype=np.float32)
     res = dec.decode(sync(spectral(y), np.arange(0.5, 7.5, 0.5)), False, 4)
     assert set(res.labels) == {"N"} and not res.key_known and res.clarity == 0.0
+
+
+@pytest.mark.parametrize("level", [-30, -45, -55, -60])
+def test_a_quiet_recording_keeps_its_chords(tmp_path: Path, level: float) -> None:
+    import soundfile as sf
+
+    # A whole song recorded low (a phone, never normalised): its own loud parts set the scale.
+    song = synth.render("pop")
+    y = song.mix * 10 ** ((level - typical_dbfs(song.mix)) / 20)
+    wav = tmp_path / "quiet.wav"
+    sf.write(wav, y, synth.SR, subtype="FLOAT")
+    res = detect(wav, beat_times=song.beats)
+    inside = [lab for t, lab in zip(res.beat_times, res.labels, strict=True) if 1.2 < t < 16.0]
+    assert inside and "N" not in inside
+
+
+def test_the_last_beat_keeps_its_chord_when_a_quarter_of_it_is_music() -> None:
+    from woodshed.engine.features import extract
+
+    # The pop song's last tracked beat is mostly silence with the end of the last chord: a mean
+    # or a median would call it silent, the upper quartile keeps its chord.
+    res = dec.decode(extract(synth.render("pop").mix.astype(np.float32)), False, 4)
+    assert res.labels[-1] != "N"

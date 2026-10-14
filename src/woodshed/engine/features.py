@@ -36,7 +36,7 @@ class Features:
     bass: Floats  # (12, n_beats)
     treble: Floats  # (12, n_beats)
     energy_db: Floats  # (n_beats,), relative to the loud parts of the song
-    energy_dbfs: Floats  # (n_beats,), absolute level
+    level_dbfs: Floats  # (n_beats,), absolute level reached by a quarter of the beat's frames, for silence
 
 
 def spectral(y: npt.NDArray[np.float32]) -> Spectral:
@@ -68,6 +68,10 @@ def beat_accents(spec: Spectral, beat_times: Floats, window: float = 0.03) -> Fl
     return out
 
 
+def _upper_quartile(x: Floats, axis: int = -1) -> Floats:
+    return np.asarray(np.percentile(x, 75, axis=axis), dtype=np.float64)
+
+
 def sync(spec: Spectral, beat_times: Floats) -> Features:
     """Chroma and energy per beat on the given grid."""
     n_frames = spec.bass.shape[1]
@@ -82,9 +86,13 @@ def sync(spec: Spectral, beat_times: Floats) -> Features:
     rms_idx = [int(e) for e in np.concatenate([np.minimum(frames, len(spec.rms) - 1), [len(spec.rms)]])]
     energy = librosa.util.sync(spec.rms[None], rms_idx, aggregate=np.mean, pad=False)[0]
     energy_db = 20 * np.log10((energy + 1e-9) / (np.percentile(spec.rms, 95) + 1e-9))
-    energy_dbfs = 20 * np.log10(energy * np.sqrt(2) + 1e-9)  # full-scale sine = 0 dBFS
+    # Not the mean: a beat that ends where the music starts is silence with a note at its very end,
+    # yet its mean level looks like a soft note. The level a quarter of its frames reach: a beat is
+    # silent only when three quarters of it are (the last beat of a song keeps its chord).
+    typical = librosa.util.sync(spec.rms[None], rms_idx, aggregate=_upper_quartile, pad=False)[0]
+    level_dbfs = 20 * np.log10(typical * np.sqrt(2) + 1e-9)  # full-scale sine = 0 dBFS
     tempo = 60.0 / float(np.median(np.diff(times))) if len(times) > 1 else 0.0
-    return Features(tempo, spec.tuning, times, bass, treble, energy_db, energy_dbfs)
+    return Features(tempo, spec.tuning, times, bass, treble, energy_db, level_dbfs)
 
 
 def extract(y: npt.NDArray[np.float32], beat_times: Floats | None = None) -> Features:
@@ -97,4 +105,4 @@ def extract(y: npt.NDArray[np.float32], beat_times: Floats | None = None) -> Fea
 
 
 def _with_tempo(f: Features, tempo: float) -> Features:
-    return Features(tempo, f.tuning, f.beat_times, f.bass, f.treble, f.energy_db, f.energy_dbfs)
+    return Features(tempo, f.tuning, f.beat_times, f.bass, f.treble, f.energy_db, f.level_dbfs)

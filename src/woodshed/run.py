@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from woodshed import __version__, audio, songbook, stems, theory
+from woodshed.analysis import REVISION as ANALYSIS_REVISION
 from woodshed.analysis import analyze
 from woodshed.build import build as build_page
 from woodshed.build import folder_name
@@ -49,9 +50,17 @@ class Reporter:
         self.started = time.monotonic()
         self.step: str | None = None
         self.step_started = self.started
+        self.stems_shown = -1
 
     def say(self, text: str) -> None:
         print(text, file=self.stream, flush=True)
+
+    def stems(self, fraction: float) -> None:
+        """Separation progress: a line every 10 %."""
+        pct = int(fraction * 100)
+        if pct // 10 != self.stems_shown // 10:
+            self.say(f"  stems      {pct:3d} %")
+            self.stems_shown = pct
 
     def progress(self, step: str, fraction: float) -> None:
         if step == self.step:
@@ -96,6 +105,7 @@ MANIFEST = "woodshed.json"  # in each page folder: what the page was built from,
 def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
     return {
         "version": __version__,
+        "analysis": ANALYSIS_REVISION,
         "source": stems.fingerprint(src),
         "stems": use_stems,
         "title": opts.title,
@@ -166,18 +176,6 @@ def _source(path: str | Path) -> Path:
     if not src.is_file():
         raise audio.AudioError(f"{src}: file not found")
     return src.resolve()
-
-
-def _stems_progress(report: Reporter) -> Callable[[float], None]:
-    last = [-1]
-
-    def tick(fraction: float) -> None:
-        pct = int(fraction * 100)
-        if pct // 10 != last[0] // 10:
-            report.say(f"  stems      {pct:3d} %")
-            last[0] = pct
-
-    return tick
 
 
 @dataclass
@@ -276,7 +274,7 @@ def second_pass(first: Pass, report: Reporter) -> Pass:
         f"{first.src.name}: separating the instruments, about {max(1, round(seconds / 60))} min on this computer"
     )
     try:
-        separated = stems.separate(first.src, offline=opts.offline, progress=_stems_progress(report))
+        separated = stems.separate(first.src, offline=opts.offline, progress=report.stems)
         song = _analyze(first.src, opts, report, True, separated)
         page = build_page(song, first.src, first.out, separated)
     except WoodshedError:
