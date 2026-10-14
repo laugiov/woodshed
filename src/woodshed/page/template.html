@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>{{TITLE}} · woodshed</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="missing-files" role="alert" style="max-width: 40em; margin: 2em auto; padding: 1em 1.4em; border: 3px solid #b45309; border-radius: 10px; background: #fff7ed; color: #111; font: 18px/1.5 system-ui, sans-serif">
+  <strong>This page cannot find its files.</strong><br>
+  Extract the whole folder before opening it: on Windows, right-click the ZIP file and choose
+  <em>Extract All</em>; on a Mac, double-click the ZIP. Then open <code>index.html</code> inside the
+  extracted folder. The page needs the <code>assets</code> and <code>audio</code> folders next to it.
+</div>
+{{BODY}}
+<script type="application/json" id="woodshed-data">{{DATA}}</script>
+<script src="assets/js/core/woodshed.js"></script>
+<script src="assets/js/core/song.js"></script>
+<script src="assets/js/core/state.js"></script>
+<script src="assets/js/core/instruments.js"></script>
+<script src="assets/js/audio/sounds.js"></script>
+<script src="assets/js/audio/transport.js"></script>
+<script src="assets/js/views/header.js"></script>
+<script src="assets/js/views/chart.js"></script>
+<script src="assets/js/views/desk.js"></script>
+<script src="assets/js/views/dock.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

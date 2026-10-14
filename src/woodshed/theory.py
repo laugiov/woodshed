@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from importlib import resources
 from typing import Literal
 
 SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -24,10 +26,11 @@ ROMAN = {
     10: "bVII",
     11: "VII",
 }
-OPEN_SHAPES = frozenset(
-    {"C", "A", "G", "E", "D", "Am", "Em", "Dm", "A7", "E7", "D7", "G7", "C7", "B7", "Am7", "Em7", "Dm7"}
-)
-EASY_BARRES = frozenset({"F", "Bm"})
+# One table for the page's chord diagrams and for the capo rule here.
+_SHAPES_FILE = json.loads(resources.files("woodshed").joinpath("shapes.json").read_text(encoding="utf-8"))
+SHAPES: dict[str, dict[str, list[int]]] = {group: _SHAPES_FILE[group] for group in ("open", "easy_barres")}
+OPEN_SHAPES = frozenset(SHAPES["open"])
+EASY_BARRES = frozenset(SHAPES["easy_barres"])
 
 Mode = Literal["maj", "min"]
 Prefer = Literal["sharps", "flats"] | None

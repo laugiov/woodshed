@@ -1,120 +1,98 @@
 <div class="wrap" id="wrap">
   <header class="head">
     <div class="song">
-      <div class="brandrow"><span class="brand">woodshed</span><button type="button" class="linkbtn" id="setlistBtn" aria-haspopup="dialog">Setlist: Friday rehearsal, 4 songs</button></div>
-      <h1 id="songTitle"></h1>
-      <div class="facts" id="facts"></div>
+      <div class="brandrow"><span class="brand">woodshed</span></div>
+      <h1 id="songTitle" data-testid="title"></h1>
+      <div class="facts" id="facts" data-testid="facts"></div>
     </div>
     <div class="head-actions">
-      <div class="plays"><span class="label">I play</span><div class="seg-ctl" role="group" aria-label="I play"><button type="button" class="on" data-inst="guitar">Guitar</button><button type="button" data-inst="bass">Bass</button><button type="button" data-inst="piano">Keys</button><button type="button" data-inst="drums">Drums</button><button type="button" data-inst="voice">Voice</button></div></div>
-      <button class="btn" id="exportBtn" type="button" aria-haspopup="menu">Export</button>
-      <button class="btn stage-btn" id="stageBtn" type="button" title="Full screen, readable from the music stand (S)">Stage mode</button>
+      <div class="plays"><span class="label">I play</span><div class="seg-ctl" id="instruments" role="group" aria-label="I play"></div></div>
+      <button class="btn stage-btn" id="stageBtn" type="button" data-testid="stage-open" title="Full screen, readable from the music stand (S)">Stage mode</button>
     </div>
   </header>
 
-  <nav class="path" id="path" aria-label="Practice path">
-    <button type="button" class="step on" data-step="1"><span class="n">Step 1</span><span class="t">Listen</span><span class="d">Full band, original tempo. Follow the chart.</span></button>
-    <button type="button" class="step" data-step="2"><span class="n">Step 2</span><span class="t" id="step2t">Learn the shapes</span><span class="d" id="step2d">Your part alone. Click a shape to hear it.</span></button>
-    <button type="button" class="step" data-step="3"><span class="n">Step 3</span><span class="t">Loop it slow</span><span class="d">From 70% tempo, 5 BPM faster each pass.</span></button>
-    <button type="button" class="step" data-step="4"><span class="n">Step 4</span><span class="t">Play along</span><span class="d">Your part is muted. The band is yours.</span></button>
-  </nav>
+  <nav class="path" id="path" aria-label="Practice path"></nav>
 
   <div class="main">
     <div class="col">
       <section class="panel">
         <div class="now">
           <div class="nowcol">
-            <span class="lbl">Now · <span id="bigRoman">vi</span></span>
-            <div class="big" id="bigChord">Fm</div>
+            <span class="lbl">Now · <span id="bigRoman"></span></span>
+            <div class="big" id="bigChord" data-testid="now-chord"></div>
             <div class="nowsub" id="nowSub"></div>
           </div>
           <div class="now-side">
             <div class="ahead">
-              <div><span class="lbl">Next</span><span class="nx" id="nextChord">Db</span></div>
-              <div><span class="lbl">Then</span><span class="th" id="thenChord">Bbm</span></div>
+              <div><span class="lbl">Next</span><span class="nx" id="nextChord" data-testid="next-chord"></span></div>
+              <div><span class="lbl">Then</span><span class="th" id="thenChord"></span></div>
             </div>
-            <div class="beats" id="beats" aria-hidden="true"><div class="beat one"></div><div class="beat"></div><div class="beat"></div><div class="beat"></div></div>
-            <div class="where"><span id="barInfo">Bar 3</span><span id="passInfo">Pass 1 of 3</span><span id="timeInfo">0:11.5</span></div>
+            <div class="beats" id="beats" aria-hidden="true"></div>
+            <div class="where"><span id="barInfo" data-testid="bar-info"></span><span id="passInfo"></span><span id="timeInfo"></span></div>
           </div>
         </div>
         <div class="chart-bar"><div class="label">Chart</div><div id="viewCtl"></div></div>
-        <div class="sheet" id="sheet"></div>
+        <div class="sheet" id="sheet" data-testid="sheet"></div>
         <p class="hint" style="margin: 10px 2px 0">Click a bar to jump. Drag across bars to loop them. Orange chords are the ones to check by ear.</p>
       </section>
 
       <section class="panel harm">
         <div class="label">Harmony</div>
-        <h2 id="keyTitle">A♭ major</h2>
+        <h2 id="keyTitle" data-testid="key"></h2>
         <div class="prog" id="prog"></div>
         <p id="progText"></p>
         <div class="label" style="margin: 14px 0 8px">To check by ear</div>
-        <ul class="checks" id="checks"></ul>
+        <ul class="checks" id="checks" data-testid="checks"></ul>
       </section>
     </div>
 
     <aside class="col desk-col">
       <section class="panel">
         <div class="desk-head">
-          <div class="label" id="deskTitle">Your guitar</div>
+          <div class="label" id="deskTitle"></div>
           <div class="keyrow">
             <span>Key</span>
-            <div class="stepper" aria-label="Transpose"><button type="button" id="trDown" aria-label="Transpose down">−</button><span id="trVal">A♭</span><button type="button" id="trUp" aria-label="Transpose up">+</button></div>
+            <div class="stepper" aria-label="Transpose"><button type="button" id="trDown" data-testid="transpose-down" aria-label="Transpose down">−</button><span id="trVal" data-testid="transpose"></span><button type="button" id="trUp" data-testid="transpose-up" aria-label="Transpose up">+</button></div>
             <span id="capoWrap">Capo</span>
-            <div class="stepper" id="capoStepper" aria-label="Capo"><button type="button" id="capoDown" aria-label="Capo down">−</button><span id="capoVal">1</span><button type="button" id="capoUp" aria-label="Capo up">+</button></div>
+            <div class="stepper" id="capoStepper" aria-label="Capo"><button type="button" id="capoDown" data-testid="capo-down" aria-label="Capo down">−</button><span id="capoVal" data-testid="capo"></span><button type="button" id="capoUp" data-testid="capo-up" aria-label="Capo up">+</button></div>
           </div>
         </div>
-        <div id="desk"></div>
+        <div id="desk" data-testid="desk"></div>
       </section>
     </aside>
   </div>
 
-  <footer class="foot">
-    <span id="madeWith"></span>
-    <span>Generated automatically from the recording: chart, tempo, key, waveform, doubtful chords and every instrument part. A sampled band stands in for the audio.</span>
-    <span>Instrument parts: read from tracks isolated on this computer with Demucs (MIT). Notation drawn with VexFlow (MIT).</span>
-    <span>Instrument samples: FluidR3_GM SoundFont by Frank Wen, MIT licence. Fonts: Barlow Condensed, Atkinson Hyperlegible, JetBrains Mono, Noto Music (SIL Open Font License).</span>
-  </footer>
+  <footer class="foot" id="foot" data-testid="credits"></footer>
 </div>
 
 <div class="dock" id="dock">
   <div class="dock-in">
-    <button class="play" id="playBtn" type="button" aria-label="Play">▶</button>
+    <button class="play" id="playBtn" type="button" data-testid="play" aria-label="Play">▶</button>
     <div class="wavebox">
-      <canvas class="wave" id="wave" aria-label="Song waveform with sections, click to jump" role="img"></canvas>
-      <div class="wave-meta"><span id="posInfo"></span><span id="loopInfo">No loop</span></div>
+      <canvas class="wave" id="wave" data-testid="wave" aria-label="Song waveform with sections, click to jump" role="img"></canvas>
+      <div class="wave-meta"><span id="posInfo" data-testid="position"></span><span id="loopInfo" data-testid="loop-info"></span></div>
     </div>
     <div class="dock-tools" id="dockTools">
-      <div class="grp"><button class="btn" id="loopBtn" type="button" title="Loop the selected bars, or the current pass (L)">⟲ Loop</button><button class="btn" id="trainBtn" type="button" title="Starts at 70% of the song's tempo and adds 5 BPM each loop">Trainer</button></div>
+      <div class="grp"><button class="btn" id="loopBtn" type="button" data-testid="loop" title="Loop the selected bars, or the current pass (L)">⟲ Loop</button><button class="btn" id="trainBtn" type="button" data-testid="trainer" title="Starts at 70% of the song's tempo and adds 5 BPM each loop">Trainer</button></div>
       <div class="grp tempo" role="group" aria-label="Playback tempo">
-        <div class="stepper"><button type="button" id="bpmDown" aria-label="Slower">−</button><span id="bpmVal">99 BPM</span><button type="button" id="bpmUp" aria-label="Faster">+</button></div>
-        <input id="bpm" type="range" min="50" max="150" step="1" value="99" aria-label="Tempo in BPM">
-        <button class="btn" id="bpmReset" type="button" title="Back to the song's tempo">Original</button>
+        <div class="stepper"><button type="button" id="bpmDown" data-testid="slower" aria-label="Slower">−</button><span id="bpmVal" data-testid="bpm"></span><button type="button" id="bpmUp" data-testid="faster" aria-label="Faster">+</button></div>
+        <input id="bpm" type="range" step="1" aria-label="Tempo in BPM" data-testid="bpm-slider">
+        <button class="btn" id="bpmReset" type="button" data-testid="bpm-reset" title="Back to the song's tempo">Original</button>
       </div>
-      <div class="grp"><button class="btn" id="countBtn" type="button" title="One bar of clicks before playing">Count-in</button><button class="btn" id="mixBtn" type="button" aria-haspopup="dialog">Mix</button><button class="btn" id="helpBtn" type="button" aria-label="Keyboard and pedal shortcuts">?</button></div>
+      <div class="grp"><button class="btn" id="countBtn" type="button" data-testid="count-in" title="One bar of clicks before playing">Count-in</button><button class="btn" id="clickBtn" type="button" data-testid="click" title="A click on every beat, over the recording">Click</button><button class="btn" id="mixBtn" type="button" data-testid="tracks" aria-haspopup="dialog">Tracks</button><button class="btn" id="helpBtn" type="button" data-testid="help" aria-label="Keyboard and pedal shortcuts">?</button></div>
     </div>
     <button class="btn moreBtn" id="moreBtn" type="button" aria-expanded="false">Controls</button>
   </div>
 </div>
 
-<div class="menu" id="mixMenu" hidden role="dialog" aria-label="Mixer">
-  <h3>Mixer <span class="v02">stems in v0.2</span></h3>
+<div class="menu" id="mixMenu" hidden role="dialog" aria-label="Tracks" data-testid="tracks-menu">
+  <h3>What you hear</h3>
   <div class="mixer" id="mixer"></div>
-  <p class="desk-note" style="margin: 2px 0 0">On your recording, the stems come from local source separation. Here they drive the stand-in band.</p>
+  <p class="desk-note" id="mixNote" style="margin: 2px 0 0"></p>
+  <h3>Preview sound</h3>
+  <div class="seg-ctl" id="soundCtl" role="group" aria-label="Sound of the chord previews"></div>
 </div>
-<div class="menu" id="exportMenu" hidden role="menu" aria-label="Export">
-  <h3>Export, with your corrections</h3>
-  <button type="button" class="item" data-export="ChordPro file"><span>ChordPro</span><small>Opens in OnSong, SongbookPro and other songbook apps</small></button>
-  <button type="button" class="item" data-export="printable chart"><span>Printable chart</span><small>One page, ready for the music stand</small></button>
-  <button type="button" class="item" data-export="MIDI backing track"><span>MIDI backing track</span><small>Chords and bass, for your DAW</small></button>
-  <button type="button" class="item" data-export="MusicXML file"><span>MusicXML</span><small>Opens in MuseScore</small></button>
-  <button type="button" class="item" data-export="JSON file"><span>JSON</span><small>For developers</small></button>
-</div>
-<div class="menu" id="setlistMenu" hidden role="dialog" aria-label="Setlist">
-  <h3>Friday rehearsal</h3>
-  <button type="button" class="item cur"><span class="row"><span id="setCur"></span><b id="setKey"></b><small id="setBpm"></small></span></button>
-  <p class="desk-note" style="margin: 2px 0 0">Made with <code>woodshed ./friday-rehearsal/</code>: one page per song, plus this index.</p>
-</div>
-<div class="menu" id="helpMenu" hidden role="dialog" aria-label="Shortcuts">
+<div class="menu" id="helpMenu" hidden role="dialog" aria-label="Shortcuts" data-testid="help-menu">
   <h3>Hands on the instrument</h3>
   <dl class="help-list">
     <dt><span class="kbd">Space</span></dt><dd style="margin: 0">Play or pause</dd>
@@ -127,15 +105,14 @@
   <p class="desk-note" style="margin: 4px 0 0">Bluetooth page-turner pedals work too: they send Space, arrows or Page Up and Page Down.</p>
 </div>
 
-<div class="pop" id="pop" hidden></div>
+<div class="pop" id="pop" hidden data-testid="doubt-pop"></div>
 <div class="sr-only" aria-live="polite" id="srChord"></div>
-<div class="toast" id="toast" hidden></div>
-<div class="stage" id="stage" hidden>
-  <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><span id="stTop">Bar 3 · pass 1 of 3</span><span class="map" id="stMap" aria-hidden="true"></span></span><button class="btn" id="stageExit" type="button">Exit stage mode (Esc)</button></div>
+<div class="toast" id="toast" hidden data-testid="toast"></div>
+<div class="stage" id="stage" hidden data-testid="stage">
+  <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><span id="stTop"></span><span class="map" id="stMap" aria-hidden="true"></span></span><button class="btn" id="stageExit" type="button" data-testid="stage-exit">Exit stage mode (Esc)</button></div>
   <div class="stage-mid">
-    <div><div class="stage-now" id="stNow">Fm</div><div class="stage-shape" id="stShape"></div></div>
-    <div class="stage-next"><div class="n1"><small>Next</small><span id="stNext">Db</span></div><div class="n2"><small>Then</small><span id="stThen">Bbm</span></div></div>
+    <div><div class="stage-now" id="stNow" data-testid="stage-chord"></div><div class="stage-shape" id="stShape"></div></div>
+    <div class="stage-next"><div class="n1"><small>Next</small><span id="stNext"></span></div><div class="n2"><small>Then</small><span id="stThen"></span></div></div>
   </div>
-  <div class="stage-beats" id="stBeats"><div class="beat one"></div><div class="beat"></div><div class="beat"></div><div class="beat"></div></div>
+  <div class="stage-beats" id="stBeats"></div>
 </div>
-

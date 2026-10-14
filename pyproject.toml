@@ -52,6 +52,7 @@ dev = [
     "twine>=5",
     "jsonschema>=4",
     "types-jsonschema",
+    "pytest-playwright>=0.7",
 ]
 
 [tool.hatch.version]
@@ -71,7 +72,7 @@ extend-exclude = [".venvs", "private"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 # Primes are the musical notation for section variants (A′, A″).
-allowed-confusables = ["′", "″", "‴"]
+allowed-confusables = ["′", "″", "‴", "×"]  # × marks a repeat count in a chart
 
 [tool.mypy]
 strict = true
@@ -85,7 +86,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-markers = ["stems: needs the stems extra (real Demucs and beat_this, downloads the models once)"]
+markers = [
+    "stems: needs the stems extra (real Demucs and beat_this, downloads the models once)",
+    "page: runs the practice page in real browsers (Playwright; browsers installed once)",
+]
 # Any warning is a test failure: a NaN or an empty slice usually shows up as a warning first.
 filterwarnings = [
     "error",

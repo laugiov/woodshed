@@ -24,8 +24,12 @@ uv run --frozen mypy src tests scripts
 for py in "${PYTHONS[@]}"; do
   step "tests, Python $py"
   UV_PROJECT_ENVIRONMENT=".venvs/py${py/./}" uv run --frozen --python "$py" --group dev \
-    pytest --cov --cov-report=term-missing:skip-covered -q
+    pytest -m "not page" --cov --cov-report=term-missing:skip-covered -q
 done
+
+step "practice page in real browsers (Chromium, Firefox)"
+uv run --frozen --group dev playwright install chromium firefox
+WOODSHED_REQUIRE_PAGE=1 uv run --frozen --group dev pytest -q -m page --browser chromium --browser firefox
 
 step "package"
 rm -rf dist

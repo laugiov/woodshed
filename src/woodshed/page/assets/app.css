@@ -1,3 +1,8 @@
+/* The hidden attribute always wins over a component's own display rule. */
+[hidden] { display: none !important; }
+/* Shown by the template only when this stylesheet did not load (a page opened from inside a ZIP). */
+.missing-files { display: none !important; }
+
 /* Layout: the chart is the music stand (hero, left); the instrument desk sits on the right; the player is pinned to the bottom like any audio app. */
 :root {
   --bg: #e6eae7;
@@ -144,6 +149,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .harm h2, .card h2 { margin: 4px 0 8px; font-family: var(--font-chord); font-weight: 600; font-size: 22px; }
 .prog { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
 .prog > span { border: 1px solid var(--line); background: var(--sheet); border-radius: 6px; padding: 3px 10px; font-family: var(--font-chord); font-weight: 600; font-size: 19px; }
+.prog-sec { align-self: center; font-family: var(--font-chord); color: var(--muted); min-width: 2.2em; }
 .prog > span small { color: var(--muted); font-size: 15px; margin-left: 4px; }
 .harm p { margin: 0 0 10px; max-width: 64ch; }
 .checks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

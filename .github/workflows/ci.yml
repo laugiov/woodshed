@@ -49,7 +49,22 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
-      - run: uv run --frozen --group dev pytest --cov --cov-report=term-missing:skip-covered -q
+      - run: uv run --frozen --group dev pytest -m "not page" --cov --cov-report=term-missing:skip-covered -q
+
+  page:
+    name: Practice page in Chromium and Firefox
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WOODSHED_REQUIRE_PAGE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: "3.13"
+      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      - run: uv run --frozen --group dev playwright install --with-deps chromium firefox
+      - run: uv run --frozen --group dev pytest -q -m page --browser chromium --browser firefox
 
   package:
     name: Build and smoke-test the package

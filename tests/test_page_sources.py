@@ -1,0 +1,34 @@
+"""Static rules on the page sources: no markup from strings, every script loaded, nothing remote."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+PAGE = Path(__file__).resolve().parents[1] / "src" / "woodshed" / "page"
+OWN_JS = sorted(p for p in (PAGE / "assets" / "js").rglob("*.js"))
+FORBIDDEN = re.compile(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function")
+
+
+@pytest.mark.parametrize("script", OWN_JS, ids=lambda p: p.name)
+def test_page_code_never_parses_strings_as_markup_or_code(script: Path) -> None:
+    # Song data (titles, file names) reaches the DOM only as text: see core/woodshed.js.
+    assert FORBIDDEN.findall(script.read_text(encoding="utf-8")) == []
+
+
+def test_every_script_is_loaded_by_the_template_in_dependency_order() -> None:
+    template = (PAGE / "template.html").read_text(encoding="utf-8")
+    loaded = re.findall(r'<script src="assets/js/([^"]+)"></script>', template)
+    assert sorted(loaded) == sorted(p.relative_to(PAGE / "assets" / "js").as_posix() for p in OWN_JS)
+    assert loaded[0] == "core/woodshed.js" and loaded[-1] == "app.js"
+    assert loaded.index("core/song.js") < loaded.index("views/chart.js")
+
+
+def test_the_page_forbids_remote_content() -> None:
+    template = (PAGE / "template.html").read_text(encoding="utf-8")
+    policy = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', template)
+    assert policy is not None
+    rules = dict(rule.strip().split(" ", 1) for rule in policy.group(1).split(";"))
+    assert rules["default-src"] == "'self'" and rules["connect-src"] == "'none'" and rules["script-src"] == "'self'"

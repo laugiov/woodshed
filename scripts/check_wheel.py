@@ -16,7 +16,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_repo import list_files
 
 PACKAGE = "src/"
-REQUIRED = ("woodshed/song.schema.json", "woodshed/page/body.html", "woodshed/py.typed")
+REQUIRED = (
+    "woodshed/song.schema.json",
+    "woodshed/view.schema.json",
+    "woodshed/shapes.json",
+    "woodshed/page/template.html",
+    "woodshed/page/body.html",
+    "woodshed/py.typed",
+)
 
 
 def expected(root: Path) -> set[str]:
