@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from woodshed import structure as st
+from woodshed.model import Structure
 from woodshed.theory import Key
 
 
@@ -13,12 +14,12 @@ def grid(labels: list[str], period: float = 0.5) -> np.ndarray:
     return np.arange(len(labels), dtype=float) * period
 
 
-def build(labels: list[str], phase: int = 0, per_bar: int = 4, flags: list[bool] | None = None) -> st.Structure:
+def build(labels: list[str], phase: int = 0, per_bar: int = 4, flags: list[bool] | None = None) -> Structure:
     n = len(labels)
     return st.build(grid(labels), labels, np.array(flags or [False] * n), None, [], phase, per_bar)
 
 
-def bar_names(s: st.Structure, i: int) -> list[str]:
+def bar_names(s: Structure, i: int) -> list[str]:
     return [c.name for c in s.bars[i].chords]
 
 
@@ -122,3 +123,41 @@ def test_verse_and_refrain_are_summarised_separately() -> None:
     assert [h.label for h in summary.sections] == ["A", "B"]
     assert summary.sections[0].romans[:4] == ["I", "V", "vi", "IV"]
     assert summary.sections[1].romans[:4] == ["vi", "V", "IV", "I"]
+
+
+def line(*chords: str) -> list[str]:
+    return [c for chord in chords for c in [chord] * 4]
+
+
+def test_section_letters_go_past_z() -> None:
+    assert [st.section_letter(i) for i in (0, 25, 26, 27, 51, 52)] == ["A", "Z", "AA", "AB", "AZ", "BA"]
+    roots = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    lines = [line(a, b, a, b) for a in roots for b in roots[:3] if a != b][:30]  # 30 unrelated lines
+    s = build([c for ln in lines for c in ln])
+    labels = [g.label for g in s.groups]
+    assert len(set(labels)) == 30 and labels[26:28] == ["AA", "AB"]
+
+
+def test_a_fourth_variant_keeps_its_family() -> None:
+    variants = [line("C", "G", "Am", x) for x in ("Dm", "Em", "Bb", "D")]
+    s = build(LOOP + [c for v in variants for c in v])
+    assert [g.label for g in s.groups] == ["A", "A′", "A″", "A‴", "A(4)"]
+    assert {g.family for g in s.groups} == {"A"}
+    assert [h.label for h in st.harmony_summary(s, Key(0)).sections] == ["A"]
+
+
+def test_a_short_last_line_keeps_the_letter_of_the_line_it_starts() -> None:
+    s = build(LOOP + line("Am", "G", "F", "E") + LOOP + ["C"] * 4 + ["G"] * 4)
+    assert [g.label for g in s.groups] == ["A", "B", "A", "A"]
+
+
+def test_a_one_bar_ending_is_not_a_variant_of_an_unrelated_line() -> None:
+    other = line("Am", "G", "F", "E")
+    s = build(LOOP + other + ["E"] * 4)  # a final E bar: one bar in common with nothing
+    assert [g.label for g in s.groups] == ["A", "B", "C"]
+
+
+def test_a_short_line_equal_to_the_start_of_any_line_takes_its_letter() -> None:
+    other = line("Am", "G", "F", "E")
+    s = build(LOOP + other + ["Am"] * 4 + ["G"] * 4)  # the first two bars of B
+    assert [g.label for g in s.groups] == ["A", "B", "B"]

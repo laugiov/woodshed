@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]  # 1.27: PEP 639 licence fields
 build-backend = "hatchling.build"
 
 [project]
@@ -18,11 +18,16 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Typing :: Typed",
 ]
 dependencies = [
-    "librosa>=0.11",
+    "librosa>=0.11,<2",  # each version has its own golden labels (tests/golden)
     "numpy>=1.24",
     "soundfile>=0.12",
 ]
@@ -45,6 +50,8 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.8",
     "twine>=5",
+    "jsonschema>=4",
+    "types-jsonschema",
 ]
 
 [tool.hatch.version]
@@ -72,12 +79,20 @@ python_version = "3.10"
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["librosa.*", "soundfile.*", "beat_this.*", "demucs.*", "torch.*", "torchaudio.*"]
+module = ["librosa.*", "soundfile.*", "beat_this.*", "demucs.*", "torch.*", "torchaudio.*", "huggingface_hub.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = ["stems: needs the stems extra (real Demucs and beat_this, downloads the models once)"]
+# Any warning is a test failure: a NaN or an empty slice usually shows up as a warning first.
+filterwarnings = [
+    "error",
+    # Emitted by numba while it compiles a librosa kernel, only on the first run after its cache
+    # is invalidated: the same inputs then run warning-free.
+    "ignore:invalid value encountered in cast:RuntimeWarning:numba.np.ufunc.dufunc",
+]
 
 [tool.coverage.run]
 source = ["woodshed"]

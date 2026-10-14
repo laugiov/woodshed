@@ -30,7 +30,7 @@ def test_beats_and_downbeats_match_the_meter(name: str) -> None:
     period = 60.0 / spec.bpm
     assert np.allclose(np.diff(song.beats), period)
     assert np.allclose(np.diff(song.downbeats), period * spec.beats_per_bar)
-    assert song.downbeats[0] == pytest.approx(song.beats[0])
+    assert song.downbeats[0] == pytest.approx(song.beats[spec.pickup])
 
 
 @pytest.mark.parametrize("name", list(synth.SONGS))

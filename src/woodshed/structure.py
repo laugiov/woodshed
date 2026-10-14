@@ -4,91 +4,18 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
 
 from woodshed import theory
+from woodshed.grid import BeatGrid
+from woodshed.model import SHARPNESS, Alternative, Bar, Chord, Doubt, Group, HarmonySummary, SectionHarmony, Structure
 
 LINE_BARS = 4
 PRIMES = ("′", "″", "‴")
-
-
-@dataclass(frozen=True)
-class Alternative:
-    pc: int
-    quality: str
-    share: int  # percent
-
-    @property
-    def name(self) -> str:
-        return theory.SHARP_NAMES[self.pc] + self.quality
-
-
-@dataclass(frozen=True)
-class Doubt:
-    id: int
-    why: str
-    alternatives: list[Alternative]
-
-
-@dataclass(frozen=True)
-class Chord:
-    pc: int  # -1 for no chord
-    quality: str  # "", "m", "7", "m7"; "N" for no chord
-    beats: int
-    doubt: Doubt | None = None
-
-    @property
-    def name(self) -> str:
-        return "N" if self.pc < 0 else theory.SHARP_NAMES[self.pc] + self.quality
-
-
-@dataclass
-class Bar:
-    start: float
-    end: float
-    chords: list[Chord]
-    group: int = 0
-    occurrence: int = 0
-    column: int = 0
-
-    def signature(self) -> tuple[tuple[int, str, int], ...]:
-        return tuple((c.pc, c.quality, c.beats) for c in self.chords)
-
-
-@dataclass
-class Group:
-    """Consecutive identical lines, shown once with a repeat count."""
-
-    label: str
-    occurrences: list[list[int]] = field(default_factory=list)
-
-
-@dataclass
-class Structure:
-    bars: list[Bar]
-    groups: list[Group]
-    music_start: float | None
-    music_end: float | None
-
-
-@dataclass(frozen=True)
-class SectionHarmony:
-    label: str  # a section letter, or "A+B" for a loop spanning two sections
-    chords: list[tuple[int, str]]
-    romans: list[str]
-    name: str | None
-
-
-@dataclass(frozen=True)
-class HarmonySummary:
-    sections: list[SectionHarmony]
-
-    @property
-    def name(self) -> str | None:
-        return next((h.name for h in self.sections if h.name), None)
+MIN_VARIANT_BARS = 3  # a line differing by one bar is a variant only if it has at least this many
 
 
 def _chord_from(label: str, beats: int) -> Chord:
@@ -96,7 +23,7 @@ def _chord_from(label: str, beats: int) -> Chord:
     return Chord(-1, "N", beats) if parsed is None else Chord(parsed[0], parsed[1], beats)
 
 
-def _alternatives(mean: npt.NDArray[np.float64], names: Sequence[str], sharpness: float = 25.0) -> list[Alternative]:
+def _alternatives(mean: npt.NDArray[np.float64], names: Sequence[str], sharpness: float) -> list[Alternative]:
     order = np.argsort(-mean)[:3]
     w = np.exp(sharpness * (mean[order] - mean[order[0]]))
     shares = np.round(100 * w / w.sum()).astype(int)
@@ -116,16 +43,14 @@ def _bars(
     names: Sequence[str],
     phase: int,
     per_bar: int,
-) -> tuple[list[Bar], float | None, float | None]:
+    sharpness: float,
+) -> tuple[list[Bar], float | None, float | None, int]:
     voiced = [i for i, lab in enumerate(labels) if lab != "N"]
     if not voiced:
-        return [], None, None
+        return [], None, None, 0
     first, last = voiced[0], voiced[-1]
     start = first - ((first - phase) % per_bar)
-    period = float(np.median(np.diff(times))) if len(times) > 1 else 0.5
-
-    def beat_time(i: int) -> float:
-        return float(times[i]) if 0 <= i < len(times) else float(times[0] + i * period)
+    beat_time = BeatGrid.of(times).time
 
     bars, doubt_id = [], 0
     b0 = start
@@ -145,7 +70,7 @@ def _bars(
             chord = _chord_from(label_at(run[0]), len(run))
             inside = [i for i in run if 0 <= i < len(labels)]
             if chord.pc >= 0 and scores is not None and any(flags[i] for i in inside):
-                alts = _alternatives(scores[:, inside].mean(axis=1), names)
+                alts = _alternatives(scores[:, inside].mean(axis=1), names, sharpness)
                 why = (
                     "Close call between the top candidates."
                     if alts and alts[0].share < 70
@@ -154,9 +79,10 @@ def _bars(
                 chord = Chord(chord.pc, chord.quality, chord.beats, Doubt(doubt_id, why, alts))
                 doubt_id += 1
             chords.append(chord)
-        bars.append(Bar(beat_time(b0), beat_time(b0 + per_bar), chords))
+        # A pickup bar can start before the file does: the page cannot seek there.
+        bars.append(Bar(max(0.0, beat_time(b0)), beat_time(b0 + per_bar), chords))
         b0 += per_bar
-    return bars, beat_time(first), beat_time(last) + period
+    return bars, beat_time(first), beat_time(last + 1), start
 
 
 LineSignature = tuple[tuple[tuple[int, str, int], ...], ...]
@@ -175,25 +101,47 @@ class _Lettering:
 
     def __init__(self) -> None:
         self.families: list[_Family] = []
-        self.known: dict[LineSignature, str] = {}
+        self.known: dict[LineSignature, tuple[str, str]] = {}
 
-    def letter_for(self, sig: LineSignature) -> str:
+    def letter_for(self, sig: LineSignature) -> tuple[str, str]:
+        """(label, family) of a line."""
         if sig not in self.known:
-            self.known[sig] = self._variant_of_family(sig) or self._new_family(sig)
+            self.known[sig] = self._of_family(sig) or self._new_family(sig)
         return self.known[sig]
 
-    def _variant_of_family(self, sig: LineSignature) -> str | None:
-        for fam in self.families:
-            if len(fam.signature) == len(sig) and sum(a != b for a, b in zip(fam.signature, sig, strict=True)) <= 1:
+    def _of_family(self, sig: LineSignature) -> tuple[str, str] | None:
+        # A short last line is compared with the start of a full line.
+        candidates = [f for f in self.families if len(sig) <= len(f.signature)]
+
+        def differences(fam: _Family) -> int:
+            return sum(a != b for a, b in zip(fam.signature, sig, strict=False))
+
+        for fam in candidates:  # an exact match in any family wins over a variant
+            if differences(fam) == 0:
+                return fam.letter, fam.letter
+        if len(sig) < MIN_VARIANT_BARS:  # one bar in common out of two says nothing
+            return None
+        for fam in candidates:
+            if differences(fam) == 1:
                 fam.variants += 1
                 mark = PRIMES[fam.variants - 1] if fam.variants <= len(PRIMES) else f"({fam.variants})"
-                return fam.letter + mark
+                return fam.letter + mark, fam.letter
         return None
 
-    def _new_family(self, sig: LineSignature) -> str:
-        letter = chr(ord("A") + len(self.families)) if len(self.families) < 26 else "Z"
+    def _new_family(self, sig: LineSignature) -> tuple[str, str]:
+        letter = section_letter(len(self.families))
         self.families.append(_Family(sig, letter))
-        return letter
+        return letter, letter
+
+
+def section_letter(n: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA, 27 -> AB, as spreadsheet columns."""
+    out = ""
+    n += 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        out = chr(ord("A") + r) + out
+    return out
 
 
 def _group(bars: list[Bar]) -> list[Group]:
@@ -207,7 +155,8 @@ def _group(bars: list[Bar]) -> list[Group]:
         if groups and sig == previous:
             groups[-1].occurrences.append(line)
         else:
-            groups.append(Group(lettering.letter_for(sig), [line]))
+            label, family = lettering.letter_for(sig)
+            groups.append(Group(label, family, [line]))
         previous = sig
     for g, group in enumerate(groups):
         for o, line in enumerate(group.occurrences):
@@ -224,9 +173,12 @@ def build(
     names: Sequence[str],
     phase: int,
     per_bar: int = 4,
+    *,
+    sharpness: float = SHARPNESS,
 ) -> Structure:
-    bars, start, end = _bars(times, labels, flags, scores, names, phase, per_bar)
-    return Structure(bars, _group(bars), start, end)
+    """Bars, sections and doubts. `sharpness` must be the decoder's, so doubt shares match its odds."""
+    bars, start, end, first_beat = _bars(times, labels, flags, scores, names, phase, per_bar, sharpness)
+    return Structure(bars, _group(bars), start, end, first_beat)
 
 
 LOOP_COVERAGE = 0.7  # two sections are one loop when their alternation covers this share of the lines
@@ -239,7 +191,7 @@ def _section_harmony(label: str, signature: LineSignature, key: theory.Key) -> S
             if pc >= 0 and (not seq or seq[-1] != (pc, quality)):
                 seq.append((pc, quality))
     romans = [theory.roman(pc, q, key) for pc, q in seq]
-    return SectionHarmony(label, seq, romans, theory.named_progression(romans))
+    return SectionHarmony(label, seq, romans, theory.progression_name(seq, key))
 
 
 def harmony_summary(structure: Structure, key: theory.Key) -> HarmonySummary:
@@ -250,9 +202,9 @@ def harmony_summary(structure: Structure, key: theory.Key) -> HarmonySummary:
     """
     if not structure.bars:
         return HarmonySummary([])
-    occurrences = [(g.label, occ) for g in structure.groups for occ in g.occurrences]
+    occurrences = [(g.family, occ) for g in structure.groups for occ in g.occurrences]
     lines = [tuple(structure.bars[i].signature() for i in occ) for _, occ in occurrences]
-    families = [label.rstrip("".join(PRIMES)) for label, _ in occurrences]
+    families = [family for family, _ in occurrences]
 
     pairs = Counter((families[i], families[i + 1]) for i in range(len(families) - 1) if families[i] != families[i + 1])
     if pairs:

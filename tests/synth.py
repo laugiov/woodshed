@@ -29,6 +29,7 @@ class Spec:
     bass: str = "root"  # "root" on every beat, or "riff" (root plus the half step below)
     hats: str = "eighths"  # "eighths" or "offbeat16" (funk)
     melody: bool = False
+    pickup: int = 0  # beats before the first downbeat (an upbeat bar)
 
 
 @dataclass
@@ -72,8 +73,12 @@ SONGS: dict[str, Spec] = {
         hats="offbeat16",
         melody=True,
     ),
+    # A fast song with a chord every two beats: must not be mistaken for a doubled slow tempo.
+    "rock": Spec(130, 4, _loop([("C", 2), ("G", 2), ("Am", 2), ("F", 2)], 4)),
+    # One beat of G before the first bar: an upbeat, so the chart starts with a partial bar.
+    "pickup": Spec(100, 4, (("G", 1), *_loop([("C", 4), ("F", 4), ("G", 4), ("C", 4)], 2)), pickup=1),
 }
-KEYS = {"pop": "C", "ballad": "C", "waltz": "D", "funk": "Ab"}
+KEYS = {"pop": "C", "ballad": "C", "waltz": "D", "funk": "Ab", "rock": "C", "pickup": "C"}
 
 
 def parse(label: str) -> tuple[int, tuple[int, ...]]:
@@ -132,7 +137,7 @@ def _render_cached(name: str) -> Song:
         spans.append((t, t + beats * beat, label))
         for b in range(beats):
             tb = t + b * beat
-            pos = i % spec.beats_per_bar
+            pos = (i - spec.pickup) % spec.beats_per_bar
             # Drums: kick on the first beat (and the middle of 4/4 bars), snare on the others' backbeats.
             if pos == 0 or (spec.beats_per_bar == 4 and pos == 2):
                 _add(stems["drums"], _kick(0.8), tb)
@@ -171,7 +176,8 @@ def _render_cached(name: str) -> Song:
     stems = {k: v / peak for k, v in stems.items()}
     mix = sum(stems.values())
     beats_t = spec.lead_in + beat * np.arange(n_beats)
-    return Song(name, np.asarray(mix), stems, spans, beats_t, beats_t[:: spec.beats_per_bar], KEYS[name], spec)
+    downbeats = beats_t[spec.pickup :: spec.beats_per_bar]
+    return Song(name, np.asarray(mix), stems, spans, beats_t, downbeats, KEYS[name], spec)
 
 
 def render(name: str) -> Song:

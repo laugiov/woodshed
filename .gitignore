@@ -9,12 +9,14 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
-dist/
-build/
+# Anchored: a dist/ or build/ folder inside the package must still ship.
+/dist/
+/build/
 *.egg-info/
 
 # Never published: recordings, references, generated practice rooms
 private/
+.woodshed-cache/
 *.woodshed/
 *.wav
 *.mp3

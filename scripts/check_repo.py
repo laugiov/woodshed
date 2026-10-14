@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Repository hygiene guard: nothing private, copyrighted or oversized may be tracked.
 
-Usage: python scripts/check_repo.py [ROOT]
+Usage: python scripts/check_repo.py [ROOT] [--pin-vendored]
 Lists the files git would track (or, outside a git repository, the files not matched by .gitignore)
 and exits with status 1 if any rule is broken.
 """
@@ -9,6 +9,7 @@ and exits with status 1 if any rule is broken.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import re
 import subprocess
 import sys
@@ -35,10 +36,30 @@ MEDIA = {
 }
 MAX_BYTES = 1024 * 1024
 # Vendored assets may exceed the size limit, but only inside these folders, which need a licence file.
+FONTS_DIR = "src/woodshed/page/assets/fonts"
 VENDOR_DIRS = ("src/woodshed/page/assets/vendor", "src/woodshed/page/assets/fonts", "src/woodshed/page/assets/samples")
-HOME_PATH = re.compile(r"(/home/[a-z_][a-z0-9_-]*/|/Users/[A-Za-z][^/\s]*/|[A-Za-z]:\\Users\\)")
-# Only these files may mention home paths, as examples of what the guard rejects.
-HOME_PATH_EXAMPLES = {"scripts/check_repo.py", "tests/test_check_repo.py"}
+HOME_PATH = re.compile(
+    # /root/ only where a path starts ("src/root/" and "https://x/root/" are not home folders);
+    # the others anywhere, URLs included (file:///home/alice/, ssh://host/home/bob/).
+    r"(/home/[a-z_][a-z0-9_-]*/|/var/home/[a-z_][a-z0-9_-]*/|(?<![\w.-])/root/|/Users/[A-Za-z][^/\s]*/"
+    r"|[A-Za-z]:[\\/]Users[\\/])"
+)
+SECRET = re.compile(
+    r"(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|xox[abprs]-[A-Za-z0-9-]{10,}"
+    r"|hf_[A-Za-z0-9]{30,}|npm_[A-Za-z0-9]{36}|(?<![A-Za-z0-9-])sk-(?:proj-|ant-)?[A-Za-z0-9_-]{32,}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # a JSON Web Token
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+)
+# Only these files may contain such patterns, as examples of what the guard rejects.
+PATTERN_EXAMPLES = {"scripts/check_repo.py", "tests/test_check_repo.py"}
+# The practice page works offline: its own code never loads anything from the network.
+PAGE_DIR = "src/woodshed/page"
+PAGE_CODE = {".js", ".html", ".css"}
+URL = re.compile(r"(?:https?|wss?|ftp)://(?!www\.w3\.org/)|(?<![:\w])//[a-z0-9.-]+\.[a-z]{2,}/", re.IGNORECASE)
+# XML namespaces (SVG, XHTML) are identifiers, never fetched.
+# Vendored files are pinned by hash: an update is a reviewed change, and nothing (audio hidden in
+# base64, for one) can slip into these folders unnoticed.
+VENDOR_MANIFEST = "scripts/vendored.sha256"
 ALWAYS_SKIPPED = {
     ".git",
     ".venv",
@@ -100,35 +121,101 @@ def list_files(root: Path) -> list[str]:
     return out
 
 
-def check(root: Path, files: list[str]) -> list[str]:
-    problems: list[str] = []
-    for rel in files:
-        path = root / rel
-        if Path(rel).suffix.lower() in MEDIA:
-            problems.append(f"{rel}: audio or video files must not be tracked")
-        if rel.split("/")[0] == "private":
-            problems.append(f"{rel}: nothing under private/ may be tracked")
-        in_vendor = any(rel.startswith(d + "/") for d in VENDOR_DIRS)
-        if path.is_file() and path.stat().st_size > MAX_BYTES and not in_vendor:
-            problems.append(f"{rel}: file larger than 1 MB")
-        if path.is_file() and path.stat().st_size < 2 * MAX_BYTES and rel not in HOME_PATH_EXAMPLES:
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                text = ""
-            if HOME_PATH.search(text):
-                problems.append(f"{rel}: contains an absolute home path")
+def _vendored(rel: str) -> bool:
+    return any(rel.startswith(d + "/") for d in VENDOR_DIRS)
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def vendor_manifest(root: Path, files: list[str]) -> str:
+    return "".join(f"{sha256(root / rel)}  {rel}\n" for rel in sorted(files) if _vendored(rel))
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return ""
+
+
+def _file_problems(root: Path, rel: str) -> list[str]:
+    path, problems = root / rel, []
+    if Path(rel).suffix.lower() in MEDIA:
+        problems.append(f"{rel}: audio or video files must not be tracked")
+    if rel.split("/")[0] == "private":
+        problems.append(f"{rel}: nothing under private/ may be tracked")
+    if not path.is_file():
+        return problems
+    size = path.stat().st_size
+    if size > MAX_BYTES and not _vendored(rel):
+        problems.append(f"{rel}: file larger than 1 MB")
+    if size < 2 * MAX_BYTES and rel not in PATTERN_EXAMPLES:
+        text = _read_text(path)
+        if HOME_PATH.search(text):
+            problems.append(f"{rel}: contains an absolute home path")
+        if SECRET.search(text):
+            problems.append(f"{rel}: contains what looks like a secret (token or private key)")
+        if rel.startswith(PAGE_DIR + "/") and Path(rel).suffix in PAGE_CODE and not _vendored(rel) and URL.search(text):
+            problems.append(f"{rel}: page code must not reference the network (the page works offline)")
+    return problems
+
+
+def _family(font: str) -> str:
+    """'JetBrainsMono-latin.woff2' -> 'jetbrainsmono'; 'Inter.woff2' -> 'inter'."""
+    return Path(font).stem.split("-")[0].lower()
+
+
+def _font_licence_problems(files: list[str]) -> list[str]:
+    """Each font family needs its own licence (OFL-<family>.txt), not just any licence in the folder."""
+    fonts = [f for f in files if f.startswith(FONTS_DIR + "/") and f.endswith((".woff2", ".woff", ".ttf", ".otf"))]
+    licences = {Path(f).stem.lower() for f in files if f.startswith(FONTS_DIR + "/OFL-")}
+    return [
+        f"{f}: no licence file OFL-{_family(f)}.txt for this font family"
+        for f in fonts
+        if f"ofl-{_family(f)}" not in licences
+    ]
+
+
+def _vendor_problems(root: Path, files: list[str]) -> list[str]:
+    problems = []
     for d in VENDOR_DIRS:
         if any(f.startswith(d + "/") for f in files) and not any(
             f.startswith(d + "/") and Path(f).name.upper().startswith(("LICENSE", "LICENCE", "COPYING", "OFL"))
             for f in files
         ):
             problems.append(f"{d}: vendored files need a licence file next to them")
+    problems += _font_licence_problems(files)
+    manifest = root / VENDOR_MANIFEST
+    pinned = {}
+    if manifest.is_file():
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            digest, _, rel = line.partition("  ")
+            pinned[rel] = digest
+    for rel in sorted(f for f in files if _vendored(f)):
+        if rel not in pinned:
+            problems.append(f"{rel}: vendored file missing from {VENDOR_MANIFEST}")
+        elif (root / rel).is_file() and sha256(root / rel) != pinned[rel]:
+            problems.append(f"{rel}: content differs from its hash in {VENDOR_MANIFEST}")
+    for rel in sorted(set(pinned) - set(files)):
+        problems.append(f"{rel}: listed in {VENDOR_MANIFEST} but not present")
     return problems
 
 
+def check(root: Path, files: list[str]) -> list[str]:
+    problems = [p for rel in files for p in _file_problems(root, rel)]
+    return problems + _vendor_problems(root, files)
+
+
 def main(argv: list[str]) -> int:
-    root = Path(argv[1]).resolve() if len(argv) > 1 else Path(__file__).resolve().parents[1]
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    root = Path(args[0]).resolve() if args else Path(__file__).resolve().parents[1]
+    if "--pin-vendored" in argv:  # after a reviewed update of a vendored file
+        manifest = root / VENDOR_MANIFEST
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(vendor_manifest(root, list_files(root)), encoding="utf-8")
+        print(f"check_repo: wrote {VENDOR_MANIFEST}")
     problems = check(root, list_files(root))
     for p in problems:
         print(f"check_repo: {p}", file=sys.stderr)

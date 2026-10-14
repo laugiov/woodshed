@@ -43,3 +43,24 @@ def test_module_entry_point_in_process(monkeypatch: pytest.MonkeyPatch, capsys: 
         runpy.run_module("woodshed", run_name="__main__")
     assert exc.value.code == 0
     assert capsys.readouterr().out.startswith("woodshed ")
+
+
+def test_analyze_is_exported_without_loading_librosa_for_version() -> None:
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, woodshed; assert 'librosa' not in sys.modules; woodshed.analyze; assert 'librosa' in sys.modules"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_reading_a_song_does_not_load_the_audio_libraries() -> None:
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import woodshed.song, woodshed.model, woodshed.theory; "
+        "loaded = {'librosa', 'numba', 'soundfile', 'scipy'} & set(sys.modules); assert not loaded, loaded"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)

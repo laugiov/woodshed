@@ -1,22 +1,36 @@
-"""Chord engine: same behaviour as the prototype, measured on the synthetic songs."""
+"""Chord engine: same labels as the golden file for the installed librosa and numpy, on the synthetic songs."""
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from typing import Any
 
-import librosa
 import numpy as np
 import pytest
 
 from tests import synth
+from tests.golden.regenerate import environment
 from tests.scoring import majmin_accuracy
 from woodshed import audio
 from woodshed.engine import decoding as dec
 from woodshed.engine import detect
 
-GOLDEN = json.loads((Path(__file__).parent / "golden" / "engine.json").read_text())
-SAME_LIBROSA = librosa.__version__ == GOLDEN["librosa"]
+_DATA = json.loads((Path(__file__).parent / "golden" / "engine.json").read_text())
+GOLDEN = _DATA["environments"]
+REFERENCE = _DATA["reference"]  # labels of the original implementation, never regenerated
+# Exact labels are pinned on Linux, where the golden file is made. Other platforms (other BLAS and
+# FFT builds) are held to the accuracy of the reference instead.
+EXACT = sys.platform == "linux"
+
+
+def golden(name: str) -> dict[str, Any]:
+    installed = environment()
+    if installed not in GOLDEN:
+        pytest.fail(f"no golden entry for {installed}: run python -m tests.golden.regenerate and review the diff")
+    entry: dict[str, Any] = GOLDEN[installed][name]
+    return entry
 
 
 @pytest.fixture(scope="session")
@@ -30,25 +44,34 @@ def bpb(name: str) -> int:
 
 
 @pytest.mark.parametrize("name", list(synth.SONGS))
-def test_matches_the_prototype_or_its_accuracy(name: str, songs: dict[str, Path]) -> None:
+def test_matches_the_golden_labels(name: str, songs: dict[str, Path]) -> None:
     res = detect(songs[name], sevenths=False, beats_per_bar=bpb(name))
-    gold = GOLDEN["songs"][name]
-    if SAME_LIBROSA:
-        assert res.labels == gold["labels"]
-        assert res.key_name == gold["key"]
-        assert res.offset == gold["offset"]
-        assert [bool(x) for x in res.doubtful] == gold["doubtful"]
-    truth = synth.render(name).chords
-    gold_acc = majmin_accuracy(gold["starts"], gold["labels"], truth)
-    assert majmin_accuracy(list(res.beat_times), res.labels, truth) >= gold_acc - 0.02
+    if not EXACT:
+        truth = synth.render(name).chords
+        floor = majmin_accuracy(REFERENCE[name]["starts"], REFERENCE[name]["labels"], truth) - 0.02
+        assert majmin_accuracy(list(res.beat_times), res.labels, truth) >= floor
+        return
+    gold = golden(name)
+    assert res.labels == gold["labels"]
+    assert res.key_name == gold["key"]
+    assert res.offset == gold["offset"]
+    assert [bool(x) for x in res.doubtful] == gold["doubtful"]
 
 
 @pytest.mark.parametrize("name", list(synth.SONGS))
-def test_sevenths_vocabulary_matches_the_prototype(name: str, songs: dict[str, Path]) -> None:
+def test_every_golden_entry_is_as_accurate_as_the_reference(name: str) -> None:
+    truth = synth.render(name).chords
+    floor = majmin_accuracy(REFERENCE[name]["starts"], REFERENCE[name]["labels"], truth) - 0.02
+    for entry in GOLDEN.values():
+        assert majmin_accuracy(entry[name]["starts"], entry[name]["labels"], truth) >= floor
+
+
+@pytest.mark.parametrize("name", list(synth.SONGS))
+def test_sevenths_vocabulary_matches_the_golden_labels(name: str, songs: dict[str, Path]) -> None:
+    if not EXACT:
+        pytest.skip("exact labels are pinned on Linux only")
     res = detect(songs[name], sevenths=True, beats_per_bar=bpb(name))
-    if not SAME_LIBROSA:
-        pytest.skip("golden labels were produced with another librosa version")
-    assert res.labels == GOLDEN["songs"][name]["labels7"]
+    assert res.labels == golden(name)["labels7"]
 
 
 def test_external_beats_and_phase_are_used(songs: dict[str, Path]) -> None:
@@ -101,15 +124,37 @@ def test_unreadable_file_raises_a_clear_error(tmp_path: Path) -> None:
 
 
 def test_wav_still_loads_without_ffmpeg(monkeypatch: pytest.MonkeyPatch, songs: dict[str, Path]) -> None:
-    monkeypatch.setattr(audio.shutil, "which", lambda _name: None)
+    monkeypatch.setattr("woodshed.audio.shutil.which", lambda _name: None)
     y = audio.load(songs["pop"])
     assert y.dtype == np.float32
     assert abs(y.size / audio.SR - synth.render("pop").mix.size / synth.SR) < 0.01
 
 
 def test_without_ffmpeg_an_mp3_gets_a_helpful_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(audio.shutil, "which", lambda _name: None)
+    monkeypatch.setattr("woodshed.audio.shutil.which", lambda _name: None)
     bad = tmp_path / "song.mp3"
     bad.write_bytes(b"ID3 not really")
     with pytest.raises(audio.AudioError, match="ffmpeg is not installed"):
         audio.load(bad)
+
+
+def test_a_soft_passage_is_not_erased(tmp_path: Path) -> None:
+    import soundfile as sf
+
+    song = synth.render("pop")
+    half = song.mix.size // 2
+    soft = song.mix.copy()
+    soft[:half] *= 10 ** (-15 / 20)  # the first half 15 dB quieter, like a soft verse
+    wav = tmp_path / "soft.wav"
+    sf.write(wav, soft, synth.SR)
+    res = detect(wav)
+    first_half = [lab for t, lab in zip(res.beat_times, res.labels, strict=True) if 1.2 < t < half / synth.SR]
+    assert first_half and "N" not in first_half
+
+
+def test_digital_silence_has_no_chords_and_an_unknown_key() -> None:
+    from woodshed.engine.features import spectral, sync
+
+    y = np.zeros(synth.SR * 8, dtype=np.float32)
+    res = dec.decode(sync(spectral(y), np.arange(0.5, 7.5, 0.5)), False, 4)
+    assert set(res.labels) == {"N"} and not res.key_known and res.clarity == 0.0

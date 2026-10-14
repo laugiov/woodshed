@@ -126,3 +126,26 @@ def test_parse_label() -> None:
     assert th.parse_label("A#m7") == (10, "m7")
     assert th.parse_label("Bbm") == (10, "m")
     assert th.parse_label("N") is None
+
+
+@pytest.mark.parametrize("key", [th.Key(0, "maj"), th.Key(9, "min")])
+def test_a_loop_has_the_same_name_in_the_major_and_the_relative_minor(key: th.Key) -> None:
+    loop = [(9, "m"), (5, ""), (0, ""), (7, "")]  # Am F C G
+    name = th.progression_name(loop, key)
+    assert name is not None and "I-V-vi-IV" in name
+
+
+@pytest.mark.parametrize(("label", "parsed"), [("Cb", (11, "")), ("E#m", (5, "m")), ("Fb7", (4, "7")), ("B#", (0, ""))])
+def test_enharmonic_labels_parse(label: str, parsed: tuple[int, str]) -> None:
+    assert th.parse_label(label) == parsed
+
+
+def test_a_non_chord_label_is_rejected() -> None:
+    with pytest.raises(ValueError, match="not a chord"):
+        th.parse_label("H7")
+
+
+def test_a_major_seventh_keeps_an_upper_case_numeral() -> None:
+    assert th.roman(0, "maj7", th.Key(0)) == "Imaj7"
+    assert th.roman(9, "m7", th.Key(0)) == "vi7"
+    assert th.roman(7, "7", th.Key(0)) == "V7"

@@ -16,20 +16,23 @@ jobs:
   checks:
     name: Hygiene, lint, types, workflows
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: "3.13"
       - run: python scripts/check_repo.py
+      - run: uv lock --check
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
-      - run: uv run --frozen mypy src
-      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color .github/workflows/ci.yml
+      - run: uv run --frozen mypy src tests scripts
+      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml
 
   tests:
     name: Tests, ${{ matrix.os }}, Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -51,14 +54,48 @@ jobs:
   package:
     name: Build and smoke-test the package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: "3.14"
       - run: uv build
-      - run: uvx twine check --strict dist/*
+      - run: uv run --frozen --group dev twine check --strict dist/*
+      - run: python scripts/check_wheel.py dist/*.whl
       - run: |
           uv venv smoke
           VIRTUAL_ENV=smoke uv pip install dist/*.whl
           smoke/bin/woodshed --version
+
+  stems:
+    name: Stems extra (real Demucs and beat_this), Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    env:
+      WOODSHED_CACHE: ${{ github.workspace }}/.woodshed-cache
+      WOODSHED_REQUIRE_STEMS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      # Saved only after the real tests pass, so only with both models complete. Bump the key
+      # when a model changes.
+      - id: models
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .woodshed-cache/models
+          key: woodshed-models-v1
+      # CPU-only torch comes from the PyTorch index set in pyproject.toml (no 5 GB CUDA download).
+      - run: uv run --frozen --extra stems --group dev pytest -q -m stems
+      - if: success() && matrix.python == '3.13' && steps.models.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .woodshed-cache/models
+          key: woodshed-models-v1

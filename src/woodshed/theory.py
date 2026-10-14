@@ -27,7 +27,7 @@ ROMAN = {
 OPEN_SHAPES = frozenset(
     {"C", "A", "G", "E", "D", "Am", "Em", "Dm", "A7", "E7", "D7", "G7", "C7", "B7", "Am7", "Em7", "Dm7"}
 )
-EASY_BARRES = frozenset({"F", "Bm", "Fmaj7"})
+EASY_BARRES = frozenset({"F", "Bm"})
 
 Mode = Literal["maj", "min"]
 Prefer = Literal["sharps", "flats"] | None
@@ -94,23 +94,25 @@ def chord_name(pc: int, quality: str, key: Key, prefer: Prefer = None) -> str:
     return spell_root(pc, key, prefer) + quality
 
 
+NATURALS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
 def parse_label(label: str) -> tuple[int, str] | None:
-    """'A#m7' -> (10, 'm7'); 'N' -> None."""
+    """'A#m7' -> (10, 'm7'), 'Cb' -> (11, ''); 'N' -> None."""
     if label in ("N", "X", ""):
         return None
-    root = label[:2] if len(label) > 1 and label[1] in "#b" else label[:1]
-    names = FLAT_NAMES if root in FLAT_NAMES and "b" in root else SHARP_NAMES
-    return names.index(root), label[len(root) :]
+    if label[0] not in NATURALS:
+        raise ValueError(f"not a chord label: {label!r}")
+    accidental = {"#": 1, "b": -1}.get(label[1:2], 0)
+    return (NATURALS[label[0]] + accidental) % 12, label[1 + abs(accidental) :]
 
 
 def roman(pc: int, quality: str, key: Key) -> str:
     """Degree relative to the tonic; lower case for minor chords, the seventh kept as a suffix."""
     numeral = ROMAN[(pc - key.tonic) % 12]
-    minor = quality.startswith("m") and not quality.startswith("maj")
-    if minor:
+    if quality.startswith("m") and not quality.startswith("maj"):
         numeral = numeral.lower()
-    suffix = "7" if quality in ("7", "m7") else "maj7" if quality == "maj7" else ""
-    return numeral + suffix
+    return numeral + ("maj7" if quality == "maj7" else "7" if quality.endswith("7") else "")
 
 
 PROGRESSIONS: list[tuple[list[str], str]] = [
@@ -132,6 +134,16 @@ def named_progression(romans: Sequence[str]) -> str | None:
             if plain[i : i + len(pattern)] == pattern:
                 return name
     return None
+
+
+def progression_name(chords: Sequence[tuple[int, str]], key: Key) -> str | None:
+    """Name of a well-known progression in these chords, whether the key reads as major or minor.
+
+    Am-F-C-G is vi-IV-I-V in C and i-bVI-bIII-bVII in A minor: the key estimate often cannot tell
+    the two apart on such loops, so names are matched relative to the relative major.
+    """
+    major = Key(key.relative_major, "maj")
+    return named_progression([roman(pc, q, major) for pc, q in chords])
 
 
 def shape_difficulty(pc: int, quality: str) -> int:

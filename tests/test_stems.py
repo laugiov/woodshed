@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 import types
 from collections.abc import Callable
@@ -14,8 +13,9 @@ import pytest
 import soundfile as sf
 
 from tests import synth
+from tests.fakes import download, hub_dir, install_fake_torch
 from woodshed import stems
-from woodshed.beats import MissingExtra
+from woodshed.errors import AudioError, MissingExtra, StemsError
 
 RATE = 44100
 
@@ -24,26 +24,27 @@ class FakeLoadModelError(Exception):
     pass
 
 
-def install_fake_demucs(monkeypatch: pytest.MonkeyPatch, calls: dict[str, Any], fail_offline: bool = False) -> None:
+def install_fake_demucs(monkeypatch: pytest.MonkeyPatch, calls: dict[str, Any], peak: float = 0.4) -> dict[str, Any]:
+    torch_state = install_fake_torch(monkeypatch)
+
     class Separator:
         samplerate = RATE
 
         def __init__(self, model: str, device: str, progress: bool, callback: Callable[[dict[str, Any]], None]) -> None:
-            import os
-
-            if fail_offline and os.environ.get("HF_HUB_OFFLINE") == "1":
-                raise FakeLoadModelError("model not cached")
+            download(f"https://example.org/{model}.th")  # as Demucs does on first use
             calls["init"] = calls.get("init", 0) + 1
+            calls["model_dir"] = hub_dir()
             calls["device"] = device
             self.callback = callback
 
-        def separate_audio_file(self, file: Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-            calls["file"] = file
+        def separate_tensor(self, wav: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+            calls["input"] = (wav.shape, sr)
             n = RATE // 2
             for offset in (0, n // 2):
                 self.callback({"segment_offset": offset, "audio_length": n, "state": "end"})
             mix = np.zeros((2, n), dtype=np.float32)
-            parts = {name: np.full((2, n), 0.1 * (i + 1), dtype=np.float32) for i, name in enumerate(stems.STEM_NAMES)}
+            levels = {name: peak * (i + 1) / 4 for i, name in enumerate(stems.STEM_NAMES)}
+            parts = {name: np.full((2, n), level, dtype=np.float32) for name, level in levels.items()}
             return mix, parts
 
     api = types.ModuleType("demucs.api")
@@ -51,6 +52,7 @@ def install_fake_demucs(monkeypatch: pytest.MonkeyPatch, calls: dict[str, Any], 
     api.LoadModelError = FakeLoadModelError  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "demucs", types.ModuleType("demucs"))
     monkeypatch.setitem(sys.modules, "demucs.api", api)
+    return torch_state
 
 
 @pytest.fixture
@@ -72,6 +74,11 @@ def test_separation_writes_lossless_stems_and_reuses_the_cache(
     install_fake_demucs(monkeypatch, calls)
     first = stems.separate(song)
     assert not first.from_cache and calls["init"] == 1 and calls["device"] == "cpu"
+    assert (
+        calls["model_dir"] == str(cache / "models")
+        and hub_dir() == "/default"
+        and sys.modules["torch.hub"]._hub_dir is None
+    )
     assert set(first.paths) == set(stems.STEM_NAMES)
     for path in first.paths.values():
         info = sf.info(path)
@@ -97,22 +104,70 @@ def test_progress_is_reported_up_to_one(monkeypatch: pytest.MonkeyPatch, song: P
 
 
 def test_offline_mode_refuses_to_download(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
-    install_fake_demucs(monkeypatch, {}, fail_offline=True)
-    with pytest.raises(stems.StemsError, match="--offline"):
+    torch_state = install_fake_demucs(monkeypatch, {})
+    with pytest.raises(StemsError, match="--offline"):
         stems.separate(song, offline=True)
-    assert not any(cache.rglob("*.flac"))  # nothing half-written
+    assert torch_state["downloads"] == []
+    assert not any(cache.rglob("*.flac")) and list((cache / "stems").iterdir()) == []  # nothing half-written
 
 
 def test_a_failed_separation_leaves_no_partial_cache(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     install_fake_demucs(monkeypatch, {})
 
-    def boom(self: object, file: Path) -> None:
+    def boom(self: object, wav: object, sr: int) -> None:
         raise RuntimeError("out of memory")
 
-    monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_audio_file", boom)
-    with pytest.raises(stems.StemsError, match="out of memory"):
+    monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", boom)
+    with pytest.raises(StemsError, match="out of memory"):
         stems.separate(song)
-    assert not any(cache.rglob("*.flac"))
+    assert list((cache / "stems").iterdir()) == []
+
+
+def test_ctrl_c_during_separation_leaves_no_temp_folder(
+    monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path
+) -> None:
+    install_fake_demucs(monkeypatch, {})
+
+    def interrupted(self: object, wav: object, sr: int) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        stems.separate(song)
+    assert list((cache / "stems").iterdir()) == []
+
+
+def test_a_model_load_error_is_typed(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
+    install_fake_demucs(monkeypatch, {})
+
+    def broken(self: object, *args: Any, **kwargs: Any) -> None:
+        raise FakeLoadModelError("unknown model")
+
+    monkeypatch.setattr(sys.modules["demucs.api"].Separator, "__init__", broken)
+    with pytest.raises(StemsError, match="unknown model"):
+        stems.separate(song)
+
+
+def test_a_concurrent_run_that_finished_first_is_reused(
+    monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path
+) -> None:
+    calls: dict[str, Any] = {}
+    install_fake_demucs(monkeypatch, calls)
+    winner = stems.separate(song)
+    real_separate = sys.modules["demucs.api"].Separator.separate_tensor
+
+    def racing(self: Any, wav: Any, sr: int) -> Any:
+        # The other run publishes its folder while this one is still separating.
+        for p in winner.paths.values():
+            sf.write(p, np.zeros((10, 2)), RATE, subtype="PCM_24")
+        return real_separate(self, wav, sr)
+
+    for p in winner.paths.values():
+        p.unlink()
+    monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", racing)
+    again = stems.separate(song)
+    assert not again.from_cache and all(p.exists() for p in again.paths.values())
+    assert [p.name for p in (cache / "stems").iterdir()] == [winner.folder.name]
 
 
 def test_missing_extra_explains_the_cpu_install(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
@@ -127,12 +182,112 @@ def test_missing_extra_explains_the_cpu_install(monkeypatch: pytest.MonkeyPatch,
 def test_cache_dir_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("WOODSHED_CACHE", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    assert stems.cache_dir() == tmp_path / "xdg" / "woodshed"
+    from woodshed.cache import cache_dir
+
+    assert cache_dir() == tmp_path / "xdg" / "woodshed"
 
 
-@pytest.mark.skipif(importlib.util.find_spec("demucs") is None, reason="needs the stems extra")
-def test_real_separation_on_a_synthetic_song(song: Path, cache: Path) -> None:
+def test_a_stale_incomplete_cache_folder_is_replaced(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
+    install_fake_demucs(monkeypatch, {})
+    first = stems.separate(song)
+    first.paths["vocals"].unlink()  # deleted by hand, or left by an interrupted older version
+    again = stems.separate(song)
+    assert not again.from_cache and all(p.exists() for p in again.paths.values())
+    assert [p.name for p in (cache / "stems").iterdir()] == [first.folder.name]
+
+
+def test_stems_louder_than_full_scale_share_one_gain(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
+    install_fake_demucs(monkeypatch, {}, peak=1.5)  # Demucs output is not limited to [-1, 1]
     result = stems.separate(song)
-    drums, _ = sf.read(result.paths["drums"], always_2d=True)
-    truth = synth.render("pop").stems["drums"]
-    assert abs(drums.shape[0] / RATE - truth.size / synth.SR) < 0.05
+    assert result.gain == pytest.approx(stems.CEILING / 1.5)
+    levels = [float(sf.read(result.paths[name])[0].max()) for name in stems.STEM_NAMES]
+    # Nothing clipped: the stems keep their proportions, so they still add up to the mix.
+    assert levels == pytest.approx([1.5 * (i + 1) / 4 * result.gain for i in range(4)], abs=1e-6)
+    assert stems.separate(song).gain == result.gain  # remembered with the cached stems
+
+
+def test_quiet_stems_are_written_unchanged(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
+    install_fake_demucs(monkeypatch, {})
+    assert stems.separate(song).gain == 1.0
+
+
+def test_a_file_longer_than_the_limit_is_not_separated(
+    monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path
+) -> None:
+    calls: dict[str, Any] = {}
+    install_fake_demucs(monkeypatch, calls)
+    monkeypatch.setattr("woodshed.audio.MAX_SECONDS", 1)
+    with pytest.raises(AudioError, match="limit"):
+        stems.separate(song)
+    assert "init" not in calls
+
+
+def test_demucs_gets_our_decoded_audio_never_the_file(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
+    calls: dict[str, Any] = {}
+    install_fake_demucs(monkeypatch, calls)
+    stems.separate(song)
+    shape, sr = calls["input"]
+    assert sr == stems.RATE and shape[0] == 2  # stereo, decoded by audio.load
+
+
+def test_a_disguised_concat_list_never_reaches_demucs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cache: Path
+) -> None:
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("needs ffmpeg")
+    calls: dict[str, Any] = {}
+    install_fake_demucs(monkeypatch, calls)
+    secret = tmp_path / "secret.wav"
+    sf.write(secret, np.full(22050, 0.5), 22050)
+    disguised = tmp_path / "song.mp3"
+    disguised.write_text(f"ffconcat version 1.0\nfile {secret.name}\n")
+    with pytest.raises(AudioError, match="not supported"):
+        stems.separate(disguised)
+    assert "init" not in calls
+
+
+@pytest.mark.parametrize("xdg", ["", "relative/cache"])
+def test_an_empty_or_relative_xdg_cache_home_is_ignored(monkeypatch: pytest.MonkeyPatch, xdg: str) -> None:
+    from woodshed.cache import cache_dir
+
+    monkeypatch.delenv("WOODSHED_CACHE", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", xdg)
+    if sys.platform == "linux":
+        assert cache_dir() == Path.home() / ".cache" / "woodshed"
+
+
+def test_a_relative_woodshed_cache_is_made_absolute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from woodshed.cache import cache_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WOODSHED_CACHE", "cache")
+    assert cache_dir() == tmp_path.resolve() / "cache"
+
+
+@pytest.mark.parametrize("content", ["not json", '{"gain": "loud"}', '{"gain": 3}', "{}"])
+def test_a_corrupt_gain_file_means_separating_again(
+    monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path, content: str
+) -> None:
+    calls: dict[str, Any] = {}
+    install_fake_demucs(monkeypatch, calls)
+    first = stems.separate(song)
+    (first.folder / stems.GAIN_FILE).write_text(content)
+    again = stems.separate(song)
+    assert not again.from_cache and calls["init"] == 2 and again.gain == 1.0
+    assert stems.separate(song).from_cache and calls["init"] == 2  # the bad entry was replaced
+
+
+def test_a_missing_extra_is_reported_before_any_decoding(
+    monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path
+) -> None:
+    monkeypatch.setitem(sys.modules, "demucs", None)
+    monkeypatch.setitem(sys.modules, "demucs.api", None)
+
+    def no_decode(*args: object, **kwargs: object) -> None:
+        raise AssertionError("decoded before checking the extra")
+
+    monkeypatch.setattr("woodshed.audio.load", no_decode)
+    with pytest.raises(MissingExtra):
+        stems.separate(song)

@@ -20,7 +20,8 @@ def write(root: Path, rel: str, data: bytes = b"x") -> Path:
 
 
 def problems(root: Path) -> list[str]:
-    return check_repo.check(root, check_repo.list_files(root))
+    found: list[str] = check_repo.check(root, check_repo.list_files(root))
+    return found
 
 
 def test_clean_tree_passes(tmp_path: Path) -> None:
@@ -45,7 +46,19 @@ def test_private_folder_is_rejected(tmp_path: Path) -> None:
     assert any("private/" in p for p in problems(tmp_path))
 
 
-@pytest.mark.parametrize("text", ["/home/alice/music", "/Users/bob/Desktop", "C:\\Users\\carol\\x"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/home/alice/music",
+        "/Users/bob/Desktop",
+        "C:\\Users\\carol\\x",
+        "C:/Users/dan/x",
+        "/root/x",
+        "/var/home/eve/x",
+        "file:///home/alice/x",
+        "ssh://h/home/bob/y",
+    ],
+)
 def test_absolute_home_paths_are_rejected(tmp_path: Path, text: str) -> None:
     write(tmp_path, "notes.md", f"see {text}\n".encode())
     assert any("home path" in p for p in problems(tmp_path))
@@ -64,3 +77,107 @@ def test_ignored_files_are_not_listed(tmp_path: Path) -> None:
     write(tmp_path, ".venv/lib/x.py")
     write(tmp_path, "keep.py")
     assert sorted(check_repo.list_files(tmp_path)) == [".gitignore", "keep.py"]
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "AKIA" + "ABCDEFGHIJKLMNOP",
+        "ghp_" + "a" * 36,
+        "github_pat_" + "A" * 30,
+        "xoxb-" + "1234567890-abc",
+        "-----BEGIN OPENSSH " + "PRIVATE KEY-----",
+    ],
+)
+def test_secrets_are_rejected(tmp_path: Path, secret: str) -> None:
+    write(tmp_path, "config.toml", f"token = '{secret}'\n".encode())
+    assert any("secret" in p for p in problems(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        'loadScript("https://cdn.example.org/lib.js")',
+        "fetch('http://localhost:8000/x')",
+        'src="//cdn.example.org/x.js"',
+    ],
+)
+def test_page_code_must_not_reference_the_network(tmp_path: Path, code: str) -> None:
+    write(tmp_path, "src/woodshed/page/assets/js/app.js", code.encode())
+    assert any("network" in p for p in problems(tmp_path))
+
+
+def test_page_code_may_use_relative_paths_and_comments(tmp_path: Path) -> None:
+    write(tmp_path, "src/woodshed/page/assets/js/app.js", b'loadScript("assets/vendor/lib.js"); // offline\n')
+    write(tmp_path, "src/woodshed/page/body.html", b"<p>a // b</p>\n")
+    assert problems(tmp_path) == []
+
+
+def test_vendored_files_are_pinned_by_hash(tmp_path: Path) -> None:
+    lib = write(tmp_path, "src/woodshed/page/assets/vendor/lib.js", b"v1")
+    write(tmp_path, "src/woodshed/page/assets/vendor/LICENSE.txt", b"MIT")
+    assert any("missing from" in p for p in problems(tmp_path))
+    assert check_repo.main(["check_repo", str(tmp_path), "--pin-vendored"]) == 0
+    lib.write_bytes(b"v1 with audio hidden in base64")
+    assert any("differs from its hash" in p for p in problems(tmp_path))
+    lib.unlink()
+    assert any("not present" in p for p in problems(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "text", ["src/root/x.py", "https://example.org/root/page", "docs/task-" + "management-and-planning-for-the-teams"]
+)
+def test_root_and_home_inside_other_paths_are_fine(tmp_path: Path, text: str) -> None:
+    write(tmp_path, "notes.md", f"see {text}\n".encode())
+    assert problems(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "hf_" + "a" * 34,
+        "npm_" + "b" * 36,
+        "sk-proj-" + "c" * 40,
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abcdefghijklmnop",
+    ],
+)
+def test_more_token_formats_are_rejected(tmp_path: Path, secret: str) -> None:
+    write(tmp_path, "config.toml", f"token = '{secret}'\n".encode())
+    assert any("secret" in p for p in problems(tmp_path))
+
+
+def test_svg_namespaces_are_not_network_references(tmp_path: Path) -> None:
+    write(tmp_path, "src/woodshed/page/assets/js/app.js", b'createElementNS("http://www.w3.org/2000/svg", "svg")\n')
+    assert problems(tmp_path) == []
+
+
+@pytest.mark.parametrize("code", ['fetch("HTTPS://cdn.example.org/x")', 'new WebSocket("wss://example.org/live")'])
+def test_upper_case_and_websocket_urls_are_caught(tmp_path: Path, code: str) -> None:
+    write(tmp_path, "src/woodshed/page/assets/js/app.js", code.encode())
+    assert any("network" in p for p in problems(tmp_path))
+
+
+def test_each_font_family_needs_its_own_licence(tmp_path: Path) -> None:
+    fonts = "src/woodshed/page/assets/fonts"
+    write(tmp_path, f"{fonts}/Barlow-500-latin.woff2", b"font")
+    write(tmp_path, f"{fonts}/OFL-barlow.txt", b"OFL")
+    write(tmp_path, f"{fonts}/Inter-400-latin.woff2", b"font")
+    write(tmp_path, f"{fonts}/Lora.woff2", b"font")  # no dash in the name
+    found = problems(tmp_path)
+    assert any("Inter-400-latin.woff2: no licence" in p for p in found)
+    assert any("Lora.woff2: no licence file OFL-lora.txt" in p for p in found)
+    assert not any("Barlow-500-latin.woff2: no licence" in p for p in found)
+
+
+def test_the_git_listing_is_used_in_a_repository(tmp_path: Path) -> None:
+    import shutil
+    import subprocess
+
+    if shutil.which("git") is None:
+        pytest.skip("needs git")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write(tmp_path, ".gitignore", b"ignored.txt\n")
+    write(tmp_path, "ignored.txt")
+    write(tmp_path, "kept.py")
+    write(tmp_path, "build/out.txt")  # git lists it; the fallback skips any build folder
+    assert sorted(check_repo.list_files(tmp_path)) == [".gitignore", "build/out.txt", "kept.py"]
