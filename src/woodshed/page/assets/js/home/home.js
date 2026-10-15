@@ -78,7 +78,7 @@
     if (job && job.status !== "done") {
       status = job.status === "failed"
         ? h("span", { class: "warn" }, (job.kind === "words" ? "Words not placed: " : "Failed: ") + job.message)
-        : h("span", null, STATUS[job.status] + (job.status === "separating" ? " " + job.percent + " %" : job.step ? " (" + job.step + ")" : ""));
+        : h("span", null, STATUS[job.status] + (job.status === "separating" || job.status === "placing" ? " " + job.percent + " %" : job.step ? " (" + job.step + ")" : ""));
     } else status = song && song.complete ? h("span", { class: "okfact" }, song.stems ? "Ready, with parts" : "Ready") : h("span", null, "Mix only");
     // The words go on the singer's track: offered once the song has its parts.
     const addWords = song && song.complete && song.stems && !song.words && !(job && !["done", "failed"].includes(job.status))

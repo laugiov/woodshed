@@ -21,7 +21,7 @@ from woodshed import __version__, audio, songbook, stems, theory
 from woodshed.analysis import REVISION as ANALYSIS_REVISION
 from woodshed.analysis import analyze
 from woodshed.build import build as build_page
-from woodshed.build import folder_name, page_revision
+from woodshed.build import folder_name, page_revision, refresh_code
 from woodshed.errors import WoodshedError
 from woodshed.model import Song
 
@@ -225,6 +225,33 @@ def _check_bpm(song: Song, report: Reporter) -> None:
         )
 
 
+def update_page_code(page: Path, settings: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """A complete page built by older page code, its code updated in place (no new analysis).
+
+    With `settings`, only when the page was built with these settings but another page revision.
+    Returns the page's summary when updated, else None (up to date, incomplete, or needing a rebuild).
+    """
+    try:
+        manifest = json.loads((page / MANIFEST).read_text(encoding="utf-8"))
+        before, info = manifest["settings"], manifest["summary"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(before, dict) or not isinstance(info, dict) or manifest.get("complete") is not True:
+        return None
+    if before.get("page") == page_revision():
+        return None
+
+    def others(s: dict[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in s.items() if k != "page"}
+
+    if settings is not None and others(before) != others(settings):
+        return None
+    if not (page / "audio" / "mix.flac").is_file() or not refresh_code(page):
+        return None
+    _record(page, {**before, "page": page_revision()}, info, complete=True)
+    return info
+
+
 def first_pass(
     path: str | Path, opts: Options, report: Reporter, out: Path | None = None, title: str | None = None
 ) -> Pass:
@@ -246,6 +273,10 @@ def first_pass(
     known = up_to_date(page, settings)
     if known is not None:
         report.say(f"  up to date {page}")
+        return Pass(src, out, page, known, settings, False, opts)
+    known = update_page_code(page, settings)
+    if known is not None:  # built by an older woodshed, same analysis: its page code only
+        report.say(f"  page code updated {page}")
         return Pass(src, out, page, known, settings, False, opts)
     cached = stems.cached(src) if use_stems else None
     if use_stems and cached is None:

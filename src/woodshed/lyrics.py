@@ -265,8 +265,11 @@ def windows(samples: int) -> list[tuple[int, int]]:
     return [(s, min(samples, s + WINDOW + extra)) for s in range(0, samples, WINDOW) if samples - s >= RECEPTIVE]
 
 
-def listen(vocals_path: Path, cache: Path, offline: bool = False) -> Voice:
-    """Run the speech model on the vocal track (cached next to the stems)."""
+def listen(
+    vocals_path: Path, cache: Path, offline: bool = False, progress: Callable[[float], None] | None = None
+) -> Voice:
+    """Run the speech model on the vocal track (cached next to the stems). `progress` hears the
+    share of the voice heard so far, 0 to 1."""
     from woodshed import audio
 
     vocals = audio.load(vocals_path)
@@ -279,7 +282,7 @@ def listen(vocals_path: Path, cache: Path, offline: bool = False) -> Voice:
         except (OSError, ValueError, KeyError, zipfile.BadZipFile):
             loaded = None  # a damaged file: heard again
     if loaded is None:
-        emission, labels = _run_model(vocals, audio.SR, offline)
+        emission, labels = _run_model(vocals, audio.SR, offline, progress)
         tmp = cache / f".{CACHE}.{os.getpid()}.{uuid.uuid4().hex[:8]}.npz"
         try:
             np.savez_compressed(tmp, emission=emission.astype(np.float16), labels=np.array(labels))
@@ -292,7 +295,9 @@ def listen(vocals_path: Path, cache: Path, offline: bool = False) -> Voice:
     return Voice(emission, labels, voice_mask(vocals, audio.SR, emission.shape[0]))
 
 
-def _run_model(vocals: npt.NDArray[np.float32], sr: int, offline: bool) -> tuple[npt.NDArray[np.float32], list[str]]:
+def _run_model(
+    vocals: npt.NDArray[np.float32], sr: int, offline: bool, progress: Callable[[float], None] | None = None
+) -> tuple[npt.NDArray[np.float32], list[str]]:
     try:
         import torch
         import torchaudio
@@ -307,9 +312,12 @@ def _run_model(vocals: npt.NDArray[np.float32], sr: int, offline: bool) -> tuple
         model = bundle.get_model(with_star=True)
     wave = torchaudio.functional.resample(torch.from_numpy(vocals).float()[None], sr, MODEL_RATE)
     parts = []
+    spans = windows(wave.shape[1])
     with torch.inference_mode():
-        for a, b in windows(wave.shape[1]):
+        for k, (a, b) in enumerate(spans):
             parts.append(model(wave[:, a:b])[0][0])
+            if progress is not None:
+                progress((k + 1) / len(spans))
     emission: npt.NDArray[np.float32] = torch.cat(parts).numpy().astype(np.float32)
     return emission, list(bundle.get_labels(star="*"))
 
@@ -879,15 +887,26 @@ def write(folder: Path, data: dict[str, Any]) -> None:
 LISTENING = "listening to the voice: about a minute (MMS speech model by Meta, CC BY-NC 4.0, on this computer)"
 
 
-def add_to_page(page: Path, text: str, offline: bool = False, say: Callable[[str], None] = print) -> dict[str, Any]:
+def add_to_page(
+    page: Path,
+    text: str,
+    offline: bool = False,
+    say: Callable[[str], None] = print,
+    progress: Callable[[float], None] | None = None,
+) -> dict[str, Any]:
     """Place the words on a page: lyrics.json and lyrics.js, and the songbook file with the words.
 
     Shared by `woodshed lyrics` and the library app. The page needs its instrument tracks in the cache.
+    `progress` hears how far it is, 0 to 1: listening to the voice is most of the time.
     """
+    step = progress or (lambda f: None)
     cache = stems_folder(page)
     if not (cache / CACHE).exists():
         say(LISTENING)
-    voice = listen(cache / "vocals.flac", cache, offline)
+    step(0.0)
+    voice = listen(cache / "vocals.flac", cache, offline, lambda f: step(0.9 * f))
+    say("placing the words on the voice and the chords on the words")
+    step(0.9)
     chart = page_song(page)
     data = place(text, voice, chart)
     write(page, data)
@@ -895,12 +914,15 @@ def add_to_page(page: Path, text: str, offline: bool = False, say: Callable[[str
         from woodshed import exports
 
         exports.write_chordpro(chart, page / "exports", data)
+    step(1.0)
     return data
 
 
 def page_song(folder: Path) -> dict[str, Any]:
     text = (folder / "index.html").read_text(encoding="utf-8")
-    m = re.search(r'<script type="application/json" id="woodshed-data">(.*?)</script>', text, re.S)
+    from woodshed.build import DATA_BLOCK
+
+    m = DATA_BLOCK.search(text)
     if not m:
         raise LyricsError(f"{folder}: not a woodshed page")
     song: dict[str, Any] = json.loads(m.group(1))["song"]

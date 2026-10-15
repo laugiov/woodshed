@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,11 @@ WORDS = "[Verse]\nMorning comes in on the harbour road,\nthe radio hums\n"
 
 def test_from_disk_the_dialog_gives_the_command(open_page: Any) -> None:
     o = open_page("pop")
-    button = o.page.get_by_test_id("words-open")
-    expect(button).to_have_text("Add the words")
-    button.click()
+    expect(o.page.get_by_test_id("words-open")).to_have_text("Add the words")
+    header = o.page.get_by_test_id("words-header")  # where it is seen, in the accent colour
+    expect(header).to_have_text("+ Add the words")
+    expect(header).to_have_class("btn primary")
+    header.click()
     expect(o.page.get_by_test_id("words-dialog")).to_be_visible()
     expect(o.page.get_by_test_id("words-command")).to_have_text(f'woodshed lyrics "{o.folder.name}" words.txt')
     o.page.keyboard.press("Escape")
@@ -33,6 +36,7 @@ def test_from_disk_the_dialog_gives_the_command(open_page: Any) -> None:
 def test_a_page_without_the_singers_track_offers_no_words(open_page: Any) -> None:
     o = open_page("waltz", stems=False)
     expect(o.page.get_by_test_id("words-open")).to_have_count(0)
+    expect(o.page.get_by_test_id("words-header")).to_be_hidden()
 
 
 @pytest.fixture
@@ -44,8 +48,13 @@ def library(tmp_path: Path, pages_root: str, monkeypatch: pytest.MonkeyPatch) ->
     (page / "woodshed.json").write_text(json.dumps({"settings": {}, "summary": summary, "complete": True}))
     pasted: list[str] = []
 
-    def add_to_page(folder: Path, text: str, offline: bool = False, say: Any = print) -> dict[str, Any]:
+    def add_to_page(
+        folder: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None
+    ) -> dict[str, Any]:
         pasted.append(text)  # the speech model is not run here: the words of the test song are written
+        say("listening to the voice")
+        progress(0.5)
+        time.sleep(2.5)  # long enough for the page to show where it is
         data = lyrics_for(lyrics.page_song(folder)) | {"text": text}
         lyrics.write(folder, data)
         return data
@@ -75,6 +84,8 @@ def test_words_pasted_in_the_page_are_placed_and_shown(page: Page, library: app.
     page.get_by_test_id("words-open").click()
     expect(page.get_by_test_id("words-text")).to_have_value(WORDS)  # closed by mistake: the paste is kept
     page.get_by_test_id("words-place").click()
+    expect(page.get_by_test_id("words-percent")).to_have_text("50 %")  # half the voice heard
+    expect(page.get_by_test_id("words-status")).to_have_text("Listening to the voice")
     expect(page.get_by_test_id("sheet-lyrics")).to_be_visible(timeout=15000)  # reloaded with the words
     expect(page.locator(".lline").first).to_contain_text("Morning")
     assert library.pasted == [WORDS]  # type: ignore[attr-defined]

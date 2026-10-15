@@ -26,7 +26,24 @@
     function ready(on) {
       const button = $("wordsPlace");
       if (button) button.disabled = !on;
+      if (on) working(false);
     }
+
+    // A spinner while the library works; the bar fills as the voice is heard (no share yet: it moves).
+    function working(on, percent) {
+      const box = $("wordsProgress");
+      if (!box) return;
+      box.hidden = !on;
+      const bar = $("wordsBar");
+      if (typeof percent === "number") {
+        bar.value = percent;
+        $("wordsPct").textContent = percent + " %";
+      } else {
+        bar.removeAttribute("value");
+        $("wordsPct").textContent = "";
+      }
+    }
+    const sentence = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
     async function token() {
       const r = await fetch("/api/token", { cache: "no-store" });
@@ -70,8 +87,16 @@
           clearInterval(polling);
           ready(true);
           say("The words could not be placed: " + job.message, true);
-        } else if (job.status === "done") placed(job.message);
-        else say(job.status === "queued" ? "Waiting for the song being analysed…" : job.message || "Listening to the voice…");
+        } else if (job.status === "done") {
+          working(true, 100);
+          placed(job.message);
+        } else if (job.status === "queued") {
+          working(true);
+          say("Waiting for the song being analysed…");
+        } else {
+          working(true, job.percent);
+          say(sentence(job.message || "listening to the voice"));
+        }
       }, 1500);
     }
 
@@ -79,6 +104,7 @@
       const text = $("wordsText").value;
       if (!text.trim()) return say("Paste the words first.", true);
       ready(false);
+      working(true);
       say("Sending…");
       try {
         const r = await fetch("/api/lyrics", {
@@ -89,6 +115,7 @@
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || "the library refused them (" + r.status + ")");
         say("Listening to the voice: about a minute, longer the first time (the speech model is downloaded once).");
+        working(true);
         follow(data.id);
       } catch (err) {
         say(err.message, true);
@@ -130,6 +157,13 @@
         h("p", { id: "wordsStatus", class: "status", role: "status", "data-testid": "words-status" }),
         h(
           "div",
+          { class: "words-progress", id: "wordsProgress", hidden: "" },
+          h("span", { class: "spin", "aria-hidden": "true" }),
+          h("progress", { id: "wordsBar", max: "100", "aria-label": "Placing the words" }),
+          h("span", { id: "wordsPct", class: "pct", "data-testid": "words-percent" }),
+        ),
+        h(
+          "div",
           { class: "dialog-actions" },
           h("button", { type: "button", class: "btn", onclick: () => dialog.close() }, "Close"),
           h("button", { type: "button", class: "btn primary", id: "wordsPlace", "data-testid": "words-place", onclick: place }, old ? "Place them again" : "Place the words"),
@@ -145,6 +179,7 @@
       } catch (err) {
         return; // sending says what is wrong
       }
+      headerBtn.classList.remove("primary"); // nothing to do here for this device
       clear(dialog, h("h2", { id: "wordsTitle" }, "The words"), h("p", { "data-testid": "words-elsewhere" }, "Words are added from the computer that runs the library, like songs."), closeRow());
     }
 
@@ -158,6 +193,15 @@
       if (!dialog.open) dialog.showModal();
       const area = $("wordsText");
       if (area) area.focus();
+    }
+
+    // In the header too, where it is seen: in the accent colour while the song has no words.
+    const headerBtn = $("wordsBtn");
+    if (hasVoice) {
+      headerBtn.hidden = false;
+      headerBtn.textContent = app.words ? "Words" : "+ Add the words";
+      headerBtn.classList.toggle("primary", !app.words);
+      headerBtn.addEventListener("click", open);
     }
 
     app.store.on((s, changed) => {

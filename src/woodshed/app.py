@@ -38,7 +38,16 @@ from woodshed import audio, lyrics
 from woodshed.build import folder_name
 from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
-from woodshed.run import EXTRA_HINT, MANIFEST, Options, Reporter, first_pass, media_files, second_pass
+from woodshed.run import (
+    EXTRA_HINT,
+    MANIFEST,
+    Options,
+    Reporter,
+    first_pass,
+    media_files,
+    second_pass,
+    update_page_code,
+)
 
 MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
@@ -136,6 +145,19 @@ class Library:
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             out.append(info)
         return sorted(out, key=lambda s: str(s.get("title", "")).lower())
+
+    def update_pages(self) -> list[str]:
+        """Pages built by an older woodshed get this version's page code; their analysis is kept."""
+        updated = []
+        for manifest in sorted(self.root.glob(f"*.woodshed/{MANIFEST}")):
+            if manifest.parent.is_symlink():
+                continue
+            try:
+                if update_page_code(manifest.parent) is not None:
+                    updated.append(manifest.parent.name)
+            except (WoodshedError, OSError) as exc:  # one page held open or not writable: the others still are
+                print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
+        return updated
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
@@ -411,7 +433,13 @@ class Library:
             if self.stopping.is_set():
                 return
             job.status = "placing"
-            data = lyrics.add_to_page(page, text, opts.offline, say=lambda line: setattr(job, "message", line))
+            data = lyrics.add_to_page(
+                page,
+                text,
+                opts.offline,
+                say=lambda line: setattr(job, "message", line),
+                progress=lambda f: setattr(job, "percent", int(f * 100)),
+            )
             sung = sum(ln["sung"] for ln in data["lines"])
             job.status, job.message = "done", f"{sung} of {len(data['lines'])} lines placed on the voice"
         except (WoodshedError, OSError) as exc:
@@ -1000,6 +1028,9 @@ def serve(
     try:  # a stop at any point, start included, leaves the songs in progress to resume
         library = Library(root, opts)
         server = AppServer(library, host, port, uploads_from_network)
+        updated = library.update_pages()
+        if updated:
+            print(f"woodshed app: {len(updated)} page(s) updated to this version's page", flush=True)
         for job in library.resume():
             print(f"woodshed app: {job.name}: {job.message or 'resumed'}", flush=True)
         print(f"woodshed app: {server.url}  (library: {library.root}; Ctrl-C to stop)", flush=True)

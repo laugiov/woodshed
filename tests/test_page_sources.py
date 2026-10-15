@@ -36,3 +36,25 @@ def test_the_page_forbids_remote_content() -> None:
     # connect-src 'self': served by `woodshed app`, the page talks to that app only (the band);
     # opened from disk it has no server to talk to.
     assert rules["default-src"] == "'self'" and rules["connect-src"] == "'self'" and rules["script-src"] == "'self'"
+
+
+# The data a page carries, by format version: a page built by an older woodshed gets the new page
+# code only when its data has the format that code reads (build.refresh_code). A schema change
+# must come with a new version number, here, in song.py or view.py, and in core/song.js.
+DATA_FORMATS = {(2, 1): ("9ab2b7d621a5157b", "6c8a1aef3cb83902")}
+
+
+def test_a_change_of_the_page_data_format_comes_with_a_new_version() -> None:
+    import hashlib
+
+    from woodshed.song import SCHEMA_VERSION
+    from woodshed.view import VIEW_VERSION
+
+    src = PAGE.parent
+    hashes = tuple(
+        hashlib.sha256((src / f).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]
+        for f in ("song.schema.json", "view.schema.json")
+    )
+    assert DATA_FORMATS.get((SCHEMA_VERSION, VIEW_VERSION)) == hashes, "bump SCHEMA_VERSION or VIEW_VERSION"
+    js = (PAGE / "assets" / "js" / "core" / "song.js").read_text(encoding="utf-8")
+    assert f"const SONG_VERSION = {SCHEMA_VERSION};" in js and f"const VIEW_VERSION = {VIEW_VERSION};" in js

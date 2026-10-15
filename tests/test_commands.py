@@ -579,3 +579,148 @@ def test_the_summary_counts_only_close_calls(tmp_path: Path, cache: Path) -> Non
     doubts = [c.doubt for b in song.structure.bars for c in b.chords if c.doubt]
     assert doubts and all(d.kind == "timing" for d in doubts)  # a clear pickup chord
     assert summary(song, tmp_path / "pickup.woodshed")["doubts"] == 0
+
+
+def _as_built_by_an_older_woodshed(page: Path) -> None:
+    manifest = json.loads((page / "woodshed.json").read_text())
+    manifest["settings"]["page"] = "0123456789abcdef"
+    (page / "woodshed.json").write_text(json.dumps(manifest))
+    (page / "assets" / "app.css").write_text("/* the old page */")
+    (page / "assets" / "js" / "views" / "words.js").unlink()  # a script the old page did not have
+
+
+def test_a_page_built_by_an_older_woodshed_gets_the_new_page_code_without_a_new_analysis(
+    tmp_path: Path, cache: Path, opened: list[str], capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from woodshed import build, lyrics, run
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    (page / lyrics.LYRICS_JS).write_text("window.WOODSHED_LYRICS = {};\n")  # the page's own files stay
+    data_before = build.DATA_BLOCK.search((page / "index.html").read_text()).group(1)  # type: ignore[union-attr]
+    _as_built_by_an_older_woodshed(page)
+
+    def no_analysis(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the analysis ran again")
+
+    monkeypatch.setattr(run, "_analyze", no_analysis)
+    capsys.readouterr()
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    assert "page code updated" in capsys.readouterr().err
+    shipped = Path(build.__file__).parent / "page" / "assets"
+    assert (page / "assets" / "app.css").read_bytes() == (shipped / "app.css").read_bytes()
+    assert (page / "assets" / "js" / "views" / "words.js").is_file()
+    index = (page / "index.html").read_text()
+    assert "views/words.js" in index and build.DATA_BLOCK.search(index).group(1) == data_before  # type: ignore[union-attr]
+    assert (page / lyrics.LYRICS_JS).read_text() == "window.WOODSHED_LYRICS = {};\n"
+    assert json.loads((page / "woodshed.json").read_text())["settings"]["page"] == build.page_revision()
+    assert not [p.name for p in page.iterdir() if p.name.startswith(".")]  # nothing left behind
+
+
+def test_page_data_of_another_format_is_rebuilt_not_given_new_code(tmp_path: Path, cache: Path) -> None:
+    from woodshed import build, run
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    from woodshed.view import VIEW_VERSION
+
+    index = page / "index.html"
+    before = index.read_text()
+    index.write_text(before.replace(f'"view_version":{VIEW_VERSION}', f'"view_version":{VIEW_VERSION - 1}'))
+    assert index.read_text() != before
+    assert run.update_page_code(page) is None  # the page's data is not what this page code reads
+    assert (page / "assets" / "app.css").read_text() == "/* the old page */"
+    assert json.loads((page / "woodshed.json").read_text())["settings"]["page"] != build.page_revision()
+
+
+def test_the_library_updates_its_pages_when_it_starts(tmp_path: Path, cache: Path) -> None:
+    from woodshed import app
+    from woodshed.run import Options
+
+    wav = synth.write("pop", tmp_path).wav
+    library = tmp_path / "library"
+    assert cli.main([str(wav), "--no-stems", "--no-open", "-o", str(library)]) == 0
+    _as_built_by_an_older_woodshed(library / "pop.woodshed")
+    lib = app.Library(library, Options(use_stems=False, open_page=False))
+    assert lib.update_pages() == ["pop.woodshed"]
+    assert lib.update_pages() == []  # up to date now
+
+
+def test_a_refresh_cut_short_leaves_the_page_as_it_was(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from woodshed import run
+    from woodshed.errors import WoodshedError
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    index = (page / "index.html").read_text()
+    real = Path.replace
+    calls: list[Path] = []
+
+    def failing(self: Path, target: Any) -> Path:
+        calls.append(Path(target))
+        if len(calls) == 2:  # the new code moving in: the disk is full, the page is held open
+            raise OSError("no space left on device")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", failing)
+    with pytest.raises(WoodshedError, match=r"could not update pop\.woodshed"):
+        run.update_page_code(page)
+    monkeypatch.setattr(Path, "replace", real)
+    assert (page / "assets" / "app.css").read_text() == "/* the old page */"  # its own code, with its own index
+    assert (page / "index.html").read_text() == index
+    assert not [p.name for p in page.iterdir() if p.name.startswith(".")]
+    assert run.update_page_code(page) is not None  # and the next start updates it
+
+
+def test_a_page_that_cannot_be_updated_does_not_stop_the_library(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from woodshed import app
+    from woodshed.run import Options
+
+    library = tmp_path / "library"
+    for name in ("pop", "ballad"):
+        assert cli.main([str(synth.write(name, tmp_path).wav), "--no-stems", "--no-open", "-o", str(library)]) == 0
+
+    def update(page: Path) -> dict[str, Any] | None:
+        if page.name == "ballad.woodshed":
+            raise PermissionError(13, "Permission denied")  # a page folder made by root in Docker
+        return {"title": "pop"}
+
+    monkeypatch.setattr(app, "update_page_code", update)
+    lib = app.Library(library, Options(use_stems=False, open_page=False))
+    assert lib.update_pages() == ["pop.woodshed"]
+
+
+def test_a_ctrl_c_during_a_refresh_leaves_the_page_as_it_was(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from woodshed import run
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    real = Path.replace
+    calls: list[Path] = []
+
+    def interrupted(self: Path, target: Any) -> Path:
+        moved = real(self, target)
+        calls.append(Path(target))
+        if len(calls) == 1:  # right after the page's code was set aside
+            raise KeyboardInterrupt
+        return moved
+
+    monkeypatch.setattr(Path, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        run.update_page_code(page)
+    monkeypatch.setattr(Path, "replace", real)
+    assert (page / "assets" / "app.css").read_text() == "/* the old page */"
+    assert not [p.name for p in page.iterdir() if p.name.startswith(".")]

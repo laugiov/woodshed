@@ -333,6 +333,12 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .words-dialog .status.warn { color: var(--warn); }
 .words-dialog .cmd { font-family: var(--font-mono); font-size: 13px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.words-progress { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.words-progress progress { flex: 1; height: 8px; accent-color: var(--accent); }
+.words-progress .pct { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.spin { width: 16px; height: 16px; flex: none; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
 .desk-col { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); }
 @media (max-width: 900px) { .desk-col { position: static; } }
 .desk-head { align-items: flex-start; }

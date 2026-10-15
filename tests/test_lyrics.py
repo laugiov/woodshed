@@ -287,7 +287,7 @@ def test_the_lyrics_command_writes_the_page_lyrics(
     page = tmp_path / "Song.woodshed"
     page.mkdir()
     monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
-    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False: v)
+    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False, progress=None: v)
     chart = song(11, [(7, "")])
     chart.update(title="Song", file="Song.wav", key={"pc": 7, "mode": "maj"}, groups=[],
                  sections=[part("Verse 1", "verse", "A", 0, 11)])  # fmt: skip
@@ -311,7 +311,7 @@ def test_the_lyrics_command_says_how_the_words_named_the_parts(
     page = tmp_path / "Song.woodshed"
     page.mkdir()
     monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
-    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False: v)
+    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False, progress=None: v)
     monkeypatch.setattr(lyrics, "page_song", lambda p: song(11, [(7, "")]))
     named = [part("Verse 1", "verse", "A", 0, 6), part("Chorus 1", "chorus", "B", 6, 11)]
     monkeypatch.setattr(lyrics, "sections_by_words", lambda chart, data: named)
@@ -328,7 +328,7 @@ def test_a_damaged_model_cache_is_heard_again(tmp_path: Path, monkeypatch: pytes
     (tmp_path / lyrics.CACHE).write_bytes(b"not a zip")
     runs = []
 
-    def model(vocals: Any, sr: int, offline: bool) -> tuple[Any, list[str]]:
+    def model(vocals: Any, sr: int, offline: bool, progress: Any = None) -> tuple[Any, list[str]]:
         runs.append(1)
         return np.zeros((10, len(LABELS)), np.float32), LABELS
 
@@ -348,7 +348,7 @@ def test_the_command_reads_text_files_from_windows(
     page = tmp_path / "Song.woodshed"
     page.mkdir()
     monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
-    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False: v)
+    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False, progress=None: v)
     monkeypatch.setattr(lyrics, "page_song", lambda p: song(6, [(7, "")]))
     words = tmp_path / "words.txt"
     words.write_bytes(("[Verse]\n" + "\n".join(VERSE_1) + "\nd\u00e9j\u00e0\n").encode(encoding))
@@ -465,3 +465,20 @@ def test_words_pasted_without_blank_lines_join_no_part() -> None:
     data = {"lines": [sung(VERSE_1[0], 0, 0), sung(CHORUS[0], 4, 0), sung(VERSE_2[0], 8, 0)]}  # one block: no stanzas
     named = lyrics.sections_by_words(chart, data) or chart["sections"]
     assert [s["name"] for s in named] == ["Verse 1", "Part B", "Verse 2"]
+
+
+def test_placing_the_words_says_how_far_it_is(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    v = full_song([(t, 1 + 5 * k) for k, t in enumerate(VERSE_1)], 12, set())
+    page = tmp_path / "Song.woodshed"
+    page.mkdir()
+
+    def heard(path: Path, cache: Path, offline: bool = False, progress: Any = None) -> Any:
+        progress(0.5)  # half the 30-second windows of the voice
+        return v
+
+    monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
+    monkeypatch.setattr(lyrics, "listen", heard)
+    monkeypatch.setattr(lyrics, "page_song", lambda p: song(6, [(7, "")]))
+    shares: list[float] = []
+    lyrics.add_to_page(page, "\n".join(VERSE_1), say=lambda line: None, progress=shares.append)
+    assert shares == [0.0, 0.45, 0.9, 1.0]  # listening is most of the time
