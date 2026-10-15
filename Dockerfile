@@ -14,6 +14,19 @@ FROM ${PYTHON} AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/woodshed
 WORKDIR /src
+# sphn (read by Demucs) has no ARM Linux wheel: on ARM it is compiled, with Rust. This stage only.
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends gcc libc6-dev curl ca-certificates \
+        && rm -rf /var/lib/apt/lists/* \
+        && curl --proto '=https' --tlsv1.2 -sSf -o /tmp/rustup-init \
+           https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-unknown-linux-gnu/rustup-init \
+        && echo "e3853c5a252fca15252d07cb23a1bdd9377a8c6f3efa01531109281ae47f841c  /tmp/rustup-init" | sha256sum -c - \
+        && chmod +x /tmp/rustup-init \
+        && /tmp/rustup-init -y --profile minimal --default-toolchain 1.90.0 --no-modify-path \
+        && rm /tmp/rustup-init; \
+    fi
 # The locked dependencies first (CPU PyTorch, Demucs, beat_this): a code change does not reinstall them.
 COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --extra stems --no-install-project

@@ -525,7 +525,7 @@ def test_a_song_whose_separation_failed_is_not_tried_at_every_start(
         again = app.Library(srv.library.root, srv.library.opts)  # the next start
         [job] = again.resume()
         assert job.status == "failed" and "no model in the cache" in job.message and again.queue.empty()
-        assert "remove songs/pop.wav and add it again" in job.message
+        assert f"remove {Path('songs', 'pop.wav')} and add it again" in job.message  # songs\pop.wav on Windows
     finally:
         srv.shutdown()
         srv.server_close()

@@ -73,3 +73,13 @@ def test_a_title_cannot_inject_markup_in_the_library(page: Page, server: app.App
     page.get_by_test_id("file-input").set_input_files(str(named))
     expect(page.get_by_test_id("song-link")).to_be_visible(timeout=60_000)
     assert page.evaluate("window.pwned === undefined")
+
+
+def test_the_library_shows_the_logo_and_shares_the_theme_with_the_songs(page: Page, server: app.AppServer) -> None:
+    page.goto(server.url)
+    expect(page.get_by_test_id("logo")).to_be_visible()
+    expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+    page.get_by_test_id("theme").click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "light")
+    page.reload()
+    expect(page.locator("html")).to_have_attribute("data-theme", "light")  # one choice for the whole library

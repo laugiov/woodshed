@@ -4,7 +4,7 @@
 .missing-files { display: none !important; }
 @media print {
   .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot,
-  .form, .sec-loop, .band-banner, .next-song { display: none !important; }
+  .form, .sec-loop, .band-banner, .next-song, .prefs { display: none !important; }
   .sec-name, .sec-head[data-role="chorus"] .sec-name { color: #000 !important; }
   body { background: #fff; color: #000; }
   .main { display: block; }
@@ -60,6 +60,13 @@
   --accent: #3cc4a9; --accent-soft: #15372f; --accent-ink: #0a1210; --warn: #f0a546; --warn-soft: #3a2a14;
   --wave: #3d5049; --dock: #121815; color-scheme: dark;
 }
+/* Paper is white whatever the theme on screen. */
+@media print {
+  :root, :root[data-theme] {
+    --bg: #fff; --panel: #fff; --sheet: #fff; --ink: #000; --muted: #444; --line: #bbb;
+    --accent: #0c7a68; --accent-soft: #d3ebe5; --warn: #a65207; --warn-soft: #fbedd9; color-scheme: light;
+  }
+}
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
 .wrap { max-width: 1220px; margin: 0 auto; padding-inline: 20px; padding-block: 18px 150px; display: grid; gap: 16px; }
@@ -80,8 +87,18 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .stepper span { min-width: 74px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 
 /* Header */
-.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
-.brand { font-family: var(--font-chord); font-weight: 700; font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.head { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+/* The logo: a shed whose walls are a chord box (an A major), and the name. */
+.brand { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-chord); font-weight: 700; font-size: 22px; line-height: 1; color: var(--ink); }
+.brand b { color: var(--accent); font-weight: 700; }
+.brand .mark { width: 22px; height: 25px; }
+.brand .mark .roof { fill: none; stroke: var(--accent); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.brand .mark .box { fill: none; stroke: var(--accent); stroke-width: 8; }
+.brand .mark .grid { stroke: var(--muted); stroke-width: 4; }
+.brand .mark circle { fill: var(--ink); }
+/* The viewer's choices, top right of the page; the logo row is as tall, so the title never runs under them. */
+.prefs { position: absolute; top: 0; right: 0; display: inline-flex; gap: 6px; }
+.btn.icon { padding: 4px 9px; font-size: 15px; line-height: 1.2; }
 .song h1 { margin: 2px 0 0; font-family: var(--font-chord); font-weight: 600; font-size: clamp(26px, 4vw, 38px); line-height: 1.05; text-wrap: balance; }
 .song .file { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; }
 .head-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
@@ -283,7 +300,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .acc { position: relative; top: -0.3em; font-size: 0.82em; line-height: 0; margin: 0 0.04em 0 0.02em;
        -webkit-text-stroke: 0.06em currentColor; }
 .big .acc, .stage-now .acc, .stage-next .acc { font-size: 0.6em; top: -0.55em; -webkit-text-stroke: 0.04em currentColor; }
-.brandrow { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.brandrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-height: 32px; padding-right: 44px; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .facts { display: flex; gap: 4px 16px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin-top: 6px; font-variant-numeric: tabular-nums; align-items: baseline; }
 .facts b { color: var(--ink); }
@@ -308,8 +325,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 @media (max-width: 900px) { .desk-col { position: static; } }
 .desk-head { align-items: flex-start; }
 .desk-head .keyrow { margin: 0; }
-.shapes { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-.shape-card { flex: 1 0 72px; max-width: 112px; }
+.shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.shape-card { max-width: 112px; }
 .strip .mute.off { background: var(--sheet); border-color: var(--line); color: var(--muted); }
 .menu { position: fixed; z-index: 35; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 30px rgba(0,0,0,0.2); padding: 14px; width: min(370px, calc(100vw - 32px)); display: grid; gap: 8px; }
 .menu h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 6px; }

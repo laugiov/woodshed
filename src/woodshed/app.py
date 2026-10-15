@@ -841,6 +841,9 @@ HOME_CSP = (
 
 class AppServer(ThreadingHTTPServer):
     daemon_threads = True
+    # On Windows SO_REUSEADDR lets a second server take a port in use, and Windows rebinds over
+    # TIME_WAIT without it (as socket.create_server does).
+    allow_reuse_address = os.name != "nt"
 
     def __init__(
         self, library: Library, host: str = "127.0.0.1", port: int = 0, uploads_from_network: bool = False

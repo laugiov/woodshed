@@ -151,6 +151,7 @@
       if (changed.has("track") || changed.has("chordSound")) renderTracks(s);
     });
     window.addEventListener("resize", () => drawWave(store.get(), true));
+    window.addEventListener("woodshed:theme", () => drawWave(store.get(), true)); // the colours change
     if (window.matchMedia) {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       if (mq.addEventListener) mq.addEventListener("change", () => drawWave(store.get(), true));

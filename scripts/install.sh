@@ -31,6 +31,14 @@ if ! command -v uv >/dev/null 2>&1; then
     command -v uv >/dev/null 2>&1 || { say "uv could not be installed: see https://docs.astral.sh/uv/"; exit 1; }
 fi
 
+# On ARM Linux (Raspberry Pi...) one dependency of Demucs, sphn, has no ready-made build: it is compiled.
+if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "aarch64" ] && ! command -v cargo >/dev/null 2>&1; then
+    say "On ARM Linux one part of woodshed is compiled: install a C compiler and Rust first, then run this again:"
+    say "  sudo apt install build-essential     (or your system's equivalent)"
+    say "  curl --proto '=https' -sSf https://sh.rustup.rs | sh"
+    exit 1
+fi
+
 say "Installing woodshed (about 1.5 GB with PyTorch: a few minutes)..."
 uv tool install --force --python 3.13 "woodshed[stems] @ $SOURCE"
 uv tool update-shell >/dev/null 2>&1 || true

@@ -218,6 +218,26 @@ def test_the_guitar_panel_draws_one_shape_per_chord(open_page: Any) -> None:
     expect(o.page.get_by_test_id("shape")).to_have_count(distinct)
 
 
+def test_the_shapes_wrap_onto_more_lines_instead_of_scrolling_sideways(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 360, "height": 740})
+    shapes = o.page.get_by_test_id("shape")
+    tops = {round(shapes.nth(i).bounding_box()["y"]) for i in range(shapes.count())}
+    assert o.js("[...document.querySelectorAll('.shapes')].every(e => e.scrollWidth <= e.clientWidth + 1)")
+    assert len(tops) > 1  # the pop song has more shapes than a phone's line holds
+
+
+def test_the_bass_tab_fits_a_phone_two_beats_a_line(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 360, "height": 740})
+    o.page.get_by_test_id("inst-bass").click()
+    tab = o.page.get_by_test_id("bass-tab")
+    expect(tab).to_contain_text("1 e & a 2 e & a")
+    assert o.js("(e => e.scrollWidth <= e.clientWidth + 1)(document.querySelector('[data-testid=bass-tab]'))")
+    text = tab.inner_text()
+    assert text.count("G|") == 2 and text.rstrip().endswith("|")  # a bar of 4/4 in two lines, closed once
+
+
 def test_every_instrument_panel_renders(open_page: Any) -> None:
     o = open_page("pop")
     for inst in ("bass", "piano", "drums", "voice", "guitar"):
@@ -600,3 +620,72 @@ def test_a_song_without_sections_still_plays_and_loops_by_line(open_page: Any) -
     expect(o.page.get_by_test_id("bar-info")).to_have_text("Bar 3")
     o.page.keyboard.press("l")
     assert state(o)["loop"] == [0, 3]
+
+
+IN_BAND = (
+    "u => { const el = document.querySelector('.bar.cur'); const r = el.getBoundingClientRect();"
+    " const seen = innerHeight - document.getElementById('dock').offsetHeight;"
+    " return r.top >= 0 && r.bottom <= seen; }"
+)
+OUT_OF_FOLLOW_BAND = (
+    "() => { const r = document.querySelector('.bar.cur').getBoundingClientRect();"
+    " const seen = innerHeight - document.getElementById('dock').offsetHeight;"
+    " return r.top < seen * 0.12 || r.bottom > seen * 0.75; }"
+)
+SHEET_HIDDEN = (
+    "() => document.getElementById('sheet').getBoundingClientRect().top"
+    " >= innerHeight - document.getElementById('dock').offsetHeight"
+)
+PEEK = (
+    "() => { const seen = innerHeight - document.getElementById('dock').offsetHeight;"
+    " scrollTo(0, scrollY + document.getElementById('sheet').getBoundingClientRect().top - seen + 40); }"
+)
+
+
+def test_the_page_scrolls_with_the_song_and_the_pedal_does_not_stop_it(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 1000, "height": 420})
+    o.js(PEEK)  # only the top of the chart shows above the dock
+    assert not o.js(IN_BAND)
+    o.page.get_by_test_id("play").click()
+    until(o, "Woodshed.debug().playing === true")
+    until(o, IN_BAND)
+    o.page.wait_for_timeout(700)  # the page's smooth scroll ends
+    o.js(PEEK)  # a scroll by the page itself, not by hand
+    assert not o.js(IN_BAND)
+    o.page.keyboard.press("PageDown")  # a page-turner pedal seeks a bar: not a scroll by hand
+    until(o, IN_BAND)
+    o.page.wait_for_timeout(600)
+    o.js(PEEK)
+    until(o, IN_BAND, 3.0)  # the next bar (2 s at 120 BPM) is followed, before a hand's 4 s pause ends
+
+
+def test_a_scroll_by_hand_wins_and_a_chart_off_screen_is_left_alone(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 1000, "height": 420})
+    o.js(PEEK)
+    o.page.mouse.move(40, 100)
+    o.page.mouse.wheel(0, 60)  # by hand, a little more of the chart showing
+    o.page.wait_for_timeout(300)
+    assert o.js(OUT_OF_FOLLOW_BAND)  # the page would follow, but for the hand
+    at = o.js("scrollY")
+    o.page.get_by_test_id("play").click()
+    until(o, "Woodshed.debug().playing === true")
+    o.page.wait_for_timeout(800)
+    assert o.js("scrollY") == at
+    o.page.get_by_test_id("play").click()
+    o.js("scrollTo(0, 0)")  # the chart below the dock: the musician reads the top of the page
+    assert o.js(SHEET_HIDDEN)
+    o.page.wait_for_timeout(4200)  # the hand's pause is over
+    o.page.get_by_test_id("play").click()
+    o.page.wait_for_timeout(800)
+    assert o.js("scrollY") == 0
+
+
+def test_printing_is_black_on_white_whatever_the_theme(open_page: Any) -> None:
+    o = open_page("pop")
+    assert o.js("document.documentElement.dataset.theme") == "dark"
+    o.page.emulate_media(media="print")
+    assert o.js("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+    assert o.js("getComputedStyle(document.querySelector('.bar')).color") == "rgb(0, 0, 0)"
+    expect(o.page.get_by_test_id("theme")).to_be_hidden()

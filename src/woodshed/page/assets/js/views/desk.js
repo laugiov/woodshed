@@ -164,11 +164,19 @@
       const frets = I.bassFrets(line);
       const counts = I.counts(song.per);
       const names = ["G", "D", "A", "E"];
-      const rows = names.map((n, k) => n + "|" + frets.map((f) => (f && f.string === k ? ("-" + f.fret + "--").slice(0, 3) : "---")).join("") + "|");
+      const cell = (f, k) => (f && f.string === k ? ("-" + f.fret + "--").slice(0, 3) : "---");
+      // Two beats a line: the tab never scrolls sideways, on a phone or in the side panel.
+      const lines = [];
+      for (let i = 0; i < frets.length; i += 8) {
+        const end = i + 8 >= frets.length ? "|" : "";
+        const head = "  " + counts.slice(i, i + 8).map((c) => (c + "  ").slice(0, 3)).join("");
+        const rows = names.map((n, k) => n + "|" + frets.slice(i, i + 8).map((f) => cell(f, k)).join("") + end);
+        lines.push(h("span", { class: "cnt" }, (i ? "\n\n" : "") + head), "\n" + rows.join("\n"));
+      }
       const heard = [...new Set(line.filter(Boolean).map((n) => song.noteName(n.midi - s.transpose, s.transpose)))];
       return [
         h("div", { class: "label", style: { marginBottom: "6px" } }, "Bar " + (u + 1) + ", the line as played ", h("span", { class: "exp" }, "experimental")),
-        h("div", { class: "tab", "data-testid": "bass-tab" }, h("span", { class: "cnt" }, "  " + counts.map((c) => (c + "  ").slice(0, 3)).join("")), "\n" + rows.join("\n")),
+        h("div", { class: "tab", "data-testid": "bass-tab" }, lines),
         h("div", { class: "chips-row" }, h("span", { class: "hint" }, "Notes in this bar:"), heard.map((n) => h("span", { class: "pc-chip" }, chordNode(n)))),
         h(
           "div",

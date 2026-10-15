@@ -1,7 +1,8 @@
 name: Install
 
 # The ways a musician installs woodshed, tried on real machines: the install scripts on Linux,
-# macOS and Windows (from this checkout), then a page built from the demo song; and the Docker image.
+# macOS and Windows (from this checkout), then a page built from the demo song; and the Docker image
+# on x86 and ARM.
 
 on:
   push:
@@ -29,6 +30,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: ffmpeg, as the script tells users to add it
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg; else sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; fi
       - name: Install woodshed with the script
         run: WOODSHED_SOURCE="$PWD" sh scripts/install.sh
       - name: A page from the demo song (the mix only, the models are not downloaded here)
@@ -59,9 +63,13 @@ jobs:
           if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
 
   docker:
-    name: Docker image
-    runs-on: ubuntu-latest
+    name: Docker image, ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]  # x86, and ARM (sphn is compiled there)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - run: docker build -t woodshed:test .

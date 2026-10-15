@@ -397,7 +397,41 @@
       shownTenth = Math.floor(s.time * 10);
       if (full) renderHarmony(s);
       lastPass = pass;
+      if (s.playing && (full || changed.has("beat"))) keepInView(s);
     });
+
+    // While the song plays the page scrolls with it: the bar or the sung line playing stays in the
+    // upper part of the screen, above the dock. Only while the chart is on screen (a phone reading the
+    // instrument panel under it stays there), and a scroll by hand wins for a few seconds.
+    let byHandAt = -Infinity;
+    const byHand = () => (byHandAt = performance.now());
+    const inside = (e, sel) => e.target instanceof Element && !!e.target.closest(sel);
+    // Dragging the tempo slider or the waveform of the dock is not a scroll.
+    const scrolled = (e) => inside(e, "#dock, input") || byHand();
+    window.addEventListener("wheel", scrolled, { passive: true });
+    window.addEventListener("touchmove", scrolled, { passive: true });
+    window.addEventListener("keydown", (e) => {
+      // The page's own keys (a pedal's PageDown seeks a bar) are not a scroll.
+      if (e.defaultPrevented || !["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
+      if (!inside(e, "input, select, textarea")) byHand();
+    });
+    document.addEventListener("mousedown", (e) => {
+      if (e.target === document.documentElement) byHand(); // the scrollbar
+    });
+    let followed = null;
+    function keepInView(s) {
+      // In the Lyrics view an intro or a solo is a free bar, between the sung lines.
+      const el = app.sheetMode(s) === "lyrics" ? document.querySelector(".bar[data-free].cur") || document.querySelector(".lline.cur") : document.querySelector(".bar.cur");
+      if (!el || el === followed || s.stage || performance.now() - byHandAt < 4000) return;
+      const seen = window.innerHeight - $("dock").offsetHeight;
+      const sheet = $("sheet").getBoundingClientRect();
+      if (sheet.bottom <= 0 || sheet.top >= seen) return; // the musician reads something else
+      followed = el;
+      const r = el.getBoundingClientRect();
+      if (r.top >= seen * 0.12 && r.bottom <= seen * 0.75) return;
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: r.top - seen * 0.3, behavior: smooth ? "smooth" : "auto" });
+    }
 
     return {
       render(s) {
