@@ -1,0 +1,30 @@
+name: Idea
+description: Something that would help you or your band practise.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you're trying to do
+      description: The situation, as a musician. "When we rehearse, the drummer can't see…" is more useful than a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+    validations:
+      required: false
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who it's for
+      multiple: true
+      options:
+        - Guitar
+        - Bass
+        - Keys
+        - Drums
+        - Voice
+        - The whole band
+        - Developers

@@ -1,0 +1,53 @@
+name: Bug report
+description: Something went wrong, or the chart doesn't match what you hear.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Please don't attach or link a recording you don't have the rights to
+        share, and no full lyrics**: describe the song instead (tempo, key, style), or reproduce it on a
+        song under a free licence.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what woodshed showed. Bar numbers and times help a lot.
+      placeholder: "Bar 12 shows Am, I hear C. It starts at 0:41, in the second verse."
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - The chart (chords, bars, sections)
+        - The lyrics
+        - A part (guitar, bass, keys, drums, voice)
+        - Playback, loops, tempo
+        - Band mode or set list
+        - The library (woodshed app)
+        - Install or command line
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: woodshed version
+      description: The output of `woodshed --version`.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and browser
+      placeholder: "Ubuntu 24.04, Firefox 133 / macOS 15, Safari"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: For a crash, run the command again with `--debug` and paste the output.
+      render: text

@@ -229,7 +229,8 @@ uv run pytest -n auto                     # Python and page tests (Playwright)
 scripts/ci.sh                             # the quick local CI
 ```
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Security problems go
+through [private reporting](SECURITY.md).
 
 ## Credits
 
