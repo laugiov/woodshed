@@ -166,6 +166,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .doubt.fixed { color: inherit; text-decoration: none; }
 .pop .alt .tag { margin-left: 6px; font: 600 11px var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .pop .alt.in-use .an { color: var(--accent); }
+.shape-card .barre-tag { color: var(--warn); font-weight: 700; }
 .fixed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; margin-left: 3px; vertical-align: super; }
 .variation { margin-left: 64px; font-size: 13.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .variation .ch { font-size: 19px; display: inline; }

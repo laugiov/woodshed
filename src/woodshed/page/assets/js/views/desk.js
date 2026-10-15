@@ -101,6 +101,8 @@
           shape = I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality);
           label = app.nameFor(c, s.capo, s);
           sub = s.capo ? W.nodes(W.t("sounds {chord}"), { chord: chordNode(app.nameFor(c, 0, s)) }) : "";
+          // No open shape for this chord here: a barre, said so.
+          if (!I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality)) sub = [sub, sub ? " · " : "", h("span", { class: "barre-tag" }, W.t("barre"))];
         } else if (s.pos === "barre") {
           shape = I.barreShape(c.pc + t, c.quality);
           label = app.nameFor(c, 0, s);
@@ -125,11 +127,22 @@
           h("span", { class: "play-hint", style: { display: "block" } }, W.t("▶ hear")),
         );
       });
+      // What the cards show, said plainly: how many barres are left, and the capo that makes the song
+      // clearly easier (theory.suggest_capo: weighted by how long each chord lasts), or none.
+      const barres = chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality)).length;
       const tip =
         s.pos === "open"
           ? s.capo === suggested
-            ? suggested ? W.t("Capo {n} gives open shapes for most of the song.", { n: s.capo }) : W.t("Open shapes, no capo needed.")
-            : W.t("Tip: capo {n} gives the easiest shapes.", { n: suggested })
+            ? suggested
+              ? W.t("Capo {n} gives open shapes for most of the song.", { n: s.capo })
+              : barres
+                ? W.t("Barre chords here: {n}. No capo makes the song clearly easier.", { n: barres })
+                : W.t("Open shapes, no capo needed.")
+            : suggested
+              ? W.t("Tip: capo {n} gives easier shapes.", { n: suggested })
+              : W.t("Tip: no capo makes the song clearly easier (without one, barre chords: {n}).", {
+                  n: chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t, c.quality)).length,
+                })
           : s.pos === "funk"
             ? W.t("Three-note shapes chosen so your hand barely moves from one chord to the next.")
             : W.t("Full barre chords, no capo, concert pitch.");
@@ -163,18 +176,25 @@
       const frets = I.bassFrets(line);
       const counts = I.counts(song.per);
       const names = ["G", "D", "A", "E"];
-      const cell = (f, k) => (f && f.string === k ? ("-" + f.fret + "--").slice(0, 3) : "---");
+      // A note the pitch tracker was less sure of is drawn faint, as the note under the tab says.
+      const cell = (f, k) => {
+        if (!f || f.string !== k) return "---";
+        const text = ("-" + f.fret + "--").slice(0, 3);
+        return f.faint ? h("span", { class: "lo", title: W.t("Less certain") }, text) : text;
+      };
       // Two beats a line: the tab never scrolls sideways, on a phone or in the side panel.
       const lines = [];
       for (let i = 0; i < frets.length; i += 8) {
         const end = i + 8 >= frets.length ? "|" : "";
         const head = "  " + counts.slice(i, i + 8).map((c) => (c + "  ").slice(0, 3)).join("");
-        const rows = names.map((n, k) => n + "|" + frets.slice(i, i + 8).map((f) => cell(f, k)).join("") + end);
-        lines.push(h("span", { class: "cnt" }, (i ? "\n\n" : "") + head), "\n" + rows.join("\n"));
+        lines.push(h("span", { class: "cnt" }, (i ? "\n\n" : "") + head));
+        names.forEach((n, k) => lines.push("\n" + n + "|", frets.slice(i, i + 8).map((f) => cell(f, k)), end));
       }
+      const silent = !line.some(Boolean);
       const heard = [...new Set(line.filter(Boolean).map((n) => song.noteName(n.midi - s.transpose, s.transpose)))];
       return [
         h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bar {n}, the line as played {tag}", { n: u + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
+        silent ? h("p", { class: "hint", "data-testid": "bass-silent" }, W.t("No bass heard in this bar.")) : null,
         h("div", { class: "tab", "data-testid": "bass-tab", translate: "no" }, lines),
         h("div", { class: "chips-row" }, h("span", { class: "hint" }, W.t("Notes in this bar:")), heard.map((n) => h("span", { class: "pc-chip" }, chordNode(n)))),
         h(
@@ -248,16 +268,25 @@
           h("button", { type: "button", class: "btn", "data-testid": "hear-groove", onclick: () => app.hearGroove() }, W.t("▶ Hear the groove")),
           h("button", { type: "button", class: "btn", "data-testid": "groove-with-band", onclick: () => app.playBars(Math.floor(store.get().beat / song.per), 2) }, W.t("▶ Groove with the band")),
         ),
-        note(
-          W.t(
-            "Read from the drum track, isolated on this computer, over {bars} bars. Kick on {kick}, snare on {snare}. Bars matching the main groove: kick {kickShare}, snare {snareShare}, hi-hat {hatShare}. Fills are not detected yet.",
-            {
-              bars: g.bars, kick: I.hitsText(g.kick, song.per), snare: I.hitsText(g.snare, song.per),
-              kickShare: pct(g.agreement.kick), snareShare: pct(g.agreement.snare), hatShare: pct(g.agreement.hat),
-            },
-          ),
-        ),
+        note(grooveText(g, pct)),
       ];
+    }
+
+    // One rule for the text, the notation and the groove heard: a hit played in more than half the
+    // bars. What no bar mostly plays is said, not invented; an agreement only for what is played.
+    function grooveText(g, pct) {
+      const steady = (p) => p > 0.5;
+      const kick = I.hitsText(g.kick, song.per, steady);
+      const snare = I.hitsText(g.snare, song.per, steady);
+      const hat = g.hat.some(steady);
+      const said = [W.t("Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.", { bars: g.bars })];
+      said.push(kick ? W.t("Kick on {hits}.", { hits: kick }) : W.t("No kick in more than half the bars."));
+      said.push(snare ? W.t("Snare on {hits}.", { hits: snare }) : W.t("No snare in more than half the bars."));
+      const agree = [kick ? W.t("kick {share}", { share: pct(g.agreement.kick) }) : null, snare ? W.t("snare {share}", { share: pct(g.agreement.snare) }) : null, hat ? W.t("hi-hat {share}", { share: pct(g.agreement.hat) }) : null].filter(Boolean);
+      if (agree.length) said.push(W.t("Bars matching the main groove: {list}.", { list: agree.join(", ") }));
+      if (!kick && !snare) said.push(W.t("The groove changes too much from bar to bar to write one down: trust your ears here."));
+      said.push(W.t("Fills are not detected yet."));
+      return said.join(" ");
     }
 
     function voice(s) {

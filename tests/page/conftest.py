@@ -166,6 +166,27 @@ def _lyrics_same_chord_to_check(song: dict[str, Any]) -> None:
     song["bars"][1]["chords"] = [{**first, "doubt": doubt}]
 
 
+def _groove_loose(song: dict[str, Any]) -> None:
+    """A drum read where no kick or snare is played in more than half the bars."""
+    groove = song["parts"]["groove"]
+    for drum in ("kick", "snare"):
+        groove[drum] = [round(min(p, 0.45), 3) for p in groove[drum]]
+
+
+def _groove_edge(song: dict[str, Any]) -> None:
+    """A kick on the & of 1 in 55 % of the bars: drawn by the notation (over half the bars), below the
+    strong hits a relative rule would keep."""
+    groove = song["parts"]["groove"]
+    groove["kick"] = [1.0 if i in (0, 8) else 0.55 if i == 2 else 0.0 for i in range(len(groove["kick"]))]
+
+
+def _bass_doubts(song: dict[str, Any]) -> None:
+    """Bar 1 heard with little confidence, bar 2 with no bass at all."""
+    bass = song["parts"]["bass"]
+    bass[0] = [None if e is None else [e[0], 0.4] for e in bass[0]]
+    bass[1] = [None for _ in bass[1]]
+
+
 def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _no_sections(song)
     _with_lyrics(song)
@@ -175,6 +196,9 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
     "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,
     "lyrics-same-check": _lyrics_same_chord_to_check,
+    "groove-loose": _groove_loose,
+    "bass-doubts": _bass_doubts,
+    "groove-edge": _groove_edge,
 }  # fmt: skip
 
 

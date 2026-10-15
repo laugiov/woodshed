@@ -769,3 +769,46 @@ def test_the_library_finds_the_page_corrections_by_the_page_own_key(open_page: A
     found = build.DATA_BLOCK.search((o.folder / "index.html").read_text(encoding="utf-8"))
     assert found is not None
     assert library.analysis_key(json.loads(found.group(1))["song"]) == o.js("Woodshed.app.fixesKey")
+
+
+def test_the_open_shapes_say_which_chords_are_barres_and_the_capo_tip_agrees(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("inst-guitar").click()
+    o.js("Woodshed.app.transposeTo(1)")  # C# G# A#m F#: no open shape for these
+    o.js("Woodshed.app.store.set({capo: 0})")
+    no_open = o.js(
+        "Woodshed.current.distinctChords().filter(c =>"
+        " !Woodshed.instruments.tableShape(Woodshed.current.view.shapes, c.pc + 1, c.quality)).length"
+    )
+    assert no_open > 0
+    expect(o.page.locator(".shape-card .barre-tag")).to_have_count(no_open)
+    tip = o.page.locator("#desk").inner_text()
+    assert f"barre chords: {no_open}" in tip.lower() or "Tip: capo" in tip
+    assert "capo 0" not in tip  # "no capo", never "capo 0"
+
+
+def test_the_drum_text_names_the_hits_the_notation_draws(open_page: Any) -> None:
+    o = open_page("pop", variant="groove-edge")
+    o.page.get_by_test_id("inst-drums").click()
+    text = o.page.locator("#desk").inner_text()
+    assert "Kick on 1, the & of 1 and 3." in text  # the & of 1 in 55 % of the bars: drawn, so named
+    assert " on ." not in text
+
+
+def test_a_drum_read_with_no_steady_hit_says_so_instead_of_inventing_one(open_page: Any) -> None:
+    o = open_page("pop", variant="groove-loose")
+    o.page.get_by_test_id("inst-drums").click()
+    text = o.page.locator("#desk").inner_text()
+    assert "No kick in more than half the bars." in text and "No snare in more than half the bars." in text
+    assert "trust your ears" in text and "kick 1" not in text.lower()
+
+
+def test_the_bass_tab_draws_doubtful_notes_faint_and_says_when_a_bar_has_no_bass(open_page: Any) -> None:
+    o = open_page("pop", variant="bass-doubts")
+    o.page.get_by_test_id("inst-bass").click()
+    tab = o.page.get_by_test_id("bass-tab")
+    expect(tab.locator(".lo").first).to_be_visible()  # bar 1: every note less certain
+    expect(o.page.get_by_test_id("bass-silent")).to_have_count(0)
+    o.js("Woodshed.app.seekBar(1)")
+    expect(o.page.get_by_test_id("bass-silent")).to_have_text("No bass heard in this bar.")
+    expect(tab.locator(".lo")).to_have_count(0)

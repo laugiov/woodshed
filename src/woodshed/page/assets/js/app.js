@@ -63,8 +63,13 @@
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
-        const hits = { kick: h("b", null, I.hitsText(g.kick, song.per)), snare: h("b", null, I.hitsText(g.snare, song.per)) };
-        return W.nodes(W.t("kick on {kick}, snare on {snare}"), hits);
+        const steady = (p) => p > 0.5; // as the notation and the drums panel
+        const kick = I.hitsText(g.kick, song.per, steady);
+        const snare = I.hitsText(g.snare, song.per, steady);
+        if (!kick && !snare) return W.t("a groove that changes from bar to bar");
+        if (!snare) return W.nodes(W.t("kick on {kick}, no steady snare"), { kick: h("b", null, kick) });
+        if (!kick) return W.nodes(W.t("snare on {snare}, no steady kick"), { snare: h("b", null, snare) });
+        return W.nodes(W.t("kick on {kick}, snare on {snare}"), { kick: h("b", null, kick), snare: h("b", null, snare) });
       }
       return W.nodes(s.inst === "voice" ? W.t("chord tones {notes}") : W.t("notes {notes}"), { notes: h("b", null, tones()) });
     };

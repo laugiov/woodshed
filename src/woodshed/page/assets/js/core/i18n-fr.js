@@ -105,6 +105,9 @@
     "barre chord, no capo": "accord barré, sans capo",
     "open shape": "position ouverte",
     "kick on {kick}, snare on {snare}": "grosse caisse sur {kick}, caisse claire sur {snare}",
+    "a groove that changes from bar to bar": "un groove qui change d'une mesure à l'autre",
+    "kick on {kick}, no steady snare": "grosse caisse sur {kick}, pas de caisse claire régulière",
+    "snare on {snare}, no steady kick": "caisse claire sur {snare}, pas de grosse caisse régulière",
     "chord tones {notes}": "notes de l'accord {notes}",
     "notes {notes}": "notes {notes}",
     "The browser blocked playback: press play again.": "Le navigateur a bloqué la lecture : appuie de nouveau sur lecture.",
@@ -270,7 +273,12 @@
     "▶ hear": "▶ écouter",
     "Capo {n} gives open shapes for most of the song.": "Capo {n} : positions ouvertes sur presque tout le morceau.",
     "Open shapes, no capo needed.": "Positions ouvertes, pas besoin de capo.",
-    "Tip: capo {n} gives the easiest shapes.": "Astuce : capo {n} donne les positions les plus faciles.",
+    "Tip: capo {n} gives easier shapes.": "Astuce : capo {n} donne des positions plus faciles.",
+    "Tip: no capo makes the song clearly easier (without one, barre chords: {n}).":
+      "Astuce : aucun capo ne rend le morceau nettement plus facile (sans capo, accords barrés : {n}).",
+    "Barre chords here: {n}. No capo makes the song clearly easier.":
+      "Accords barrés ici : {n}. Aucun capo ne rend le morceau nettement plus facile.",
+    barre: "barré",
     "Three-note shapes chosen so your hand barely moves from one chord to the next.":
       "Positions à trois notes choisies pour que ta main bouge à peine d'un accord à l'autre.",
     "Full barre chords, no capo, concert pitch.": "Accords barrés complets, sans capo, en son réel.",
@@ -289,6 +297,8 @@
     "Bar {n}, the line as played {tag}": "Mesure {n}, la ligne telle que jouée {tag}",
     experimental: "expérimental",
     "Notes in this bar:": "Notes de cette mesure :",
+    "Less certain": "Moins sûre",
+    "No bass heard in this bar.": "Pas de basse entendue dans cette mesure.",
     "▶ Hear bar {n}": "▶ Écouter la mesure {n}",
     "Transcribed from the isolated bass track. Faint notes are less certain.":
       "Transcrit d'après la piste de basse séparée. Les notes pâles sont moins sûres.",
@@ -315,8 +325,19 @@
     "Notation: hits played in more than half the bars": "Notation : frappes jouées dans plus de la moitié des mesures",
     "▶ Hear the groove": "▶ Écouter le groove",
     "▶ Groove with the band": "▶ Groove avec le groupe",
-    "Read from the drum track, isolated on this computer, over {bars} bars. Kick on {kick}, snare on {snare}. Bars matching the main groove: kick {kickShare}, snare {snareShare}, hi-hat {hatShare}. Fills are not detected yet.":
-      "Lu sur la piste de batterie, séparée sur cet ordinateur, sur {bars} mesures. Grosse caisse sur {kick}, caisse claire sur {snare}. Mesures conformes au groove principal : grosse caisse {kickShare}, caisse claire {snareShare}, charley {hatShare}. Les breaks ne sont pas encore détectés.",
+    "Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.":
+      "Lu sur la piste de batterie, séparée sur cet ordinateur, sur les {bars} mesures où la batterie joue.",
+    "Kick on {hits}.": "Grosse caisse sur {hits}.",
+    "Snare on {hits}.": "Caisse claire sur {hits}.",
+    "No kick in more than half the bars.": "Pas de grosse caisse dans plus de la moitié des mesures.",
+    "No snare in more than half the bars.": "Pas de caisse claire dans plus de la moitié des mesures.",
+    "kick {share}": "grosse caisse {share}",
+    "snare {share}": "caisse claire {share}",
+    "hi-hat {share}": "charley {share}",
+    "Bars matching the main groove: {list}.": "Mesures conformes au groove principal : {list}.",
+    "The groove changes too much from bar to bar to write one down: trust your ears here.":
+      "Le groove change trop d'une mesure à l'autre pour en écrire un : fie-toi à tes oreilles ici.",
+    "Fills are not detected yet.": "Les breaks ne sont pas encore détectés.",
     "No vocal track was separated for this song: run woodshed with stems to get this part.":
       "Aucune piste de voix séparée pour ce morceau : lance woodshed avec les pistes séparées (stems) pour avoir cette partie.",
     "No singing was detected on the isolated vocal track, so there is no range to match.":

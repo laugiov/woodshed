@@ -131,12 +131,15 @@
   }
 
   // "1, 2 and 3" for the slots hit in most bars.
-  function hitsText(shares, per) {
+  // The hits worth naming: by default the strong ones of a rhythm (chords); `kept` can give the rule
+  // (the drums name what the notation draws: hits in more than half the bars).
+  function hitsText(shares, per, kept) {
     const c = counts(per);
     const top = Math.max(...shares);
+    const keep = kept || ((p) => p > 0.6 * top && p > 0.2);
     const on = [];
     shares.forEach((p, i) => {
-      if (p > 0.6 * top && p > 0.2) on.push(i % 4 === 0 ? c[i] : W.t("the {count} of {beat}", { count: c[i], beat: Math.floor(i / 4) + 1 }));
+      if (keep(p)) on.push(i % 4 === 0 ? c[i] : W.t("the {count} of {beat}", { count: c[i], beat: Math.floor(i / 4) + 1 }));
     });
     return on.length > 1 ? W.t("{list} and {last}", { list: on.slice(0, -1).join(", "), last: on[on.length - 1] }) : on.join("");
   }
