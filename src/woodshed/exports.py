@@ -92,7 +92,7 @@ def chordpro(song: Song) -> str:
         for u in group["occurrences"][0]:
             cells: list[str] = []
             for c in song["bars"][u]["chords"]:
-                name = _name(c, key) + ("?" if c["doubt"] else "")
+                name = _name(c, key) + ("?" if c["doubt"] and c["doubt"].get("kind", "chord") == "chord" else "")
                 cells += [name] + ["."] * (c["beats"] - 1)
             bars.append(" ".join(cells))
         times = len(group["occurrences"])

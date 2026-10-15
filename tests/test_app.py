@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import signal
 import threading
 import time
 from collections.abc import Iterator
@@ -16,7 +17,8 @@ import pytest
 from tests import synth
 from tests.test_commands import install_full_length_demucs
 from woodshed import app
-from woodshed.run import Options
+from woodshed.errors import WoodshedError
+from woodshed.run import Options, Reporter, first_pass
 
 
 @pytest.fixture
@@ -276,7 +278,7 @@ def test_two_uploads_of_one_name_at_once_keep_both_files(server: app.AppServer) 
     for t in threads:
         t.join()
     assert results == [202, 202]
-    files = sorted(server.library.songs.iterdir())
+    files = sorted(p for p in server.library.songs.iterdir() if not p.name.startswith("."))
     assert [p.name for p in files] == ["dup (2).wav", "dup.wav"]
     assert {p.read_bytes()[:1] for p in files} == {b"\x01", b"\x02"} and all(
         len(set(p.read_bytes())) == 1 for p in files
@@ -397,3 +399,230 @@ def test_a_symlinked_page_folder_is_not_listed(server: app.AppServer, tmp_path: 
     (outside / "woodshed.json").write_text(json.dumps({"summary": {"title": "x", "folder": "x"}, "complete": True}))
     (server.library.root / "linked.woodshed").symlink_to(outside)
     assert json.loads(request(server, "GET", "/api/songs")[2])["songs"] == []
+
+
+# Resume: a stop during a job must not leave a song half done for ever.
+
+
+def song_file(srv: app.AppServer, tmp_path: Path, name: str = "pop", as_name: str = "pop.wav") -> Path:
+    target = srv.library.songs / as_name
+    target.write_bytes(synth.write(name, tmp_path / "src").wav.read_bytes())
+    return target
+
+
+def test_a_song_left_without_a_page_is_resumed(server: app.AppServer, tmp_path: Path) -> None:
+    song_file(server, tmp_path)
+    [job] = server.library.resume()
+    assert job.name == "pop.wav"
+    state = wait_done(server)
+    assert state["jobs"][0]["status"] == "done" and [s["folder"] for s in state["songs"]] == ["pop.woodshed"]
+    assert state["songs"][0]["complete"]
+
+
+def test_a_page_waiting_for_its_stems_is_resumed_with_its_upload_options(server: app.AppServer, tmp_path: Path) -> None:
+    src = song_file(server, tmp_path, "waltz", "waltz.wav")
+    first_pass(src, server.library.options(3, True, 90), Reporter(), server.library.root)
+    manifest = server.library.root / "waltz.woodshed" / "woodshed.json"
+    data = json.loads(manifest.read_text())
+    manifest.write_text(json.dumps({**data, "complete": False}))  # as a stop before the stems leaves it
+    assert len(server.library.resume()) == 1
+    assert wait_done(server)["jobs"][0]["status"] == "done"
+    data = json.loads(manifest.read_text())
+    assert data["complete"] is True
+    assert (data["settings"]["beats_per_bar"], data["settings"]["sevenths"], data["settings"]["bpm"]) == (3, True, 90)
+
+
+def test_finished_pages_are_not_resumed(server: app.AppServer, tmp_path: Path) -> None:
+    src = song_file(server, tmp_path)
+    first_pass(src, server.library.options(), Reporter(), server.library.root)
+    (server.library.songs / "notes.txt").write_text("not a song")
+    (server.library.songs / ".pop.wav.1234.part").write_bytes(b"cut short")
+    assert server.library.resume() == []
+
+
+@pytest.mark.parametrize(
+    ("settings", "beats"),
+    [
+        ({"beats_per_bar": "x"}, 4),
+        ({"beats_per_bar": True}, 4),
+        ({"beats_per_bar": 3, "bpm": 5000}, 3),  # each field on its own
+        ({"beats_per_bar": 3, "bpm": 10**400}, 3),  # too big for a float
+        ({"beats_per_bar": 3, "bpm": "NaN"}, 3),
+        ("nonsense", 4),
+    ],
+)
+def test_a_page_edited_by_hand_resumes_with_its_good_fields(
+    server: app.AppServer, tmp_path: Path, settings: Any, beats: int
+) -> None:
+    song_file(server, tmp_path)
+    page = server.library.root / "pop.woodshed"
+    page.mkdir()
+    (page / "woodshed.json").write_text(json.dumps({"settings": settings, "complete": False}))
+    assert len(server.library.resume()) == 1
+    assert wait_done(server)["jobs"][0]["status"] == "done"
+    data = json.loads((page / "woodshed.json").read_text())
+    assert data["settings"]["beats_per_bar"] == beats and data["settings"]["bpm"] is None
+
+
+def test_a_manifest_that_cannot_be_read_does_not_stop_the_start(server: app.AppServer, tmp_path: Path) -> None:
+    song_file(server, tmp_path)
+    song_file(server, tmp_path, as_name="other.wav")
+    page = server.library.root / "other.woodshed"
+    page.mkdir()
+    (page / "woodshed.json").write_text("[" * 100_000 + "]" * 100_000)  # too deep for the parser
+    jobs = server.library.resume()
+    assert sorted(j.name for j in jobs) == ["other.wav", "pop.wav"]
+
+
+def test_a_resumed_song_that_fails_keeps_its_file(server: app.AppServer) -> None:
+    broken = server.library.songs / "broken.wav"
+    broken.write_bytes(b"not audio at all")
+    server.library.resume()
+    assert wait_done(server)["jobs"][0]["status"] == "failed"
+    assert broken.exists()  # the user's own file: only a failed upload is removed
+
+
+def stems_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> app.AppServer:
+    install_full_length_demucs(monkeypatch)
+    srv = app.AppServer(app.Library(tmp_path / "library", Options(open_page=False)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_a_mix_only_page_gets_its_stems_when_resumed(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    srv = stems_library(tmp_path, monkeypatch)
+    try:
+        src = song_file(srv, tmp_path, "waltz", "waltz.wav")
+        done = first_pass(src, srv.library.options(3), Reporter(), srv.library.root)
+        assert done.stems_to_come  # the app stopped here: a mix-only page
+        assert len(srv.library.resume()) == 1
+        assert wait_done(srv)["jobs"][0]["status"] == "done"
+        data = json.loads((done.page / "woodshed.json").read_text())
+        assert data["complete"] is True and data["settings"]["stems"] is True and data["summary"]["stems"] is True
+        assert data["settings"]["beats_per_bar"] == 3
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_song_whose_separation_failed_is_not_tried_at_every_start(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    srv = stems_library(tmp_path, monkeypatch)
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise WoodshedError("no model in the cache")
+
+    monkeypatch.setattr("woodshed.stems.separate", broken)
+    try:
+        upload(srv, "pop.wav", synth.write("pop", tmp_path / "src").wav.read_bytes())
+        assert wait_done(srv)["jobs"][0]["status"] == "failed"
+        assert (srv.library.songs / "pop.wav").exists()  # its mix-only page is kept, and its file
+        again = app.Library(srv.library.root, srv.library.opts)  # the next start
+        [job] = again.resume()
+        assert job.status == "failed" and "no model in the cache" in job.message and again.queue.empty()
+        assert "remove songs/pop.wav and add it again" in job.message
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_song_that_killed_the_app_is_not_tried_again(server: app.AppServer, tmp_path: Path) -> None:
+    src = song_file(server, tmp_path)
+    app.Library.attempt(src).write_text("")  # the process died during it: no error written
+    [job] = server.library.resume()
+    assert job.status == "failed" and "stopped during it" in job.message and server.library.queue.empty()
+
+
+def test_a_song_stopped_by_the_user_is_resumed(
+    server: app.AppServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started, stopped = threading.Event(), threading.Event()
+
+    def decode_killed_by_ctrl_c(*args: Any, **kwargs: Any) -> Any:
+        started.set()
+        stopped.wait(10)
+        raise WoodshedError("ffmpeg: interrupted")  # Ctrl-C reaches ffmpeg too
+
+    monkeypatch.setattr("woodshed.app.first_pass", decode_killed_by_ctrl_c)
+    upload(server, "new.wav", b"fresh upload")
+    upload(server, "next.wav", b"waiting in the queue")
+    assert started.wait(10)
+    server.library.interrupted()  # Ctrl-C or docker stop during it
+    stopped.set()
+    deadline = time.monotonic() + 10
+    while server.library.running is not None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    songs = server.library.songs
+    assert (songs / "new.wav").exists() and (songs / "next.wav").exists()  # nothing deleted
+    assert not any(p.name.endswith(".attempt") for p in songs.iterdir())  # no failure recorded
+    monkeypatch.undo()
+    again = app.Library(server.library.root, Options(use_stems=False, open_page=False))
+    assert [j.name for j in again.resume()] == ["new.wav", "next.wav"]
+
+
+def test_a_failed_song_finished_by_hand_is_not_reported(server: app.AppServer, tmp_path: Path) -> None:
+    src = song_file(server, tmp_path)
+    app.Library.attempt(src).write_text("no model in the cache")
+    first_pass(src, server.library.options(), Reporter(), server.library.root)  # e.g. the command line
+    assert server.library.resume() == []
+
+
+def test_two_files_of_one_name_copied_in_by_hand_make_one_page(server: app.AppServer, tmp_path: Path) -> None:
+    song_file(server, tmp_path)
+    song_file(server, tmp_path, as_name="POP.flac")
+    jobs = server.library.resume()
+    failed = [j for j in jobs if j.status == "failed"]  # the other one may already be running
+    assert len(jobs) == 2 and len(failed) == 1 and "another file" in failed[0].message
+
+
+def test_a_symlinked_page_folder_is_not_written_through(server: app.AppServer, tmp_path: Path) -> None:
+    song_file(server, tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (server.library.root / "pop.woodshed").symlink_to(elsewhere)
+    assert server.library.resume() == []
+
+
+def test_song_options_keep_the_library_settings(tmp_path: Path) -> None:
+    library = app.Library(tmp_path / "library", Options(use_stems=False, offline=True, out=tmp_path, title="x"))
+    opts = library.options(3, True, 100)
+    assert (opts.use_stems, opts.offline, opts.out, opts.title, opts.open_page) == (False, True, None, None, False)
+    assert (opts.beats_per_bar, opts.sevenths, opts.bpm) == (3, True, 100)
+
+
+def test_the_app_resumes_at_start_and_stops_cleanly(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "library"
+    (root / "songs").mkdir(parents=True)
+    (root / "songs" / "pop.wav").write_bytes(synth.write("pop", tmp_path / "src").wav.read_bytes())
+    handlers: list[int] = []
+    monkeypatch.setattr("woodshed.app.signal.signal", lambda signum, handler: handlers.append(signum))
+    seen: list[app.Library] = []
+
+    def stop_at_once(self: app.AppServer) -> None:
+        seen.append(self.library)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(app.AppServer, "serve_forever", stop_at_once)
+    with pytest.raises(KeyboardInterrupt):
+        app.serve(root, Options(use_stems=False, open_page=False), port=0, open_browser=False)
+    assert handlers == [signal.SIGTERM, signal.SIGTERM]  # set, then put back
+    assert [j.name for j in seen[0].jobs.values()] == ["pop.wav"]
+
+
+def test_a_taken_port_still_puts_the_stop_signal_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    handlers: list[int] = []
+    monkeypatch.setattr("woodshed.app.signal.signal", lambda signum, handler: handlers.append(signum))
+    busy = app.AppServer(app.Library(tmp_path / "other", Options(use_stems=False, open_page=False)))
+    try:
+        with pytest.raises(OSError):
+            app.serve(
+                tmp_path / "library", Options(use_stems=False, open_page=False), port=busy.port, open_browser=False
+            )
+    finally:
+        busy.server_close()
+    assert handlers == [signal.SIGTERM, signal.SIGTERM]

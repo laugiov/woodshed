@@ -163,11 +163,16 @@ def shape_difficulty(pc: int, quality: str) -> int:
     return 2 if name in EASY_BARRES else 3
 
 
+HIGH_CAPO = 4  # above this fret a capo sounds thin and far from the recording's voicing
+HIGH_CAPO_COST = 0.05  # per fret above HIGH_CAPO: a low capo wins when the shapes are about as easy
+
+
 def suggest_capo(chords: Sequence[TimedChord], transposition: int = 0) -> int:
     """Capo position (0 to 7) worth suggesting: only when it makes the song clearly easier."""
 
-    def cost(capo: int) -> int:
-        return sum(shape_difficulty(c.pc + transposition - capo, c.quality) * c.beats for c in chords)
+    def cost(capo: int) -> float:
+        shapes = sum(shape_difficulty(c.pc + transposition - capo, c.quality) * c.beats for c in chords)
+        return shapes * (1 + HIGH_CAPO_COST * max(0, capo - HIGH_CAPO))
 
     base = cost(0)
     best, best_cost = 0, base

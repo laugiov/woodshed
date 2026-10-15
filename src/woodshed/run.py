@@ -118,7 +118,7 @@ def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
 def summary(song: Song, page: Path) -> dict[str, Any]:
     """What the songbook index shows for a page."""
     key = theory.Key(song.key.tonic, song.key.mode)
-    doubts = len({c.doubt.id for b in song.structure.bars for c in b.chords if c.doubt})
+    doubts = len({c.doubt.id for b in song.structure.bars for c in b.chords if c.doubt and c.doubt.counts})
     return {
         "title": song.title,
         "folder": page.name,

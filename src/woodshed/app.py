@@ -11,16 +11,21 @@ fetch cannot send it, and preflights are refused), and never reads or writes out
 
 from __future__ import annotations
 
+import contextlib
+import ipaddress
 import json
+import math
 import mimetypes
 import queue
 import re
 import secrets
 import shutil
+import signal
+import socket
 import threading
 import time
 import traceback
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -29,13 +34,18 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from woodshed import audio
+from woodshed.build import folder_name
 from woodshed.errors import WoodshedError
-from woodshed.run import MANIFEST, Options, Reporter, first_pass, second_pass
+from woodshed.run import MANIFEST, Options, Reporter, first_pass, media_files, second_pass
 
 MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
 CHUNK = 1024 * 1024
 TOKEN_HEADER = "X-Woodshed-Token"
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
+SETLIST_MAX = 500
+SETLIST_BYTES = 256 * 1024  # 500 long titles
 TYPES = {
     ".flac": "audio/flac",
     ".woff2": "font/woff2",
@@ -90,9 +100,11 @@ class Library:
         self.opts = opts
         self.jobs: dict[str, Job] = {}
         self.reserved: set[str] = set()
+        self.running: Path | None = None
+        self.stopping = threading.Event()  # set by interrupted(): the worker takes no new job, records no failure
         for leftover in self.songs.glob(".*.part"):  # uploads cut short by a stop or a crash
             leftover.unlink(missing_ok=True)
-        self.queue: queue.Queue[tuple[Job, Path, Options]] = queue.Queue()
+        self.queue: queue.Queue[tuple[Job, Path, Options, bool]] = queue.Queue()
         self.lock = threading.Lock()
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
@@ -110,6 +122,35 @@ class Library:
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             out.append(info)
         return sorted(out, key=lambda s: str(s.get("title", "")).lower())
+
+    def setlist(self) -> list[str]:
+        """The set, as page folders in order; songs removed since are left out."""
+        try:
+            data = json.loads((self.root / SETLIST).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        names = data.get("songs") if isinstance(data, dict) else None
+        if not isinstance(names, list):
+            return []
+        pages = {p["folder"] for p in self.pages()}
+        return list(dict.fromkeys(n for n in names if isinstance(n, str) and n in pages))
+
+    def set_setlist(self, data: Any) -> list[str]:
+        names = data.get("songs") if isinstance(data, dict) else None
+        if not isinstance(names, list) or len(names) > SETLIST_MAX or not all(isinstance(n, str) for n in names):
+            raise ValueError("songs: a list of page folders")
+        pages = {p["folder"] for p in self.pages()}
+        unknown = [n for n in names if n not in pages]
+        if unknown or len(set(names)) != len(names):
+            raise ValueError("songs: each page of the library once at most")
+        with self.lock:
+            tmp = self.root / f".{SETLIST}.{secrets.token_hex(4)}"
+            try:
+                tmp.write_text(json.dumps({"songs": names}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+                tmp.replace(self.root / SETLIST)
+            finally:
+                tmp.unlink(missing_ok=True)
+        return list(names)
 
     def state(self) -> dict[str, Any]:
         with self.lock:
@@ -144,17 +185,91 @@ class Library:
         with self.lock:
             self.reserved.discard(path.stem.lower())
 
-    def add(self, path: Path, opts: Options) -> Job:
+    def options(self, beats_per_bar: int = 4, sevenths: bool = False, bpm: float | None = None) -> Options:
+        """The options of one song: the library's, with the ones given at upload."""
+        if not 2 <= beats_per_bar <= 12 or (bpm is not None and not 30 <= bpm <= 300):
+            raise ValueError("beats per bar 2 to 12, tempo 30 to 300 BPM")
+        return replace(
+            self.opts, out=None, open_page=False, title=None, beats_per_bar=beats_per_bar, sevenths=sevenths, bpm=bpm
+        )
+
+    @staticmethod
+    def attempt(src: Path) -> Path:
+        """A hidden note next to a song while it is processed, kept with the error if it fails: a
+        song that failed, or killed the app, is not tried again at every start."""
+        return src.with_name(f".{src.name}.attempt")
+
+    def resume(self) -> list[Job]:
+        """Queue again the songs a stop left unfinished: no page yet, or a page still waiting for
+        its stems. A page keeps the options it was uploaded with. A song that failed is listed as
+        failed, not tried again."""
+        jobs: list[Job] = []
+        seen: set[str] = set()
+        for src in media_files(self.songs):
+            try:
+                job = self._resume(src, seen)
+            except Exception as exc:  # one odd song must not stop the app from starting
+                job = self._failed(src, f"not resumed: {exc}")
+            if job is not None:
+                jobs.append(job)
+        return jobs
+
+    def _resume(self, src: Path, seen: set[str]) -> Job | None:
+        folder = folder_name(src.stem)
+        page = self.root / folder
+        if page.is_symlink():
+            return None
+        try:
+            manifest = json.loads((page / MANIFEST).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = None
+        manifest = manifest if isinstance(manifest, dict) else {}
+        if manifest.get("complete") is True:
+            return None
+        note = self.attempt(src)
+        if note.exists():
+            # Also after a power cut or a kill -9: the song is not tried again until it is added again.
+            error = note.read_text(encoding="utf-8", errors="replace").strip() or "the app stopped during it"
+            where = src.relative_to(self.root)
+            return self._failed(src, f"failed last time ({error}); to retry, remove {where} and add it again")
+        if folder.lower() in seen:  # pop.wav and pop.mp3 copied in by hand: one page
+            return self._failed(src, f"not resumed: another file already makes {folder}")
+        seen.add(folder.lower())
+        given = manifest.get("settings")
+        given = given if isinstance(given, dict) else {}
+        beats, bpm = given.get("beats_per_bar"), given.get("bpm")
+        # Each field checked on its own: a page edited by hand keeps its good fields.
+        opts = self.options(
+            beats if isinstance(beats, int) and not isinstance(beats, bool) and 2 <= beats <= 12 else 4,
+            given.get("sevenths") is True,
+            float(bpm) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and 30 <= bpm <= 300 else None,
+        )
+        return self.add(src, opts, uploaded=False)
+
+    def _failed(self, src: Path, message: str) -> Job:
+        job = Job(secrets.token_hex(6), src.name, status="failed", message=message)
+        with self.lock:
+            self.jobs[job.id] = job
+        return job
+
+    def add(self, path: Path, opts: Options, uploaded: bool = True) -> Job:
         job = Job(secrets.token_hex(6), path.name)
         with self.lock:
             self.jobs[job.id] = job
-        self.queue.put((job, path, opts))
+        self.queue.put((job, path, opts, uploaded))
         return job
 
     def _work(self) -> None:
         while True:
-            job, path, opts = self.queue.get()
+            job, path, opts, uploaded = self.queue.get()
             report = JobReporter(job)
+            note = self.attempt(path)
+            with self.lock:
+                if self.stopping.is_set():
+                    return
+                self.running = path
+                with contextlib.suppress(OSError):  # under the lock: a stop never misses it
+                    note.write_text("", encoding="utf-8")
             try:
                 job.status = "analysing"
                 done = first_pass(path, opts, report, self.root)
@@ -163,15 +278,132 @@ class Library:
                     job.status = "separating"
                     done = second_pass(done, report)
                 job.status, job.message = "done", "Ready"
+                note.unlink(missing_ok=True)
             except (WoodshedError, OSError) as exc:
                 job.status, job.message = "failed", str(exc)
-                if job.page is None:  # nothing came of it: the file does not keep its name taken
-                    path.unlink(missing_ok=True)
+                with self.lock:  # one order with interrupted(): a stop never leaves a failure behind
+                    if self.stopping.is_set():  # Ctrl-C also stops ffmpeg: not the song's fault
+                        continue
+                    self._keep_failure(note, job)
+                    if uploaded and job.page is None:  # nothing came of it: the file does not keep its name taken
+                        path.unlink(missing_ok=True)
+                        note.unlink(missing_ok=True)
             except Exception as exc:  # a bug must not stop the queue
                 job.status, job.message = "failed", f"unexpected error: {exc}"
+                with self.lock:
+                    if not self.stopping.is_set():
+                        self._keep_failure(note, job)
                 traceback.print_exc()
             finally:
+                with self.lock:
+                    self.running = None
                 self.queue.task_done()
+
+    @staticmethod
+    def _keep_failure(note: Path, job: Job) -> None:
+        with contextlib.suppress(OSError):
+            note.write_text(job.message, encoding="utf-8")
+
+    def interrupted(self) -> None:
+        """The app is stopping: the song in progress did not fail, it is resumed next time."""
+        with self.lock:
+            self.stopping.set()
+            if self.running is not None:
+                self.attempt(self.running).unlink(missing_ok=True)
+
+
+LIVE_MAX = 4096  # bytes of one live update
+LIVE_FOLLOWERS = 32  # open streams at most: a band, not an audience
+LIVE_PING = 15.0  # seconds between keep-alive comments on a quiet stream
+
+
+class Live:
+    """Where the band is: the leader's song and position, kept in memory and sent to followers.
+
+    One leader at a time: a device that claims the lead gets it, the previous leader sees on the
+    stream that it now follows. Updates from a device that is not the leader are refused.
+    """
+
+    def __init__(self) -> None:
+        self.cond = threading.Condition()
+        self.state: dict[str, Any] = {"leader": None}
+        self.version = 0
+        self.followers = 0
+        self.closed = False
+
+    def update(self, data: Any, library_root: Path) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise ValueError("a live update is a JSON object")
+        who = data.get("id")
+        if not isinstance(who, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", who):
+            raise ValueError("a live update needs the device id")
+        with self.cond:
+            leader = self.state.get("leader")
+            if data.get("release") is True:
+                if leader == who:
+                    self.state = {"leader": None}
+                    self._changed()
+                return self.state
+            if data.get("lead") is not True and leader != who:
+                raise PermissionError("another device leads the band")
+            song = data.get("song")
+            if not isinstance(song, str) or not song.endswith(".woodshed") or "/" in song or song.startswith("."):
+                raise ValueError("song: a page folder of the library")
+            if not (library_root / song / "index.html").is_file():
+                raise ValueError("song: no such page in the library")
+            time_, rate = data.get("time"), data.get("rate", 1.0)
+            for value, low, high in ((time_, 0.0, 86400.0), (rate, 0.25, 2.0)):
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                    raise ValueError("time and rate are numbers")
+                if not low <= value <= high:
+                    raise ValueError("time or rate out of range")
+            loop = data.get("loop")
+            if loop is not None and not (
+                isinstance(loop, list) and len(loop) == 2 and all(type(x) is int and 0 <= x < 100_000 for x in loop)
+            ):
+                raise ValueError("loop: two bar numbers, or null")
+            self.state = {
+                "leader": who,
+                "song": song,
+                "playing": data.get("playing") is True,
+                "time": float(data["time"]),
+                "rate": float(data.get("rate", 1.0)),
+                "loop": loop,
+                "at": time.time(),  # the server clock when `time` was true
+            }
+            self._changed()
+            return self.state
+
+    def _changed(self) -> None:
+        self.version += 1
+        self.cond.notify_all()
+
+    def wait(self, seen: int, timeout: float) -> tuple[int, dict[str, Any] | None]:
+        """The next state after version `seen`, or None on a quiet `timeout`."""
+        with self.cond:
+            self.cond.wait_for(lambda: self.version != seen or self.closed, timeout)
+            if self.closed or self.version == seen:
+                return seen, None
+            return self.version, dict(self.state)
+
+    def close(self) -> None:
+        with self.cond:
+            self.closed = True
+            self.cond.notify_all()
+
+
+def lan_addresses() -> list[str]:
+    """This computer's addresses on the local network, for the phones of the band."""
+    found: set[str] = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))  # a documentation address: no packet is sent
+            found.add(s.getsockname()[0])
+    except OSError:
+        pass
+    with contextlib.suppress(OSError):
+        found |= set(socket.gethostbyname_ex(socket.gethostname())[2])
+    return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
 
 
 def home_html(token: str) -> str:
@@ -189,8 +421,29 @@ class Handler(BaseHTTPRequestHandler):
 
     # Checks shared by every request.
 
+    def _may_upload(self) -> bool:
+        return self.server.uploads_from_network or self._from_this_computer()
+
+    def _from_this_computer(self) -> bool:
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            return False
+
     def _host_ok(self) -> bool:
-        return self.headers.get("Host", "") in self.server.hosts
+        host = self.headers.get("Host", "")
+        if host in self.server.hosts:
+            return True
+        if not self.server.network:
+            return False
+        # On the network, the phones of the band use this computer's address. A DNS rebinding
+        # attack needs a name: an address literal on the app's port is safe to accept.
+        name, _, port = host.rpartition(":")
+        try:
+            ipaddress.ip_address(name.strip("[]"))
+        except ValueError:
+            return False
+        return port == str(self.server.port)
 
     def _send(self, status: int, body: bytes, kind: str, extra: dict[str, str] | None = None) -> None:
         self.send_response(status)
@@ -239,7 +492,25 @@ class Handler(BaseHTTPRequestHandler):
                 {"Content-Security-Policy": HOME_CSP},
             )
         elif path == "/api/songs":
-            self._json(HTTPStatus.OK, self.server.library.state())
+            state = self.server.library.state()
+            state["addresses"] = self.server.lan_urls()
+            state["can_upload"] = self._may_upload()
+            self._json(HTTPStatus.OK, state)
+        elif path == "/api/token":
+            # Read by the song pages of this server only: no CORS header, so another site's page
+            # cannot read the answer, and the Host check stops DNS rebinding.
+            self._json(HTTPStatus.OK, {"token": self.server.token})
+        elif path == "/api/setlist":
+            self._json(HTTPStatus.OK, {"songs": self.server.library.setlist()})
+        elif path == "/api/live":
+            given = parse_qs(urlsplit(self.path).query).get("t", [""])[0].encode("utf-8", "surrogateescape")
+            site = self.headers.get("Sec-Fetch-Site", "same-origin")
+            # Without the token (in the query: EventSource sends no headers), another site's page
+            # could still hold the stream slots open, even though it cannot read them.
+            if site not in ("same-origin", "none") or not secrets.compare_digest(given, self.server.token.encode()):
+                self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
+                return
+            self._live_stream()
         elif path.startswith("/app/"):
             self._static(self.server.assets, path[len("/app/") :])
         else:
@@ -254,8 +525,16 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
+        if url.path in ("/api/live", "/api/setlist"):
+            self._small_json_post(url.path)
+            return
         if url.path != "/api/songs":
             self._error(HTTPStatus.NOT_FOUND, "no such endpoint")
+            return
+        if not self._may_upload():
+            # On the network the band's phones lead and follow; adding songs (files up to 2 GB that
+            # run the analysis) stays with the computer that runs the app.
+            self._error(HTTPStatus.FORBIDDEN, "songs are added from the computer that runs the app")
             return
         query = parse_qs(url.query)
         if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
@@ -295,21 +574,74 @@ class Handler(BaseHTTPRequestHandler):
         job = self.server.library.add(target, opts)
         self._json(HTTPStatus.ACCEPTED, asdict(job))
 
+    def _small_json_post(self, path: str) -> None:
+        declared = self.headers.get("Content-Length", "")
+        length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
+        limit = LIVE_MAX if path == "/api/live" else SETLIST_BYTES
+        if "chunked" in self.headers.get("Transfer-Encoding", "").lower() or not 0 < length <= limit:
+            self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "a small JSON body with a Content-Length")
+            return
+        try:
+            data = json.loads(self.rfile.read(length))
+        except (ValueError, OSError, TimeoutError):
+            self._error(HTTPStatus.BAD_REQUEST, "not JSON")
+            return
+        try:
+            if path == "/api/live":
+                self._json(HTTPStatus.OK, self.server.live.update(data, self.server.library.root))
+            else:
+                self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
+        except PermissionError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except (ValueError, OSError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+
+    def _live_stream(self) -> None:
+        live = self.server.live
+        with live.cond:
+            if live.followers >= LIVE_FOLLOWERS:
+                full = True
+            else:
+                full = False
+                live.followers += 1
+        if full:
+            self._error(HTTPStatus.SERVICE_UNAVAILABLE, "too many devices follow the band")
+            return
+        self.close_connection = True  # a stream ends with its connection
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            seen = -1
+            with live.cond:
+                current: tuple[int, dict[str, Any]] | None = (live.version, dict(live.state))
+            while not live.closed:
+                if current is not None:
+                    seen, shown = current
+                    event = {**shown, "now": time.time()}  # the server clock, to measure the offset
+                    self.wfile.write(b"data: " + json.dumps(event).encode() + b"\n\n")
+                else:
+                    self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+                version, state = live.wait(seen, LIVE_PING)
+                current = None if state is None else (version, state)
+        except (OSError, TimeoutError):
+            pass  # the device left
+        finally:
+            with live.cond:
+                live.followers -= 1
+
     def _options(self, query: dict[str, list[str]]) -> Options:
         def one(key: str) -> str | None:
             values = query.get(key)
             return values[0] if values and values[0] else None
 
-        beats = int(one("beats_per_bar") or 4)
         tempo = one("bpm")
-        bpm = float(tempo) if tempo else None
-        if not 2 <= beats <= 12 or (bpm is not None and not 30 <= bpm <= 300):
-            raise ValueError("beats per bar 2 to 12, tempo 30 to 300 BPM")
-        base = self.server.library.opts
-        return Options(
-            use_stems=base.use_stems, offline=base.offline, open_page=False,
-            beats_per_bar=beats, sevenths=one("sevenths") == "1", bpm=bpm,
-        )  # fmt: skip
+        return self.server.library.options(
+            int(one("beats_per_bar") or 4), one("sevenths") == "1", float(tempo) if tempo else None
+        )
 
     def _static(self, root: Path, rel: str) -> None:
         target = (root / rel).resolve()
@@ -380,9 +712,17 @@ HOME_CSP = (
 class AppServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, library: Library, host: str = "127.0.0.1", port: int = 0) -> None:
+    def __init__(
+        self, library: Library, host: str = "127.0.0.1", port: int = 0, uploads_from_network: bool = False
+    ) -> None:
+        # In a container every request comes through the bridge: uploads must then be allowed from
+        # the network explicitly (docker run -p 127.0.0.1:8000:8000 keeps them to this computer).
+        self.uploads_from_network = uploads_from_network
+        self.live = Live()  # before binding: a taken port closes the server inside __init__
         super().__init__((host, port), Handler)
         self.library = library
+        self.network = host not in LOOPBACK
+        self._addresses: list[str] | None = None
         self.token = secrets.token_urlsafe(24)
         with resources.as_file(resources.files("woodshed").joinpath("page")) as page:
             self.assets = Path(page).resolve()
@@ -395,29 +735,59 @@ class AppServer(ThreadingHTTPServer):
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/"
 
+    def lan_urls(self) -> list[str]:
+        """The addresses the phones type, looked up once (a name lookup can take seconds)."""
+        if not self.network:
+            return []
+        if self._addresses is None:
+            self._addresses = [f"http://{a}:{self.port}/" for a in lan_addresses()]
+        return self._addresses
 
-LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+    def server_close(self) -> None:
+        self.live.close()  # open streams end
+        super().server_close()
 
 
-def serve(root: Path, opts: Options, host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) -> None:
+def serve(
+    root: Path,
+    opts: Options,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    open_browser: bool = True,
+    uploads_from_network: bool = False,
+) -> None:
     import webbrowser
 
     if host not in LOOPBACK:
-        # The token stops other web sites, not other computers: anyone who can reach the port can
-        # read the home page and its token. Only for a container whose port is published on
-        # 127.0.0.1 (docker run -p 127.0.0.1:8000:8000).
+        # The token stops other web sites, not other devices: anyone who can reach the port reads
+        # the home page and its token. For the band's phones on the rehearsal Wi-Fi, or a container
+        # published on 127.0.0.1 (with uploads allowed from the network: the bridge is not loopback).
+        uploads = "anyone can add songs" if uploads_from_network else "songs are added from this computer only"
         print(
-            f"woodshed app: listening on {host}: every computer that can reach this port can use the library",
+            f"woodshed app: listening on {host}: every device on this network can open the library, play it and "
+            f"lead the band ({uploads})",
             flush=True,
         )
 
-    library = Library(root, opts)
-    server = AppServer(library, host, port)
-    print(f"woodshed app: {server.url}  (library: {library.root}; Ctrl-C to stop)", flush=True)
-    if open_browser:
-        webbrowser.open(server.url)
-    try:
+    def stop(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt  # docker stop sends SIGTERM: stop as on Ctrl-C
+
+    previous = signal.signal(signal.SIGTERM, stop)
+    library: Library | None = None
+    server: AppServer | None = None
+    try:  # a stop at any point, start included, leaves the songs in progress to resume
+        library = Library(root, opts)
+        server = AppServer(library, host, port, uploads_from_network)
+        for job in library.resume():
+            print(f"woodshed app: {job.name}: {job.message or 'resumed'}", flush=True)
+        print(f"woodshed app: {server.url}  (library: {library.root}; Ctrl-C to stop)", flush=True)
+        if open_browser:
+            webbrowser.open(server.url)
         server.serve_forever()
     finally:
-        server.server_close()
-        shutil.rmtree(library.songs / ".tmp", ignore_errors=True)
+        if library is not None:
+            library.interrupted()
+            shutil.rmtree(library.songs / ".tmp", ignore_errors=True)
+        if server is not None:
+            server.server_close()
+        signal.signal(signal.SIGTERM, previous)

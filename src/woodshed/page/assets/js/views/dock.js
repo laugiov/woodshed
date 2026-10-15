@@ -25,9 +25,10 @@
       const g = layer.getContext("2d");
       g.scale(dpr, dpr);
       const X = (t) => (t / duration) * w;
+      const sections = app.sections();
       g.fillStyle = colours.accentSoft;
-      song.song.groups.forEach((gr, gi) => {
-        if (gi % 2 === 0) for (const o of gr.occurrences) g.fillRect(X(barStart(o[0])), 0, X(barStart(o[o.length - 1] + 1)) - X(barStart(o[0])), hgt);
+      sections.forEach((sec, k) => {
+        if (k % 2 === 0) g.fillRect(X(barStart(sec.start)), 0, X(barStart(sec.end)) - X(barStart(sec.start)), hgt);
       });
       if (s.loopOn && s.loop) {
         g.fillStyle = colours.accent;
@@ -46,20 +47,20 @@
       }
       g.fillStyle = colours.warn;
       song.bars.forEach((b, i) => {
-        if (b.chords.some((c) => c.doubt && !c.fixed)) g.fillRect(X(barStart(i)), hgt - 4, X(barStart(i + 1)) - X(barStart(i)), 4);
+        if (b.chords.some((c) => c.doubt && c.doubt.kind === "chord" && !c.fixed)) g.fillRect(X(barStart(i)), hgt - 4, X(barStart(i + 1)) - X(barStart(i)), 4);
       });
       g.fillStyle = colours.muted;
       g.font = "11px " + colours.font;
-      let lastX = -99;
-      for (const gr of song.song.groups) {
-        for (const o of gr.occurrences) {
-          const x = X(barStart(o[0]));
-          if (x - lastX > 14) {
-            g.fillText(gr.label, x + 3, 12);
-            lastX = x;
-          }
-        }
-      }
+      // Each section's name where it fits, else its first letters (V1 for Verse 1), else nothing.
+      sections.forEach((sec) => {
+        const x = X(barStart(sec.start));
+        const room = X(barStart(sec.end)) - x - 5;
+        const SHORT = { intro: "In", verse: "V", prechorus: "Pre", chorus: "C", bridge: "Br", instrumental: "Inst", outro: "Out" };
+        const number = (sec.name.match(/ (\d+)$/) || ["", ""])[1];
+        const short = SHORT[sec.role] ? SHORT[sec.role] + number : sec.letter;
+        const text = [sec.name, short].find((t) => g.measureText(t).width <= room);
+        if (text) g.fillText(text, x + 3, 12);
+      });
     }
 
     function drawWave(s, rebuild) {
@@ -89,7 +90,9 @@
       const tenth = Math.floor(s.time * 10);
       if (tenth !== shownTenth) clear($("posInfo"), h("b", null, fmt(s.time, true)), " / " + fmt(duration));
       shownTenth = tenth;
-      $("loopInfo").textContent = s.loopOn && s.loop ? "Looping bars " + (s.loop[0] + 1) + "–" + (s.loop[1] + 1) + (s.trainer ? " · trainer on" : "") : "No loop";
+      const looped = s.loop && app.sections().find((sec) => sec.start === s.loop[0] && sec.end === s.loop[1] + 1);
+      const what = !s.loop ? "" : looped ? looped.name : "bars " + (s.loop[0] + 1) + "–" + (s.loop[1] + 1);
+      $("loopInfo").textContent = s.loopOn && s.loop ? "Looping " + what + (s.trainer ? " · trainer on" : "") : "No loop";
       $("loopBtn").classList.toggle("on", !!s.loopOn);
       $("trainBtn").classList.toggle("on", !!s.trainer);
       $("countBtn").classList.toggle("on", !!s.countIn);

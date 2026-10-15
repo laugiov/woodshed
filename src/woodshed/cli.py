@@ -94,6 +94,10 @@ def app_parser() -> argparse.ArgumentParser:
         "--allow-network", action="store_true",
         help="needed with a --host other than this computer: anyone who reaches the port can use the library",
     )  # fmt: skip
+    parser.add_argument(
+        "--uploads-from-network", action="store_true",
+        help="let other devices add songs too (in Docker: the published port comes through the network)",
+    )  # fmt: skip
     return parser
 
 
@@ -108,7 +112,10 @@ def run_app(argv: Sequence[str]) -> int:
 
     opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False)
     try:
-        serve(args.library, opts, args.host, args.port, open_browser=not args.no_open)
+        serve(
+            args.library, opts, args.host, args.port, open_browser=not args.no_open,
+            uploads_from_network=args.uploads_from_network,
+        )  # fmt: skip
     except KeyboardInterrupt:
         print("woodshed app: stopped", file=sys.stderr)
     except OSError as exc:  # the port is taken, the folder cannot be written...

@@ -31,6 +31,13 @@ class Doubt:
     id: int
     why: str
     alternatives: list[Alternative]
+    # "chord": the top candidates are close, the chord itself is uncertain (counted, shown in
+    # orange); "timing": the chord is clear but starts off the beat or lasts one beat.
+    kind: str = "chord"
+
+    @property
+    def counts(self) -> bool:
+        return self.kind == "chord"
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,17 @@ class Group:
     occurrences: list[list[int]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Section:
+    """A part of the song as a band names it: Intro, Verse 1, Chorus 2. Whole lines of the chart."""
+
+    name: str
+    role: str  # intro, verse, prechorus, chorus, bridge, instrumental, outro, or part
+    letter: str  # the same letter is the same music
+    start: int  # first bar
+    end: int  # bar after the last
+
+
 @dataclass
 class Structure:
     bars: list[Bar]
@@ -74,6 +92,7 @@ class Structure:
     music_start: float | None
     music_end: float | None
     first_beat: int = 0  # index, in the beat grid, of the first bar's beat one (negative for a pickup)
+    sections: list[Section] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

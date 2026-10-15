@@ -32,4 +32,6 @@ def test_the_page_forbids_remote_content() -> None:
     policy = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', template)
     assert policy is not None
     rules = dict(rule.strip().split(" ", 1) for rule in policy.group(1).split(";"))
-    assert rules["default-src"] == "'self'" and rules["connect-src"] == "'none'" and rules["script-src"] == "'self'"
+    # connect-src 'self': served by `woodshed app`, the page talks to that app only (the band);
+    # opened from disk it has no server to talk to.
+    assert rules["default-src"] == "'self'" and rules["connect-src"] == "'self'" and rules["script-src"] == "'self'"

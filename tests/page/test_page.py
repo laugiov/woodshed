@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from pathlib import Path
@@ -47,8 +48,9 @@ def test_a_hostile_title_is_shown_as_text_and_never_runs(open_page: Any) -> None
 def test_the_chart_shows_the_sections_and_repeats_of_the_song(open_page: Any) -> None:
     o = open_page("pop")
     groups = o.js("Woodshed.current.song.groups")
-    labels = o.page.get_by_test_id("section").all_inner_texts()
-    assert labels == [g["label"] for g in groups]
+    sections = o.js("Woodshed.current.song.sections")
+    heads = o.page.locator("[data-testid=section] .sec-name").all_inner_texts()
+    assert heads == [sec["name"] for sec in sections] == o.page.get_by_test_id("form-chip").all_inner_texts()
     repeats = o.page.get_by_test_id("repeat").all_inner_texts()
     assert repeats == ["×" + str(len(g["occurrences"])) for g in groups if len(g["occurrences"]) > 1]
     first = o.js("Woodshed.current.song.bars[0].chords[0]")
@@ -73,7 +75,7 @@ def test_clicking_a_bar_jumps_to_it(open_page: Any) -> None:
     o.page.locator('[data-testid=bar][data-bar="2"]').click()
     start = o.js("Woodshed.current.bars[2].start")
     assert state(o)["audioTime"] == pytest.approx(start, abs=0.01)
-    expect(o.page.get_by_test_id("bar-info")).to_have_text("Bar 3 of 8")
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 3 of 8")  # in the song's only section
 
 
 def test_switching_tracks_keeps_the_position(open_page: Any) -> None:
@@ -112,12 +114,12 @@ def test_a_loop_wraps_back_to_its_first_bar(open_page: Any) -> None:
     o.page.locator('[data-testid=bar][data-bar="0"]').click()
     o.page.keyboard.press("l")
     s = state(o)
-    assert s["loopOn"] and s["loop"] == [0, 3]  # the line holding bar 1
-    end = o.js("Woodshed.current.bars[4].start")
-    o.js(f"Woodshed.app.transport.seek({end} - 0.2)")
+    assert s["loopOn"] and s["loop"] == [0, 7]  # the section holding bar 1
+    end = o.js("Woodshed.current.bars[7].end")  # the last section: its end is the end of the file
+    o.js(f"Woodshed.app.transport.seek({end} - 1.0)")
     o.page.get_by_test_id("play").click()
-    o.page.wait_for_timeout(700)
-    assert state(o)["audioTime"] < 3.0  # wrapped to bar 1 (running on would be past 4 s)
+    o.page.wait_for_timeout(1600)
+    assert state(o)["playing"] and state(o)["audioTime"] < 3.0  # wrapped to bar 1
 
 
 @pytest.mark.parametrize("steps", [2, 5, -1])
@@ -161,9 +163,9 @@ def test_keyboard_and_pedal_keys(open_page: Any) -> None:
     o = open_page("pop")
     o.page.keyboard.press("ArrowRight")
     o.page.keyboard.press("PageDown")
-    expect(o.page.get_by_test_id("bar-info")).to_have_text("Bar 3 of 8")
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 3 of 8")
     o.page.keyboard.press("ArrowLeft")
-    expect(o.page.get_by_test_id("bar-info")).to_have_text("Bar 2 of 8")
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 2 of 8")
     o.page.keyboard.press("]")
     assert state(o)["bpm"] > o.js("Woodshed.app.songBpm")
     o.page.keyboard.press(" ")
@@ -181,8 +183,18 @@ def test_stage_mode_shows_the_chord_and_closes_with_escape(open_page: Any) -> No
     expect(o.page.get_by_test_id("stage")).to_be_hidden()
 
 
+def test_a_clear_chord_off_the_beat_is_not_counted_but_can_still_be_checked(open_page: Any) -> None:
+    o = open_page("pickup")  # its pickup chord is clear: a timing doubt
+    expect(o.page.get_by_test_id("facts")).to_contain_text("Nothing to check by ear")
+    timing = o.page.get_by_test_id("doubt").first
+    assert timing.get_attribute("data-kind") == "timing" and "?" not in timing.inner_text()
+    timing.click()
+    expect(o.page.get_by_test_id("doubt-pop")).to_be_visible()
+    expect(o.page.get_by_test_id("checks")).to_contain_text("Nothing left to check by ear")
+
+
 def test_a_doubt_offers_alternatives_and_a_correction_is_remembered(open_page: Any) -> None:
-    o = open_page("pickup")
+    o = open_page("pickup", close_calls=True)
     expect(o.page.get_by_test_id("spots")).to_have_text("1 spot to check by ear")
     o.page.get_by_test_id("doubt").first.click()
     pop = o.page.get_by_test_id("doubt-pop")
@@ -324,7 +336,7 @@ def test_a_page_opened_without_its_files_says_how_to_fix_it(open_page: Any, tmp_
     "stored", ["{}", "[]", '"x"', "not json", '{"0": [99, "m"]}', '{"0": [7, "dim"]}', '{"0": "G"}']
 )
 def test_corrupted_saved_corrections_never_break_the_page(open_page: Any, stored: str) -> None:
-    o = open_page("pickup")
+    o = open_page("pickup", close_calls=True)
     o.page.get_by_test_id("doubt").first.click()
     o.page.get_by_test_id("pick").first.click()  # creates the key for this song
     key = o.js("Object.keys(localStorage).find(k => k.startsWith('woodshed:corrections:'))")
@@ -362,7 +374,7 @@ def test_the_trainer_speeds_up_after_each_pass(open_page: Any) -> None:
     o.page.get_by_test_id("step-3").click()
     o.page.get_by_test_id("count-in").click()  # off, to keep the test short
     start = state(o)["bpm"]
-    end = o.js("Woodshed.current.bars[4].start")
+    end = o.js("Woodshed.current.bars[7].end")  # the end of the looped section
     o.js(f"Woodshed.app.transport.seek({end} - 0.3)")
     o.page.get_by_test_id("play").click()
     until(o, f"Woodshed.debug().bpm === {start + 5}", 5.0)
@@ -470,14 +482,18 @@ def download(o: Any, testid: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("name", ["pop", "pickup", "waltz", "ballad", "funk"])  # ballad, funk: .lab clipped
-def test_text_exports_from_the_page_equal_the_python_ones(open_page: Any, name: str) -> None:
+@pytest.mark.parametrize(
+    ("name", "close_calls"),
+    [("pop", False), ("pickup", False), ("waltz", False), ("ballad", False), ("funk", False), ("pickup", True)],
+)  # ballad, funk: .lab clipped; pickup with close calls: the "?" of a doubtful chord
+def test_text_exports_from_the_page_equal_the_python_ones(open_page: Any, name: str, close_calls: bool) -> None:
     from woodshed import exports
 
-    o = open_page(name, stems=name != "waltz")
+    o = open_page(name, stems=name != "waltz", close_calls=close_calls)
     data = o.js("Woodshed.current.song")
     assert download(o, "export-chordpro") == exports.chordpro(data)
     assert download(o, "export-lab") == exports.lab(data)
+    assert ("?" in download(o, "export-chordpro").split("{start_of_grid")[1]) is close_calls
 
 
 def test_exports_from_the_page_carry_the_corrections(open_page: Any) -> None:
@@ -520,3 +536,41 @@ def test_exports_match_python_for_a_half_bpm_and_a_hostile_title(open_page: Any)
     data = o.js("Woodshed.current.song")
     assert download(o, "export-chordpro") == exports.chordpro(data)
     assert download(o, "export-lab") == exports.lab(data)
+
+
+def test_the_form_follows_the_song_and_a_part_loops_from_its_name(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    chips = o.page.get_by_test_id("form-chip")
+    expect(chips).to_have_text(["Verse 1", "Chorus 1"])
+    expect(chips.first).to_have_class(re.compile(r"\bon\b"))
+    o.js("Woodshed.app.seekBar(5)")
+    expect(chips.nth(1)).to_have_class(re.compile(r"\bon\b"))
+    expect(o.page.get_by_test_id("bar-info")).to_have_text("Chorus 1")
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 2 of 4")
+    chips.first.click()  # a part's name goes there
+    until(o, "Woodshed.debug().beat === 0")
+    o.page.get_by_test_id("section-loop").nth(1).click()
+    s = state(o)
+    assert s["loopOn"] and s["loop"] == [4, 7]
+    expect(o.page.get_by_test_id("loop-info")).to_have_text("Looping Chorus 1")
+
+
+def test_stage_mode_names_the_part_and_announces_the_next_one(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    o.page.get_by_test_id("stage-open").click()
+    o.js("Woodshed.app.seekBar(2)")
+    expect(o.page.get_by_test_id("stage-section")).to_have_text("Verse 1")
+    expect(o.page.get_by_test_id("stage-coming")).to_have_text("Chorus 1 in 2 bars")
+    o.js("Woodshed.app.seekBar(7)")
+    expect(o.page.get_by_test_id("stage-section")).to_have_text("Chorus 1")
+    expect(o.page.get_by_test_id("stage-coming")).to_have_text("End next bar")
+
+
+def test_a_song_without_sections_still_plays_and_loops_by_line(open_page: Any) -> None:
+    o = open_page("pop", variant="nosections")
+    expect(o.page.get_by_test_id("form-chip")).to_have_count(0)
+    expect(o.page.get_by_test_id("section")).to_have_count(0)
+    o.js("Woodshed.app.seekBar(2)")
+    expect(o.page.get_by_test_id("bar-info")).to_have_text("Bar 3")
+    o.page.keyboard.press("l")
+    assert state(o)["loop"] == [0, 3]

@@ -110,6 +110,13 @@ def test_capo_suggested_when_it_turns_barre_chords_into_open_shapes() -> None:
     assert th.suggest_capo(song) == 1
 
 
+def test_a_low_capo_wins_over_a_high_one_when_the_shapes_are_about_as_easy() -> None:
+    # Db major: capo 1 gives C shapes (Gb -> F, an easy barre), capo 6 gives G shapes (Fm -> Bm,
+    # an easy barre). Capo 6 is a little easier here, but a capo that high sounds thin.
+    song = chords((1, "", 4), (6, "", 6), (8, "", 4), (10, "m", 4), (3, "m", 4), (5, "m", 4))
+    assert th.suggest_capo(song) == 1
+
+
 def test_no_capo_for_a_song_that_is_already_easy() -> None:
     # C - G - Am - F: F counts as an easy small barre, so no capo.
     song = chords((0, "", 8), (7, "", 8), (9, "m", 8), (5, "", 8))

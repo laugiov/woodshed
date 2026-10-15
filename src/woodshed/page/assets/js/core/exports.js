@@ -35,7 +35,7 @@
       const bars = group.occurrences[0].map((u) => {
         const cells = [];
         for (const c of d.bars[u].chords) {
-          cells.push(name(c) + (c.doubt ? "?" : ""));
+          cells.push(name(c) + (c.doubt && (c.doubt.kind || "chord") === "chord" ? "?" : "")); // no kind: data before kinds
           for (let i = 1; i < c.beats; i++) cells.push(".");
         }
         return cells.join(" ");

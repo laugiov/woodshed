@@ -46,6 +46,16 @@ def test_chordpro_has_the_song_facts_and_one_grid_per_section(pop: dict[str, Any
     assert [cells[0] for cells in bars[:4]] == [names(pop)[u][0] for u in first_line]
 
 
+def test_only_close_calls_get_a_question_mark(pop: dict[str, Any]) -> None:
+    bars = [dict(b) for b in pop["bars"]]
+    first = dict(bars[0]["chords"][0])
+    alts = [{"pc": first["pc"], "quality": first["quality"], "share": 95}]
+    for kind, marked in (("timing", False), ("chord", True)):
+        bars[0] = {**bars[0], "chords": [{**first, "doubt": {"id": 0, "why": "", "kind": kind, "alternatives": alts}}]}
+        grid = exports.chordpro({**pop, "bars": bars}).split("{start_of_grid")[1]
+        assert ("?" in grid.split("\n")[1]) is marked
+
+
 def test_chordpro_marks_repeats(pop: dict[str, Any]) -> None:
     repeated = [g for g in pop["groups"] if len(g["occurrences"]) > 1]
     assert repeated and exports.chordpro(pop).count("|: ") == len(repeated)

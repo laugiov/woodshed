@@ -536,3 +536,14 @@ def test_a_new_analysis_revision_rebuilds_old_pages(
     capsys.readouterr()
     assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
     assert "up to date" not in capsys.readouterr().err
+
+
+def test_the_summary_counts_only_close_calls(tmp_path: Path, cache: Path) -> None:
+    from woodshed import analysis
+    from woodshed.run import summary
+
+    wav = synth.write("pickup", tmp_path).wav
+    song = analysis.analyze(wav, use_stems=False)
+    doubts = [c.doubt for b in song.structure.bars for c in b.chords if c.doubt]
+    assert doubts and all(d.kind == "timing" for d in doubts)  # a clear pickup chord
+    assert summary(song, tmp_path / "pickup.woodshed")["doubts"] == 0

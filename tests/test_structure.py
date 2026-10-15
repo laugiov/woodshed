@@ -95,6 +95,19 @@ def test_doubtful_chords_carry_ranked_alternatives() -> None:
     shares = [a.share for a in doubt.alternatives]
     assert shares == sorted(shares, reverse=True) and 98 <= sum(shares) <= 102
     assert s.bars[0].chords[0].doubt is None
+    assert doubt.kind == "chord" and doubt.counts  # F and Fm are a close call
+
+
+def test_a_clear_chord_off_the_beat_is_a_timing_doubt_that_does_not_count() -> None:
+    labels = LOOP
+    flags = [False] * 12 + [True] * 4
+    names = ["C", "Cm", "F", "Fm", "Am", "G"]
+    scores = np.zeros((len(names), len(labels)))
+    scores[names.index("F"), 12:] = 0.95  # far ahead of the others
+    s = st.build(grid(labels), labels, np.array(flags), scores, names, 0, 4)
+    doubt = s.bars[3].chords[0].doubt
+    assert doubt is not None and doubt.kind == "timing" and not doubt.counts
+    assert doubt.alternatives[0].share >= st.CLOSE_CALL
 
 
 def test_harmony_summary_names_the_progression() -> None:

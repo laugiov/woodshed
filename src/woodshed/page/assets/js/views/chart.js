@@ -25,8 +25,15 @@
       const shapes = app.showShapes(s);
       const name = app.nameFor(c, shapes ? s.capo : 0, s);
       const main = chordNode(name);
+      // A timing doubt (the chord is clear) stays readable as a plain chord, still open to a check.
+      const timing = c.doubt && c.doubt.kind === "timing";
       const inner = c.doubt && !c.fixed
-        ? h("button", { type: "button", class: "doubt", "data-ref": ref, "data-testid": "doubt", title: "Check by ear" }, main, h("sup", null, "?"))
+        ? h(
+            "button",
+            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": ref, "data-testid": "doubt", "data-kind": c.doubt.kind, title: timing ? "Placement to check by ear" : "Check by ear" },
+            main,
+            timing ? null : h("sup", null, "?"),
+          )
         : [main, c.fixed ? h("span", { class: "fixed-dot", title: "Your correction" }) : null];
       return h(
         "span",
@@ -48,44 +55,77 @@
       return out;
     }
 
+    function sectionHead(sec, k) {
+      const first = bar(sec.start);
+      const n = sec.end - sec.start;
+      return h(
+        "div",
+        { class: "sec-head", "data-testid": "section", "data-section": k, "data-role": sec.role },
+        h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: "Go to " + sec.name }, sec.name),
+        h("span", { class: "sec-meta" }, fmt(first.start) + " · " + n + (n === 1 ? " bar" : " bars")),
+        h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: "Loop " + sec.name }, "⟲ Loop"),
+      );
+    }
+
+    function renderForm(s) {
+      const list = app.sections();
+      const cur = list.length ? song.sectionIndex(curBar(s), list) : -1;
+      clear(
+        $("form"),
+        list.map((sec, k) =>
+          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, "data-goto": sec.start, "data-testid": "form-chip" }, sec.name),
+        ),
+      );
+    }
+
     function renderSheet(s) {
-      const lines = song.song.groups.map((gr, g) => {
-        const n = gr.occurrences.length;
-        const len = gr.occurrences[0].length;
-        const cells = [];
-        for (let col = 0; col < 4; col++) {
-          if (col >= len) {
-            cells.push(h("div", { class: "bar empty", "aria-hidden": "true" }));
-            continue;
-          }
-          const u = barShown(g, col, s);
-          const b = bar(u);
-          cells.push(
-            h(
-              "div",
-              { class: "bar", "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "aria-label": "Bar " + (u + 1) + ": " + b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", "), "data-testid": "bar" },
-              barContent(b, u, s),
-              h("span", { class: "num" }, String(u + 1)),
-              h("span", { class: "rn" }, b.chords.map((c) => song.roman(c)).join(" ")),
-            ),
-          );
-        }
-        return h(
-          "div",
-          { class: "line", "data-testid": "line" },
-          h("div", { class: "line-label" }, h("span", { class: "sec", "data-testid": "section" }, gr.label), h("span", { class: "t" }, fmt(bar(gr.occurrences[0][0]).start))),
-          h(
-            "div",
-            { class: "staff four" },
-            n > 1 ? h("div", { class: "rep" }, "𝄆") : h("div", { class: "plain-bar" }),
-            cells,
-            n > 1 ? [h("div", { class: "rep r-end" }, "𝄇"), h("span", { class: "times", "data-testid": "repeat" }, "×" + n)] : h("div", { class: "plain-end" }),
-          ),
-        );
+      const sections = app.sections();
+      const headAt = new Map(sections.map((sec, k) => [sec.start, [sec, k]]));
+      const lines = [];
+      song.song.groups.forEach((gr, g) => {
+        const head = headAt.get(gr.occurrences[0][0]);
+        if (head) lines.push(sectionHead(head[0], head[1]));
+        lines.push(row(gr, g, s));
       });
       clear($("sheet"), lines);
+      renderForm(s);
       renderViewControl(s);
       paintBars(s);
+    }
+
+    function row(gr, g, s) {
+      const n = gr.occurrences.length;
+      const len = gr.occurrences[0].length;
+      const cells = [];
+      for (let col = 0; col < 4; col++) {
+        if (col >= len) {
+          cells.push(h("div", { class: "bar empty", "aria-hidden": "true" }));
+          continue;
+        }
+        const u = barShown(g, col, s);
+        const b = bar(u);
+        cells.push(
+          h(
+            "div",
+            { class: "bar", "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "aria-label": "Bar " + (u + 1) + ": " + b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", "), "data-testid": "bar" },
+            barContent(b, u, s),
+            h("span", { class: "num" }, String(u + 1)),
+            h("span", { class: "rn" }, b.chords.map((c) => song.roman(c)).join(" ")),
+          ),
+        );
+      }
+      return h(
+        "div",
+        { class: "line", "data-testid": "line" },
+        h("div", { class: "line-label" }, h("span", { class: "t" }, fmt(bar(gr.occurrences[0][0]).start))),
+        h(
+          "div",
+          { class: "staff four" },
+          n > 1 ? h("div", { class: "rep" }, "𝄆") : h("div", { class: "plain-bar" }),
+          cells,
+          n > 1 ? [h("div", { class: "rep r-end" }, "𝄇"), h("span", { class: "times", "data-testid": "repeat" }, "×" + n)] : h("div", { class: "plain-end" }),
+        ),
+      );
     }
 
     function renderViewControl(s) {
@@ -142,10 +182,9 @@
         if (box.children.length !== song.per) clear(box, Array.from({ length: song.per }, (_, i) => h("div", { class: "beat" + (i === 0 ? " one" : "") })));
         for (let i = 0; i < box.children.length; i++) box.children[i].classList.toggle("on", i === b % song.per);
       }
-      const gr = song.song.groups[bar(u).group];
-      const passes = gr.occurrences.length;
-      $("barInfo").textContent = "Bar " + (u + 1) + " of " + song.bars.length;
-      $("passInfo").textContent = "Line " + gr.label + (passes > 1 ? ", pass " + (bar(u).occurrence + 1) + " of " + passes : "");
+      const sec = app.sectionOf(u);
+      $("barInfo").textContent = sec ? sec.name : "Bar " + (u + 1);
+      $("passInfo").textContent = sec ? "bar " + (u - sec.start + 1) + " of " + (sec.end - sec.start) : "of " + song.bars.length;
       renderTime(s);
     }
 
@@ -159,21 +198,35 @@
       clear($("keyTitle"), chordNode(minor ? key.slice(0, -1) : key, "kn"), minor ? " minor" : " major");
       if (!song.song.key.known) $("keyTitle").append(h("small", { class: "hint" }, " (uncertain)"));
       const sections = song.song.harmony;
+      // Harmony is summarised per family of lines (A, B); the page names them after the part
+      // where each family is first heard (Verse, Chorus), the names the chart shows.
+      const partOf = (family) => {
+        const g = song.song.groups.find((gr) => gr.family === family);
+        const sec = g && app.sectionOf(g.occurrences[0][0]);
+        return sec ? sec.name.replace(/ \d+$/, "") : family;
+      };
+      const used = new Map();
+      const labelOf = (label) => {
+        const base = [...new Set(label.split("+").map(partOf))].join(" + ");
+        used.set(base, (used.get(base) || 0) + 1);
+        return used.get(base) > 1 ? base + " (" + used.get(base) + ")" : base;
+      };
+      const labels = sections.map((sec) => labelOf(sec.label));
       const prog = $("prog");
       clear(prog);
       const text = [];
       sections.forEach((sec, n) => {
         // One row per section; the chips are direct children of .prog, as the stylesheet expects.
         if (n > 0) prog.append(h("div", { style: { flexBasis: "100%", height: "0" } }));
-        if (sections.length > 1) prog.append(h("b", { class: "prog-sec" }, sec.label));
+        if (sections.length > 1) prog.append(h("b", { class: "prog-sec" }, labels[n]));
         sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s)), h("small", null, sec.romans[i]))));
-        if (sec.name) text.push((sections.length > 1 ? sec.label + ": " : "") + sec.name.charAt(0).toUpperCase() + sec.name.slice(1) + ".");
+        if (sec.name) text.push((sections.length > 1 ? labels[n] + ": " : "") + sec.name.charAt(0).toUpperCase() + sec.name.slice(1) + ".");
       });
       $("progText").textContent = text.join(" ");
       const items = [];
       const seen = new Set();
       for (const d of song.doubts()) {
-        if (d.chord.fixed || seen.has(d.chord.doubt.id)) continue;
+        if (d.chord.fixed || d.chord.doubt.kind !== "chord" || seen.has(d.chord.doubt.id)) continue;
         seen.add(d.chord.doubt.id);
         items.push(
           h(

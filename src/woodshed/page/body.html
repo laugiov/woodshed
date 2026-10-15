@@ -1,13 +1,16 @@
 <div class="wrap" id="wrap">
   <div class="pending" id="pending" hidden role="status" data-testid="pending"></div>
+  <div class="band-banner" id="bandBanner" hidden role="status" data-testid="band-banner"></div>
   <header class="head">
     <div class="song">
       <div class="brandrow"><a class="back" id="backLink" href="../" hidden data-testid="back">← Library</a><span class="brand">woodshed</span></div>
       <h1 id="songTitle" data-testid="title"></h1>
+      <a class="next-song" id="nextSong" href="#" hidden data-testid="next-song"></a>
       <div class="facts" id="facts" data-testid="facts"></div>
     </div>
     <div class="head-actions">
       <div class="plays"><span class="label">I play</span><div class="seg-ctl" id="instruments" role="group" aria-label="I play"></div></div>
+      <div class="plays band" id="band" hidden data-testid="band"></div>
       <button class="btn" id="exportBtn" type="button" data-testid="export" aria-haspopup="menu">Export</button>
       <button class="btn stage-btn" id="stageBtn" type="button" data-testid="stage-open" title="Full screen, readable from the music stand (S)">Stage mode</button>
     </div>
@@ -30,12 +33,13 @@
               <div><span class="lbl">Then</span><span class="th" id="thenChord"></span></div>
             </div>
             <div class="beats" id="beats" aria-hidden="true"></div>
-            <div class="where"><span id="barInfo" data-testid="bar-info"></span><span id="passInfo"></span><span id="timeInfo"></span></div>
+            <div class="where"><span id="barInfo" data-testid="bar-info"></span><span id="passInfo" data-testid="pass-info"></span><span id="timeInfo"></span></div>
           </div>
         </div>
+        <nav class="form" id="form" aria-label="Song form: click a part to go there" data-testid="form"></nav>
         <div class="chart-bar"><div class="label">Chart</div><div id="viewCtl"></div></div>
         <div class="sheet" id="sheet" data-testid="sheet"></div>
-        <p class="hint" style="margin: 10px 2px 0">Click a bar to jump. Drag across bars to loop them. Orange chords are the ones to check by ear.</p>
+        <p class="hint" style="margin: 10px 2px 0">Click a bar to jump, a part's name to go there. Drag across bars to loop them. Orange chords are the ones to check by ear.</p>
       </section>
 
       <section class="panel harm">
@@ -103,10 +107,11 @@
   <dl class="help-list">
     <dt><span class="kbd">Space</span></dt><dd style="margin: 0">Play or pause</dd>
     <dt><span class="kbd">←</span> <span class="kbd">→</span></dt><dd style="margin: 0">Previous or next bar</dd>
-    <dt><span class="kbd">L</span></dt><dd style="margin: 0">Loop on or off</dd>
     <dt><span class="kbd">[</span> <span class="kbd">]</span></dt><dd style="margin: 0">Tempo down or up by 5 BPM</dd>
     <dt><span class="kbd">1</span>–<span class="kbd">4</span></dt><dd style="margin: 0">Practice steps</dd>
     <dt><span class="kbd">S</span></dt><dd style="margin: 0">Stage mode</dd>
+    <dt><span class="kbd">L</span></dt><dd style="margin: 0">Loops the part being played (Verse 1, Chorus 2...)</dd>
+    <dt><span class="kbd">N</span></dt><dd style="margin: 0">Next song of the set (served by woodshed app)</dd>
   </dl>
   <p class="desk-note" style="margin: 4px 0 0">Bluetooth page-turner pedals work too: they send Space, arrows or Page Up and Page Down.</p>
 </div>
@@ -115,10 +120,11 @@
 <div class="sr-only" aria-live="polite" id="srChord"></div>
 <div class="toast" id="toast" hidden data-testid="toast"></div>
 <div class="stage" id="stage" hidden data-testid="stage">
-  <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><span id="stTop"></span><span class="map" id="stMap" aria-hidden="true"></span></span><button class="btn" id="stageExit" type="button" data-testid="stage-exit">Exit stage mode (Esc)</button></div>
+  <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><b class="st-section" id="stSection" data-testid="stage-section"></b><span id="stTop"></span><span class="map" id="stMap" aria-hidden="true"></span></span><button class="btn" id="stageExit" type="button" data-testid="stage-exit">Exit stage mode (Esc)</button></div>
   <div class="stage-mid">
     <div><div class="stage-now" id="stNow" data-testid="stage-chord"></div><div class="stage-shape" id="stShape"></div></div>
-    <div class="stage-next"><div class="n1"><small>Next</small><span id="stNext"></span></div><div class="n2"><small>Then</small><span id="stThen"></span></div></div>
+    <div class="stage-next"><div class="st-coming" id="stComing" data-testid="stage-coming" aria-live="polite"></div><div class="n1"><small>Next</small><span id="stNext"></span></div><div class="n2"><small>Then</small><span id="stThen"></span></div></div>
   </div>
   <div class="stage-beats" id="stBeats"></div>
+  <div class="st-next-song" id="stNextSong" data-testid="stage-next-song"></div>
 </div>

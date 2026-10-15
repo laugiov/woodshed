@@ -21,7 +21,7 @@
     const meta = song.song;
 
     function renderFacts(s) {
-      const open = song.doubts().filter((d) => !d.chord.fixed);
+      const open = song.doubts().filter((d) => !d.chord.fixed && d.chord.doubt.kind === "chord");
       const spots = new Set(open.map((d) => d.chord.doubt.id)).size;
       const key = song.keyName(s.transpose);
       const minor = key.endsWith("m");
@@ -123,12 +123,20 @@
       clear($("stShape"), app.nowHint(c, s));
       clear($("stNext"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : "end");
       clear($("stThen"), up[1] ? chordNode(app.nameFor(up[1], shift, s)) : "");
-      const b = song.bars[u];
-      const gr = song.song.groups[b.group];
-      const len = gr.occurrences[b.occurrence].length;
-      clear($("stMap"), Array.from({ length: len }, (_, k) => h("i", { class: k === b.column ? "on" : k < b.column ? "done" : "" })));
-      const passes = gr.occurrences.length;
-      $("stTop").textContent = "Bar " + (u + 1) + " · line " + gr.label + (passes > 1 ? ", pass " + (b.occurrence + 1) + " of " + passes : "") + " · " + s.bpm + " BPM";
+      // Where the band is: the section, the bar in it, and the next section two bars ahead.
+      const list = app.sections();
+      const k = list.length ? song.sectionIndex(u, list) : -1;
+      const sec = k >= 0 ? list[k] : { name: "Bar " + (u + 1), start: u, end: u + 1 };
+      const len = sec.end - sec.start;
+      const per = Math.ceil(len / 16); // a dot per bar, or per few bars in a long section
+      const at = Math.floor((u - sec.start) / per);
+      clear($("stMap"), Array.from({ length: Math.ceil(len / per) }, (_, i) => h("i", { class: i === at ? "on" : i < at ? "done" : "" })));
+      $("stSection").textContent = sec.name;
+      $("stTop").textContent = "bar " + (u - sec.start + 1) + " of " + len + " · " + s.bpm + " BPM";
+      const next = k >= 0 ? list[k + 1] : null;
+      const left = sec.end - u;
+      const what = next ? next.name : k >= 0 && k === list.length - 1 ? "End" : "";
+      $("stComing").textContent = what && left <= 2 ? what + (left === 1 ? " next bar" : " in " + left + " bars") : "";
     }
     store.on((s, changed) => {
       if (changed.has("stage") || (s.stage && (changed.has("beat") || changed.has("transpose") || changed.has("capo") || changed.has("bpm")))) render(s);

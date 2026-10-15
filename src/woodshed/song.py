@@ -10,7 +10,7 @@ from typing import Any
 from woodshed import model
 from woodshed.model import Song
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: sections, doubt kinds
 
 
 def _r(x: float, digits: int = 3) -> float:
@@ -23,6 +23,7 @@ def _chord(c: model.Chord) -> dict[str, Any]:
         out["doubt"] = {
             "id": c.doubt.id,
             "why": c.doubt.why,
+            "kind": c.doubt.kind,
             "alternatives": [{"pc": a.pc, "quality": a.quality, "share": a.share} for a in c.doubt.alternatives],
         }
     return out
@@ -56,6 +57,9 @@ def to_json(song: Song) -> dict[str, Any]:
             for b in s.bars
         ],
         "groups": [{"label": g.label, "family": g.family, "occurrences": g.occurrences} for g in s.groups],
+        "sections": [
+            {"name": x.name, "role": x.role, "letter": x.letter, "start": x.start, "end": x.end} for x in s.sections
+        ],
         "harmony": [
             {"label": h.label, "chords": [list(c) for c in h.chords], "romans": h.romans, "name": h.name}
             for h in song.harmony.sections
@@ -130,6 +134,16 @@ def cross_check(data: dict[str, Any]) -> list[str]:
             problems.append(f"group {g}: label {group['label']} is not of family {group['family']}")
     if placed != set(range(len(bars))):
         problems.append("some bars belong to no group")
+    edge = 0
+    group_starts = {group["occurrences"][0][0] for group in groups if group["occurrences"]}
+    for k, sec in enumerate(data["sections"]):
+        if sec["start"] != edge or sec["end"] <= sec["start"]:
+            problems.append(f"section {k} does not start right after the previous section")
+        if sec["start"] not in group_starts:
+            problems.append(f"section {k} does not start a line of its own on the page")
+        edge = sec["end"]
+    if bars and edge != len(bars):
+        problems.append("the sections do not cover every bar")
     ids = []
     for i, bar in enumerate(bars):
         if bar["end"] <= bar["start"] or (i and bar["start"] < bars[i - 1]["start"]):

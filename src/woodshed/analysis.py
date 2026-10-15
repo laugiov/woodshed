@@ -21,7 +21,7 @@ Progress = Callable[[str, float], None]
 # Bumped whenever the analysis gives different results for the same file: pages built by an older
 # revision are then rebuilt by the next run instead of being kept as up to date.
 # Any change to the engine, features or structure that changes labels needs a bump too.
-REVISION = 2  # 2: silence judged on absolute level (soft verses kept)
+REVISION = 3  # 2: silence judged on absolute level (soft verses kept); 3: doubt kinds, sections
 Floats = npt.NDArray[np.float64]
 # Below this share of tracked downbeats on one residue, the downbeats are too inconsistent to set
 # the bar phase and the chord changes decide instead.
@@ -133,6 +133,7 @@ def analyze(
     times = decoded.beat_times
 
     report("structure", 0.0)
+    vocals = audio.load(separated.paths["vocals"]) if separated is not None else None
     built = structure.build(
         times,
         decoded.labels,
@@ -142,6 +143,8 @@ def analyze(
         decoded.phase,
         beats_per_bar,
         sharpness=decoded.sharpness,
+        energy_db=np.asarray(decoded.energy_db, dtype=float),
+        vocal=None if vocals is None else parts.vocal_activity(vocals, times),
     )
     key = theory.Key(decoded.key_pc, decoded.key_mode)
     timed = [theory.TimedChord(c.pc, c.quality, c.beats) for b in built.bars for c in b.chords if c.pc >= 0]
@@ -149,7 +152,7 @@ def analyze(
     song_parts = None
     if separated is not None and built.bars:
         report("parts", 0.0)
-        song_parts = _parts(separated, times, built, beats_per_bar)
+        song_parts = _parts(separated, times, built, beats_per_bar, vocals)
 
     report("done", 1.0)
     return Song(
@@ -180,8 +183,13 @@ def analyze(
     )
 
 
-def _parts(separated: stems.Stems, times: Floats, built: Structure, beats_per_bar: int) -> Parts:
-    track = {name: audio.load(p) for name, p in separated.paths.items()}
+def _parts(
+    separated: stems.Stems, times: Floats, built: Structure, beats_per_bar: int, vocals: parts.Audio | None = None
+) -> Parts:
+    track = {
+        name: vocals if name == "vocals" and vocals is not None else audio.load(p)
+        for name, p in separated.paths.items()
+    }
     shift = parts.drum_grid_shift(track["drums"], times)
     grid = parts.Grid.from_beats(times + shift, built.first_beat, beats_per_bar, n_bars=len(built.bars))
     return Parts(

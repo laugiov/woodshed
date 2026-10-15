@@ -34,10 +34,18 @@
     </details>
   </section>
 
+  <section class="panel" data-testid="set-panel">
+    <div class="label">Set list</div>
+    <ol class="setlist" id="setlist" data-testid="setlist"></ol>
+    <p class="hint" id="setEmpty">No set yet: add songs with <b>+ Set</b> in the library below. On a song page,
+      <b>N</b> goes to the next song of the set, and the band follows the device that leads.</p>
+    <p class="hint" id="phones" data-testid="phones"></p>
+  </section>
+
   <section class="panel">
     <div class="label">Library</div>
     <table class="library" data-testid="library">
-      <thead><tr><th>Song</th><th>Key</th><th>BPM</th><th class="wide">Meter</th><th class="wide">Length</th><th class="wide">To check</th><th>Status</th></tr></thead>
+      <thead><tr><th>Song</th><th>Key</th><th>BPM</th><th class="wide">Meter</th><th class="wide">Length</th><th class="wide">To check</th><th>Status</th><th><span class="sr-only">Set list</span></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <p class="hint" id="empty" hidden>No song yet: add one above.</p>

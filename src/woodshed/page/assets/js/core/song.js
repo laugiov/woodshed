@@ -3,7 +3,7 @@
 (function () {
   "use strict";
   const W = window.Woodshed;
-  const SONG_VERSION = 1;
+  const SONG_VERSION = 2;
   const VIEW_VERSION = 1;
 
   function read() {
@@ -89,6 +89,12 @@
       return [occ[0], occ[occ.length - 1]];
     }
 
+    // Index, in a list of sections (the analysis's, or the band's own), of the one holding bar u.
+    function sectionIndex(u, list) {
+      for (let k = list.length - 1; k >= 0; k--) if (list[k].start <= u) return k;
+      return 0;
+    }
+
     function barAt(time) {
       let u = 0;
       for (let i = 0; i < bars.length; i++) if (bars[i].start <= time) u = i;
@@ -125,7 +131,7 @@
 
     return {
       data, song, view, per, bars, totalBeats, beatTime, beatAt, chordAtBeat, same, upcoming,
-      noteName, chordName, roman, keyName, capoFor, occurrenceRange, barAt, doubts, distinctChords,
+      noteName, chordName, roman, keyName, capoFor, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
       tracks: view.tracks,
       parts: song.parts,
     };

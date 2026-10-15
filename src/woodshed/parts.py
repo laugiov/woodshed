@@ -19,6 +19,7 @@ SILENT_RMS = 1e-3  # a stem below this level is treated as empty
 # hi-hat-only stem the low band measures 2, real hits 170 to 800, funk hi-hats 46 (see the tests).
 BAND_FLOOR = 8.0
 MIN_VOICING = 0.3  # least mean pyin voicing probability of a sung note
+VOICE_FLOOR = 10 ** (-40 / 20)  # RMS of the quietest singing (bleed sits near -50 dBFS and below)
 QUIET_NOTE = 0.1  # a note 20 dB below the loud sung notes is bleed, not singing
 SNARE_BODY = 0.1  # least mid-band hit, against the high band, for a snare (synthetic snare 0.8, hi-hat 0.02)
 Audio = npt.NDArray[np.float32]
@@ -196,6 +197,26 @@ def _runs(flags: npt.NDArray[np.bool_], min_len: int) -> list[tuple[int, int]]:
     """(start, end) of each run of True at least `min_len` frames long."""
     edges = np.flatnonzero(np.diff(np.concatenate([[0], flags.astype(np.int8), [0]])))
     return [(int(a), int(b)) for a, b in zip(edges[::2], edges[1::2], strict=True) if b - a >= min_len]
+
+
+def vocal_activity(vocals: Audio, beat_times: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Share of each beat where the voice sings: the vocal track within 20 dB of its loud singing
+    (bleed from the other instruments sits about 30 dB below it)."""
+    level = librosa.feature.rms(y=vocals, frame_length=2048, hop_length=HOP)[0]
+    out = np.zeros(len(beat_times))
+    audible = level[level >= SILENT_RMS]
+    if audible.size == 0 or len(beat_times) == 0:
+        return out
+    # Against the loud singing, and an absolute floor: on an instrumental the stem holds only
+    # bleed, which its own loudest moments must not turn into singing.
+    on = (level >= max(QUIET_NOTE * np.percentile(audible, 90), VOICE_FLOOR)).astype(float)
+    step = float(np.median(np.diff(beat_times))) if len(beat_times) > 1 else 0.5
+    edges = librosa.time_to_frames(np.append(beat_times, beat_times[-1] + step), sr=SR, hop_length=HOP)
+    for i in range(len(beat_times)):
+        a, b = int(edges[i]), max(int(edges[i]) + 1, int(edges[i + 1]))
+        part = on[a:b]
+        out[i] = float(part.mean()) if part.size else 0.0
+    return out
 
 
 def vocal_range(vocals: Audio, min_share: float = 0.15) -> VocalRange | None:

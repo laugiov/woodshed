@@ -9,12 +9,25 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+from woodshed import sections as song_sections
 from woodshed import theory
 from woodshed.grid import BeatGrid
-from woodshed.model import SHARPNESS, Alternative, Bar, Chord, Doubt, Group, HarmonySummary, SectionHarmony, Structure
+from woodshed.model import (
+    SHARPNESS,
+    Alternative,
+    Bar,
+    Chord,
+    Doubt,
+    Group,
+    HarmonySummary,
+    Section,
+    SectionHarmony,
+    Structure,
+)
 
-LINE_BARS = 4
+LINE_BARS = song_sections.LINE_BARS
 PRIMES = ("′", "″", "‴")
+CLOSE_CALL = 70  # % for the top candidate: under it the chord itself is uncertain
 MIN_VARIANT_BARS = 3  # a line differing by one bar is a variant only if it has at least this many
 
 
@@ -71,12 +84,14 @@ def _bars(
             inside = [i for i in run if 0 <= i < len(labels)]
             if chord.pc >= 0 and scores is not None and any(flags[i] for i in inside):
                 alts = _alternatives(scores[:, inside].mean(axis=1), names, sharpness)
+                close = bool(alts) and alts[0].share < CLOSE_CALL  # nothing to offer: not a close call
                 why = (
                     "Close call between the top candidates."
-                    if alts and alts[0].share < 70
-                    else "The chord starts off the beat or lasts a single beat."
+                    if close
+                    else "The chord is clear, but it starts off the beat or lasts a single beat."
                 )
-                chord = Chord(chord.pc, chord.quality, chord.beats, Doubt(doubt_id, why, alts))
+                kind = "chord" if close else "timing"
+                chord = Chord(chord.pc, chord.quality, chord.beats, Doubt(doubt_id, why, alts, kind))
                 doubt_id += 1
             chords.append(chord)
         # A pickup bar can start before the file does: the page cannot seek there.
@@ -144,15 +159,17 @@ def section_letter(n: int) -> str:
     return out
 
 
-def _group(bars: list[Bar]) -> list[Group]:
-    """Lines of four bars. Only exactly identical consecutive lines collapse into a repeat."""
+def _group(bars: list[Bar], sections: Sequence[Section] = ()) -> list[Group]:
+    """Lines of four bars. Only exactly identical consecutive lines of one section collapse into a
+    repeat: a section always starts a new line on the page."""
     lettering = _Lettering()
     groups: list[Group] = []
     previous: LineSignature | None = None
+    starts = {s.start for s in sections}
     for start in range(0, len(bars), LINE_BARS):
         line = list(range(start, min(start + LINE_BARS, len(bars))))
         sig = tuple(bars[i].signature() for i in line)
-        if groups and sig == previous:
+        if groups and sig == previous and start not in starts:
             groups[-1].occurrences.append(line)
         else:
             label, family = lettering.letter_for(sig)
@@ -175,10 +192,21 @@ def build(
     per_bar: int = 4,
     *,
     sharpness: float = SHARPNESS,
+    energy_db: npt.NDArray[np.float64] | None = None,
+    vocal: npt.NDArray[np.float64] | None = None,
 ) -> Structure:
-    """Bars, sections and doubts. `sharpness` must be the decoder's, so doubt shares match its odds."""
+    """Bars, lines, sections and doubts. `sharpness` must be the decoder's, so doubt shares match
+    its odds. `energy_db` and `vocal` (per beat) help name the sections; without them the sections
+    come from the chords alone."""
     bars, start, end, first_beat = _bars(times, labels, flags, scores, names, phase, per_bar, sharpness)
-    return Structure(bars, _group(bars), start, end, first_beat)
+    found = song_sections.sections(
+        [[(c.pc, c.quality, c.beats) for c in b.chords] for b in bars],
+        [(b.start, b.end) for b in bars],
+        np.asarray(times, dtype=float),
+        energy_db,
+        vocal,
+    )
+    return Structure(bars, _group(bars, found), start, end, first_beat, found)
 
 
 LOOP_COVERAGE = 0.7  # two sections are one loop when their alternation covers this share of the lines

@@ -3,7 +3,9 @@
 /* Shown by the template only when this stylesheet did not load (a page opened from inside a ZIP). */
 .missing-files { display: none !important; }
 @media print {
-  .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot { display: none !important; }
+  .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot,
+  .form, .sec-loop, .band-banner, .next-song { display: none !important; }
+  .sec-name, .sec-head[data-role="chorus"] .sec-name { color: #000 !important; }
   body { background: #fff; color: #000; }
   .main { display: block; }
   .panel { border: none; box-shadow: none; background: #fff; }
@@ -143,6 +145,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .slash { font-family: var(--font-chord); font-size: 21px; color: var(--muted); }
 .doubt { color: var(--warn); border: 0; background: none; padding: 0; cursor: pointer; text-decoration: underline dotted 2px; text-underline-offset: 5px; font: inherit; }
 .doubt sup { font-size: 0.55em; margin-left: 1px; }
+.doubt.timing { color: inherit; text-decoration: underline dotted 1px var(--muted); text-underline-offset: 6px; }
 .fixed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; margin-left: 3px; vertical-align: super; }
 .variation { margin-left: 64px; font-size: 13.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .variation .ch { font-size: 19px; display: inline; }
@@ -275,8 +278,11 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 
 /* Revision: notation fixes, practice path, persona, menus, compact dock */
 .cn { white-space: nowrap; }
-.acc { position: relative; top: -0.42em; font-size: 0.6em; line-height: 0; margin-left: 0.04em; }
-.big .acc, .stage-now .acc, .stage-next .acc { font-size: 0.5em; top: -0.72em; }
+/* A flat or a sharp must read from the music stand: Noto Music draws thin signs, thickened with a
+   stroke and kept near the cap height, never a small raised mark that reads as an apostrophe. */
+.acc { position: relative; top: -0.3em; font-size: 0.82em; line-height: 0; margin: 0 0.04em 0 0.02em;
+       -webkit-text-stroke: 0.06em currentColor; }
+.big .acc, .stage-now .acc, .stage-next .acc { font-size: 0.6em; top: -0.55em; -webkit-text-stroke: 0.04em currentColor; }
 .brandrow { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .facts { display: flex; gap: 4px 16px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin-top: 6px; font-variant-numeric: tabular-nums; align-items: baseline; }
@@ -354,7 +360,39 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .fit { font-size: 14px; margin: 8px 0 0; }
 .fit b { color: var(--accent); }
 .toast { bottom: calc(var(--dock-h, 90px) + 12px + env(safe-area-inset-bottom, 0px)); }
-.stage-top .map { display: flex; gap: 6px; align-items: center; }
+.stage-top .map { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.stage-top .st-section { font-family: var(--font-chord); font-size: clamp(26px, 4vw, 48px); color: var(--ink); line-height: 1; }
+.st-coming { font-family: var(--font-chord); font-weight: 700; font-size: clamp(22px, 3vw, 40px); color: var(--warn); min-height: 1.2em; }
+
+.setlist { margin: 6px 0 4px; padding: 0; list-style: none; counter-reset: set; display: grid; gap: 6px; font-size: 17px; }
+.setlist li { display: flex; align-items: center; gap: 12px; counter-increment: set; }
+.setlist li::before { content: counter(set); min-width: 1.6em; text-align: right; font-family: var(--font-chord); font-weight: 700; font-size: 20px; color: var(--muted); }
+.setlist li a { color: var(--accent); font-weight: 700; }
+.set-tools { margin-left: auto; display: flex; gap: 4px; }
+.set-tools .btn { padding: 2px 9px; }
+
+/* The band: lead or follow, the banner of a follower, the next song of the set. */
+.band .seg-ctl button { padding: 6px 10px; }
+.band-banner { position: sticky; top: 0; z-index: 20; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+               background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 8px; margin-bottom: 10px; }
+.band-banner .linkbtn { color: var(--accent-ink); margin-left: auto; }
+.next-song { display: inline-block; margin-top: 4px; color: var(--accent); font-weight: 600; text-decoration: none; }
+.next-song:hover { text-decoration: underline; }
+.st-next-song { text-align: center; color: var(--muted); font-size: 18px; margin-top: 10px; min-height: 1.4em; }
+body.following #playBtn { opacity: 0.45; }
+
+/* Sections: a header per part of the song, and the song's form as a row of buttons. */
+.form { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.form-chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 999px; padding: 4px 11px; font: 600 13px var(--font-body); color: var(--ink); cursor: pointer; }
+.form-chip:hover { border-color: var(--accent); }
+.form-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.form-chip.r-chorus:not(.on) { border-color: var(--accent); }
+.sec-head { display: flex; align-items: baseline; gap: 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
+.sec-head:first-child { margin-top: 0; padding-top: 0; }
+.sec-name { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--font-chord); font-weight: 700; font-size: 26px; line-height: 1.1; color: var(--ink); text-align: left; }
+.sec-head[data-role="chorus"] .sec-name { color: var(--accent); }
+.sec-meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.sec-loop { margin-left: auto; font-size: 13px; }
 .stage-top .map i { width: 30px; height: 10px; border-radius: 3px; background: var(--line); display: inline-block; }
 .stage-top .map i.on { background: var(--accent); }
 .stage-top .map i.done { background: var(--muted); }

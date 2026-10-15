@@ -24,7 +24,10 @@
     const meta = song.song;
     const songBpm = Math.round(meta.bpm);
     // Corrections are kept per analysis: a rebuilt page with other chords starts clean.
-    const storageKey = "woodshed:corrections:" + fnv1a(JSON.stringify([meta.bars, meta.beats]));
+    // The key is made of what a correction depends on (chords, doubt ids, beats), not of the whole
+    // bar data: a rebuild that only adds a field (a doubt's kind, sections) keeps the corrections.
+    const chords = meta.bars.map((b) => b.chords.map((c) => [c.pc, c.quality, c.beats, c.doubt ? c.doubt.id : null]));
+    const storageKey = "woodshed:corrections:" + fnv1a(JSON.stringify([chords, meta.beats]));
 
     const app = {
       song,
@@ -93,6 +96,10 @@
     const sounds = W.createSounds(app.toast);
     app.sounds = sounds;
 
+    // A follower's position comes from the leader: nothing on the device moves it or makes sound.
+    const following = () => !!(W.band && W.band.mode() === "follow");
+    const leaderMoves = () => app.toast("The leader moves the band. Press Stop following to play on your own.");
+
     function setBpm(v) {
       const bpm = Math.max(app.minBpm, Math.min(app.maxBpm, Math.round(v)));
       transport.setRate(bpm / songBpm);
@@ -102,15 +109,37 @@
       transport.setLoop(on && range ? [barStart(range[0]), barStart(range[1] + 1)] : null);
       store.set({ loop: range, loopOn: !!(on && range) });
     }
-    const lineOf = (u) => song.occurrenceRange(u);
+    // The song's sections, as the analysis named them.
+    app.sections = () => meta.sections;
+    app.sectionOf = (u) => {
+      const list = app.sections();
+      return list.length ? list[song.sectionIndex(u, list)] : null;
+    };
+    // What a loop takes by default: the section being played (a band loops "the chorus"), or the
+    // line when the song has no sections.
+    const lineOf = (u) => {
+      const sec = app.sectionOf(u);
+      return sec ? [sec.start, sec.end - 1] : song.occurrenceRange(u);
+    };
+    app.loopSection = (u) => {
+      if (following()) return leaderMoves();
+      setLoop(lineOf(u), true);
+      app.seekBar(lineOf(u)[0]);
+      const sec = app.sectionOf(u);
+      app.toast("Looping " + (sec ? sec.name : "bars " + (lineOf(u)[0] + 1) + "–" + (lineOf(u)[1] + 1)) + ". Press play.");
+    };
     const curBar = () => Math.floor(store.get().beat / song.per);
 
     app.seekBar = function seekBar(u) {
+      if (following()) return leaderMoves();
       transport.seek(barStart(Math.max(0, Math.min(song.bars.length - 1, u))));
     };
+    app.setBpm = (v) => setBpm(v);
+    app.setLoop = (range, on) => setLoop(range, on);
     // A count-in in progress: pressing play again cancels it.
     let countIn = null;
     app.togglePlay = async function togglePlay() {
+      if (following()) return leaderMoves();
       app.cancelTimers();
       if (countIn) {
         countIn.cancelled = true;
@@ -342,6 +371,7 @@
     };
     // A candidate chord, strummed softly on each beat over this bar of the recording.
     app.audition = (u, alt) => {
+      if (following()) return leaderMoves(); // it plays the recording under the candidate
       const s = store.get();
       const guitar = s.chordSound === "guitar";
       const inst = guitar ? "guitar" : keysSound();
@@ -431,7 +461,8 @@
       }
     };
 
-    const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app)];
+    app.setStage = (on, full) => setStage(on, full);
+    const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
     const dock = views[3];
     for (const v of views) v.render(store.get());
@@ -442,6 +473,7 @@
       if (e.target.closest(".doubt")) return;
       const el = e.target.closest(".bar:not(.empty)");
       if (!el) return;
+      if (following()) return leaderMoves();
       const u = chart.barFromEl(el);
       drag = { start: u, end: u };
     });
@@ -472,6 +504,11 @@
         return;
       }
       if (!e.target.closest("#pop") && !e.target.closest(".menu") && !e.target.closest("[data-menu-anchor]")) popups.closeAll();
+      const loop = e.target.closest("[data-loop]");
+      if (loop) {
+        app.loopSection(+loop.getAttribute("data-loop"));
+        return;
+      }
       const go = e.target.closest("[data-goto]");
       if (go) {
         const u = +go.getAttribute("data-goto");
@@ -505,6 +542,9 @@
         app.togglePlay();
       } else if (k === "ArrowRight" || k === "PageDown") {
         e.preventDefault();
+        // The pedal at the end of a song, in stage mode: on to the next song of the set.
+        const end = curBar() >= song.bars.length - 1 && !store.get().playing;
+        if (store.get().stage && end && app.nextSong && app.nextSong()) return;
         app.seekBar(curBar() + 1);
       } else if (k === "ArrowLeft" || k === "PageUp") {
         e.preventDefault();
@@ -513,17 +553,20 @@
       else if (k === "[") setBpm(store.get().bpm - 5);
       else if (k === "]") setBpm(store.get().bpm + 5);
       else if (k === "s" || k === "S") setStage(!store.get().stage);
+      else if ((k === "n" || k === "N") && app.nextSong) app.nextSong();
       else if (k >= "1" && k <= "4") app.setStep(+k);
       else if (k === "?") popups.openMenu("helpMenu", $("helpBtn"));
     });
 
-    $("wave").addEventListener("click", (e) => transport.seek(dock.timeAt(e.clientX)));
+    $("wave").addEventListener("click", (e) => (following() ? leaderMoves() : transport.seek(dock.timeAt(e.clientX))));
     $("playBtn").addEventListener("click", () => app.togglePlay());
     $("loopBtn").addEventListener("click", () => {
+      if (following()) return leaderMoves();
       const s = store.get();
       setLoop(s.loop || lineOf(curBar()), !s.loopOn);
     });
     $("trainBtn").addEventListener("click", () => {
+      if (following()) return leaderMoves();
       const s = store.get();
       const on = !s.trainer;
       store.set({ trainer: on });
@@ -542,7 +585,7 @@
     let ticked = -1;
     let lit = -1;
     store.on((s, changed) => {
-      if (!s.playing || !changed.has("time")) return;
+      if (!s.playing || !changed.has("time") || following()) return;
       const b = s.beat;
       // The next beat to click: beat one of the first bar while the intro plays, else the one after b.
       const next = s.time < song.beatTime(0) ? 0 : b + 1;
@@ -602,9 +645,10 @@
       this.textContent = open ? "Hide" : "Controls";
     });
 
-    function setStage(on) {
+    // Full screen needs a gesture: a stage carried over from the previous song shows without it.
+    function setStage(on, full = true) {
       store.set({ stage: on });
-      if (on) {
+      if (on && full) {
         try {
           const p = $("stage").requestFullscreen && $("stage").requestFullscreen();
           if (p && p.catch) p.catch(() => {});
