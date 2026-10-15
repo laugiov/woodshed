@@ -30,3 +30,5 @@ private/
 *.mp4
 *.mov
 *.webm
+# Except the demo song, under a free licence (see demo/LICENSE.md), pinned by scripts/vendored.sha256
+!/demo/*.mp3

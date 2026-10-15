@@ -139,6 +139,16 @@ opens with the full mix after a few seconds, and the instrument tracks follow.
 
 ## Use it
 
+**Try it on the demo song** that comes with the repository, "As I Am" by Josh Woodward (CC BY 4.0):
+
+```bash
+git clone https://github.com/laugiov/woodshed && cd woodshed
+woodshed "demo/As I Am.mp3"                                # the page opens in your browser
+woodshed lyrics "demo/As I Am.woodshed" "demo/As I Am.txt"  # and the words on the chart
+```
+
+Then on your own songs:
+
 ```bash
 woodshed song.mp3                           # one song: builds the page and opens it
 woodshed ~/Music/setlist/                   # a whole folder: a songbook
@@ -240,9 +250,10 @@ The screenshots show woodshed's analysis of four songs by
 [Same Boat](https://www.joshwoodward.com/song/SameBoat),
 [Beyond the Sky](https://www.joshwoodward.com/song/BeyondTheSky) and
 [The Rival Within](https://www.joshwoodward.com/song/TheRivalWithin), licensed under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: the images show woodshed's
-chords, parts and short excerpts of the lyrics placed on the recordings; no audio is included in
-this repository. Thank you, Josh, for making your music free to use.
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The images show woodshed's chords, parts
+and excerpts of the lyrics placed on the recordings. The [`demo/`](demo/) folder ships "As I Am",
+recording and lyrics, unchanged ([details](demo/LICENSE.md)). Thank you, Josh, for making your music
+free to use.
 
 ## License
 

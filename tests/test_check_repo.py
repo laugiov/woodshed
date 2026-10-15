@@ -181,3 +181,23 @@ def test_the_git_listing_is_used_in_a_repository(tmp_path: Path) -> None:
     write(tmp_path, "kept.py")
     write(tmp_path, "build/out.txt")  # git lists it; the fallback skips any build folder
     assert sorted(check_repo.list_files(tmp_path)) == [".gitignore", "build/out.txt", "kept.py"]
+
+
+def test_the_demo_song_is_allowed_with_its_licence_and_pinned(tmp_path: Path) -> None:
+    # A free-licence demo song may ship in demo/, like a vendored file: with its licence, pinned by hash.
+    song = write(tmp_path, "demo/song.mp3", b"\xff\xfb" + b"0" * (2 * 1024 * 1024))
+    found = problems(tmp_path)
+    assert not any("audio or video" in p or "larger than 1 MB" in p for p in found)
+    assert any("licence" in p for p in found)
+    write(tmp_path, "demo/LICENSE.md", b"CC BY 4.0, by the artist\n")
+    assert any("missing from" in p for p in problems(tmp_path))
+    assert check_repo.main(["check_repo", str(tmp_path), "--pin-vendored"]) == 0
+    assert problems(tmp_path) == []
+    song.write_bytes(b"another recording")
+    assert any("differs from its hash" in p for p in problems(tmp_path))
+
+
+@pytest.mark.parametrize("name", ["songs/demo/song.mp3", "demos/song.mp3", "src/demo/song.wav"])
+def test_audio_outside_the_demo_folder_is_still_rejected(tmp_path: Path, name: str) -> None:
+    write(tmp_path, name)
+    assert any("audio or video" in p for p in problems(tmp_path))

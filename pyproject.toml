@@ -67,7 +67,7 @@ path = "src/woodshed/__init__.py"
 packages = ["src/woodshed"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/private", "/.github", "/.venv*", "/docs"]
+exclude = ["/private", "/.github", "/.venv*", "/docs", "/demo", "/demo/*.mp3"]
 
 [tool.ruff]
 line-length = 120

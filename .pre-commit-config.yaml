@@ -4,6 +4,7 @@ repos:
     hooks:
       - id: check-added-large-files
         args: ["--maxkb=1024"]
+        exclude: ^demo/  # the demo song, pinned by hash (scripts/check_repo.py)
       - id: check-yaml
       - id: check-toml
       - id: end-of-file-fixer

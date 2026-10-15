@@ -10,7 +10,7 @@ section starts) and what woodshed showed, with `woodshed --version`, your OS and
 
 **Never attach or link a recording you don't have the rights to share**, and no full lyrics. Describe
 the song instead (tempo, key, style), or reproduce the problem on a song under a free licence, such
-as the [CC BY songs](README.md#credits) used in the screenshots.
+as the demo song in [`demo/`](demo/LICENSE.md).
 
 ## Setting up
 
@@ -37,8 +37,9 @@ scripts/ci.sh --full   # what GitHub runs: every Python, Firefox, the stems extr
 
 The rules the checks enforce, and the ones they can't:
 
-- **No audio, no video, nothing from `private/`** is ever committed (`scripts/check_repo.py`).
-  Tests build their songs with the synthesiser in `tests/`.
+- **No audio, no video, nothing from `private/`** is ever committed (`scripts/check_repo.py`), apart
+  from the demo song in `demo/`, under a free licence and pinned by hash. Tests build their songs
+  with the synthesiser in `tests/`.
 - **The page works offline**: no CDN, no fetch to the internet. Vendored files are pinned by hash.
 - **Every change comes with tests**, the page included: Playwright tests run in Chromium and Firefox.
 - **English** in code, comments, docs and messages.

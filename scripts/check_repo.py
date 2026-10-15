@@ -37,7 +37,15 @@ MEDIA = {
 MAX_BYTES = 1024 * 1024
 # Vendored assets may exceed the size limit, but only inside these folders, which need a licence file.
 FONTS_DIR = "src/woodshed/page/assets/fonts"
-VENDOR_DIRS = ("src/woodshed/page/assets/vendor", "src/woodshed/page/assets/fonts", "src/woodshed/page/assets/samples")
+# The demo song (a free-licence recording, so that a clone has a song to try) is the one place audio
+# may be tracked: like a vendored file, it needs its licence next to it and is pinned by hash.
+DEMO_DIR = "demo"
+VENDOR_DIRS = (
+    "src/woodshed/page/assets/vendor",
+    "src/woodshed/page/assets/fonts",
+    "src/woodshed/page/assets/samples",
+    DEMO_DIR,
+)
 HOME_PATH = re.compile(
     # /root/ only where a path starts ("src/root/" and "https://x/root/" are not home folders);
     # the others anywhere, URLs included (file:///home/alice/, ssh://host/home/bob/).
@@ -142,7 +150,7 @@ def _read_text(path: Path) -> str:
 
 def _file_problems(root: Path, rel: str) -> list[str]:
     path, problems = root / rel, []
-    if Path(rel).suffix.lower() in MEDIA:
+    if Path(rel).suffix.lower() in MEDIA and not rel.startswith(DEMO_DIR + "/"):
         problems.append(f"{rel}: audio or video files must not be tracked")
     if rel.split("/")[0] == "private":
         problems.append(f"{rel}: nothing under private/ may be tracked")
