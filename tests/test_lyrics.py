@@ -353,7 +353,7 @@ def test_the_command_reads_text_files_from_windows(
     words = tmp_path / "words.txt"
     words.write_bytes(("[Verse]\n" + "\n".join(VERSE_1) + "\nd\u00e9j\u00e0\n").encode(encoding))
     assert cli.main(["lyrics", str(page), str(words)]) == 0
-    data = json.loads((page / lyrics.LYRICS).read_text())
+    data = json.loads((page / lyrics.LYRICS).read_text(encoding="utf-8"))
     assert data["lines"][0]["tag"] == "Verse" and data["lines"][-1]["text"] == "d\u00e9j\u00e0"
 
 

@@ -23,7 +23,8 @@ def test_every_script_is_loaded_by_the_template_in_dependency_order() -> None:
     loaded = re.findall(r'<script src="assets/js/([^"]+)"></script>', template)
     song_page = [p for p in OWN_JS if p.parent.name != "home"]  # home/: the library page of `woodshed app`
     assert sorted(loaded) == sorted(p.relative_to(PAGE / "assets" / "js").as_posix() for p in song_page)
-    assert loaded[0] == "core/woodshed.js" and loaded[-1] == "app.js"
+    # prefs.js first, in <head>: it depends on nothing and sets the theme before the page is drawn.
+    assert loaded[:2] == ["core/prefs.js", "core/woodshed.js"] and loaded[-1] == "app.js"
     assert loaded.index("core/song.js") < loaded.index("views/chart.js")
 
 

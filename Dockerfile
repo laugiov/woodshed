@@ -15,10 +15,11 @@ COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/woodshed
 WORKDIR /src
 # sphn (read by Demucs) has no ARM Linux wheel: on ARM it is compiled, with Rust. This stage only.
-ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+# Its Opus library is built with CMake 4, which needs telling that Opus's old CMakeLists still builds.
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH CMAKE_POLICY_VERSION_MINIMUM=3.5
 RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
         apt-get update \
-        && apt-get install -y --no-install-recommends gcc libc6-dev curl ca-certificates \
+        && apt-get install -y --no-install-recommends gcc g++ make cmake libc6-dev curl ca-certificates \
         && rm -rf /var/lib/apt/lists/* \
         && curl --proto '=https' --tlsv1.2 -sSf -o /tmp/rustup-init \
            https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-unknown-linux-gnu/rustup-init \

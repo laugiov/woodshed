@@ -411,3 +411,37 @@ def test_a_damaged_entry_does_not_lose_the_others(server: app.AppServer) -> None
     store.write_text(json.dumps(data))
     _, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
     assert json.loads(body)["fixes"] == {"3": [9, "m"], "7": [7, ""]} and json.loads(body)["rev"] == data["rev"]
+
+
+class FakeRoute:
+    """A UDP socket: connect() finds the route out, or there is none."""
+
+    found: str | None = "192.168.1.20"
+
+    def __init__(self, *args: object) -> None: ...
+    def __enter__(self) -> FakeRoute:
+        return self
+
+    def __exit__(self, *args: object) -> None: ...
+    def connect(self, address: object) -> None:
+        if self.found is None:
+            raise OSError("network is unreachable")
+
+    def getsockname(self) -> tuple[str, int]:
+        return (self.found or "", 50000)
+
+
+def test_the_address_for_the_phones_needs_no_name_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    def slow(name: str) -> tuple[str, list[str], list[str]]:
+        raise AssertionError("a name lookup: seconds on a Mac without a DNS answer")
+
+    monkeypatch.setattr("woodshed.app.socket.gethostbyname_ex", slow)
+    monkeypatch.setattr("woodshed.app.socket.socket", FakeRoute)
+    assert app.lan_addresses() == ["192.168.1.20"]
+
+
+def test_without_a_route_out_the_name_of_the_computer_gives_its_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(FakeRoute, "found", None)
+    monkeypatch.setattr("woodshed.app.socket.socket", FakeRoute)
+    monkeypatch.setattr("woodshed.app.socket.gethostbyname_ex", lambda name: (name, [], ["127.0.0.1", "10.0.0.7"]))
+    assert app.lan_addresses() == ["10.0.0.7"]

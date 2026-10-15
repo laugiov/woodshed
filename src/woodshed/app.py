@@ -49,6 +49,7 @@ SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
 CORRECTIONS_MAX = 2000  # chords picked by ear on one page: more than any song has doubts
 CORRECTIONS_BYTES = 64 * 1024
+DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a huge one is not
 QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
@@ -501,8 +502,9 @@ def lan_addresses() -> list[str]:
             found.add(s.getsockname()[0])
     except OSError:
         pass
-    with contextlib.suppress(OSError):
-        found |= set(socket.gethostbyname_ex(socket.gethostname())[2])
+    if not found:  # no route out: ask the name of this computer (on a Mac it can take seconds)
+        with contextlib.suppress(OSError):
+            found |= set(socket.gethostbyname_ex(socket.gethostname())[2])
     return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
 
 
@@ -703,7 +705,18 @@ class Handler(BaseHTTPRequestHandler):
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limit = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES}.get(path, SETLIST_BYTES)
-        if "chunked" in self.headers.get("Transfer-Encoding", "").lower() or not 0 < length <= limit:
+        chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
+        if chunked or not 0 < length <= limit:
+            if not chunked and limit < length <= DRAIN_MAX:
+                # Read it first: closing on a client still sending resets the connection (macOS), and
+                # the client never sees the answer. A few seconds at most, a piece at a time.
+                left, deadline = length, time.monotonic() + 5
+                with contextlib.suppress(OSError, TimeoutError):
+                    while left > 0 and time.monotonic() < deadline:
+                        piece = self.rfile.read1(min(left, 64 * 1024))
+                        if not piece:
+                            break
+                        left -= len(piece)
             self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "a small JSON body with a Content-Length")
             return
         try:

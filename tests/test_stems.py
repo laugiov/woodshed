@@ -180,11 +180,19 @@ def test_missing_extra_explains_the_cpu_install(monkeypatch: pytest.MonkeyPatch,
 
 
 def test_cache_dir_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from woodshed import cache
+
     monkeypatch.delenv("WOODSHED_CACHE", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    from woodshed.cache import cache_dir
-
-    assert cache_dir() == tmp_path / "xdg" / "woodshed"
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    expected = {
+        "linux": tmp_path / "xdg" / "woodshed",
+        "win32": tmp_path / "local" / "woodshed" / "Cache",
+        "darwin": Path.home() / "Library" / "Caches" / "woodshed",
+    }
+    for platform, folder in expected.items():  # the module's view of the platform only, not the process's
+        monkeypatch.setattr(cache, "sys", types.SimpleNamespace(platform=platform))
+        assert cache.cache_dir() == folder
 
 
 def test_a_stale_incomplete_cache_folder_is_replaced(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
