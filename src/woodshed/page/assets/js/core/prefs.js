@@ -1,27 +1,45 @@
-// The viewer's own choices, for every page of woodshed: the theme (dark unless light is chosen),
-// kept in this browser. Loaded in <head>, before the page is drawn: no flash of the other theme.
+// The viewer's own choices, for every page of woodshed, kept in this browser: the theme (dark unless
+// light is chosen) and the language (the browser's, English or French, until one is chosen).
+// Loaded in <head>, before the page is drawn: no flash of the other theme.
 (function () {
   "use strict";
-  const KEY = "woodshed:theme";
+  const THEME = "woodshed:theme";
+  const LANG = "woodshed:lang";
+  const LANGS = ["en", "fr"];
   const root = document.documentElement;
 
-  function stored() {
+  function stored(key) {
     try {
-      return localStorage.getItem(KEY);
+      return localStorage.getItem(key);
     } catch (err) {
-      return null; // storage off (private window): dark, as by default
+      return null; // storage off (private window): the defaults
+    }
+  }
+
+  function keep(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      /* this visit only */
     }
   }
 
   function apply(theme) {
     root.setAttribute("data-theme", theme === "light" ? "light" : "dark");
   }
-  apply(stored());
+  apply(stored(THEME));
+
+  const browser = (navigator.language || "en").slice(0, 2).toLowerCase();
+  const chosen = stored(LANG);
+  root.lang = LANGS.includes(chosen) ? chosen : browser === "fr" ? "fr" : "en";
+
+  // The page's own words, translated by core/i18n.js once it is loaded; English until then.
+  const say = (text) => (window.Woodshed && window.Woodshed.t ? window.Woodshed.t(text) : text);
 
   function label(button) {
     const light = root.getAttribute("data-theme") === "light";
+    const next = say(light ? "Switch to the dark theme" : "Switch to the light theme");
     button.textContent = light ? "☾︎" : "☀︎";
-    const next = light ? "Switch to the dark theme" : "Switch to the light theme";
     button.setAttribute("aria-label", next);
     button.title = next;
   }
@@ -29,19 +47,36 @@
   function toggle() {
     const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
     apply(next);
-    try {
-      localStorage.setItem(KEY, next);
-    } catch (err) {
-      /* this visit only */
-    }
+    keep(THEME, next);
     document.querySelectorAll("[data-theme-toggle]").forEach(label);
     window.dispatchEvent(new CustomEvent("woodshed:theme", { detail: next })); // the waveform redraws
+  }
+
+  function marks(group) {
+    group.querySelectorAll("[data-lang]").forEach((b) => {
+      const on = b.getAttribute("data-lang") === root.lang;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+  }
+
+  function setLang(lang) {
+    if (!LANGS.includes(lang) || lang === root.lang) return;
+    root.lang = lang;
+    keep(LANG, lang);
+    document.querySelectorAll("[data-lang-toggle]").forEach(marks);
+    document.querySelectorAll("[data-theme-toggle]").forEach(label);
+    window.dispatchEvent(new CustomEvent("woodshed:lang", { detail: lang })); // the page says it again
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       label(button);
       button.addEventListener("click", toggle);
+    });
+    document.querySelectorAll("[data-lang-toggle]").forEach((group) => {
+      marks(group);
+      group.querySelectorAll("[data-lang]").forEach((b) => b.addEventListener("click", () => setLang(b.getAttribute("data-lang"))));
     });
   });
 })();

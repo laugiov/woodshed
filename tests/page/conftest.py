@@ -164,6 +164,13 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
 
 
 @pytest.fixture(scope="session")
+def browser_context_args(browser_context_args: dict[str, Any]) -> dict[str, Any]:
+    """The pages in English whatever the computer's language (the French has its own tests, whose
+    browser_context_args marker wins)."""
+    return {**browser_context_args, "locale": "en-US"}
+
+
+@pytest.fixture(scope="session")
 def pages_root(tmp_path_factory: pytest.TempPathFactory) -> str:
     return str(tmp_path_factory.mktemp("pages"))
 

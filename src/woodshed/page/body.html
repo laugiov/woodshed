@@ -3,8 +3,8 @@
   <div class="band-banner" id="bandBanner" hidden role="status" data-testid="band-banner"></div>
   <header class="head">
     <div class="song">
-      <div class="brandrow"><a class="back" id="backLink" href="../" hidden data-testid="back">← Library</a><span class="brand" data-testid="logo"><svg class="mark" viewBox="0 0 132 150" aria-hidden="true"><path class="roof" d="M8 56 L66 8 L124 56"/><rect class="box" x="22" y="58" width="88" height="84" rx="4"/><g class="grid"><line x1="39.6" y1="58" x2="39.6" y2="142"/><line x1="57.2" y1="58" x2="57.2" y2="142"/><line x1="74.8" y1="58" x2="74.8" y2="142"/><line x1="92.4" y1="58" x2="92.4" y2="142"/><line x1="22" y1="86" x2="110" y2="86"/><line x1="22" y1="114" x2="110" y2="114"/></g><circle cx="57.2" cy="100" r="9.5"/><circle cx="74.8" cy="100" r="9.5"/><circle cx="92.4" cy="100" r="9.5"/></svg><span>wood<b>shed</b></span></span><span class="prefs"><button class="btn icon" type="button" data-theme-toggle data-testid="theme"></button></span></div>
-      <h1 id="songTitle" data-testid="title"></h1>
+      <div class="brandrow"><a class="back" id="backLink" href="../" hidden data-testid="back">← Library</a><span class="brand" data-testid="logo" translate="no"><svg class="mark" viewBox="0 0 132 150" aria-hidden="true"><path class="roof" d="M8 56 L66 8 L124 56"/><rect class="box" x="22" y="58" width="88" height="84" rx="4"/><g class="grid"><line x1="39.6" y1="58" x2="39.6" y2="142"/><line x1="57.2" y1="58" x2="57.2" y2="142"/><line x1="74.8" y1="58" x2="74.8" y2="142"/><line x1="92.4" y1="58" x2="92.4" y2="142"/><line x1="22" y1="86" x2="110" y2="86"/><line x1="22" y1="114" x2="110" y2="114"/></g><circle cx="57.2" cy="100" r="9.5"/><circle cx="74.8" cy="100" r="9.5"/><circle cx="92.4" cy="100" r="9.5"/></svg><span>wood<b>shed</b></span></span><span class="prefs"><span class="seg-ctl lang" data-lang-toggle role="group" aria-label="Language"><button type="button" data-lang="en" lang="en" aria-label="English" data-testid="lang-en">EN</button><button type="button" data-lang="fr" lang="fr" aria-label="Français" data-testid="lang-fr">FR</button></span><button class="btn icon" type="button" data-theme-toggle data-testid="theme"></button></span></div>
+      <h1 id="songTitle" data-testid="title" translate="no"></h1>
       <a class="next-song" id="nextSong" href="#" hidden data-testid="next-song"></a>
       <div class="facts" id="facts" data-testid="facts"></div>
     </div>
@@ -24,7 +24,7 @@
       <section class="panel">
         <div class="now">
           <div class="nowcol">
-            <span class="lbl">Now · <span id="bigRoman"></span></span>
+            <span class="lbl">Now · <span id="bigRoman" translate="no"></span></span>
             <div class="big" id="bigChord" data-testid="now-chord"></div>
             <div class="nowsub" id="nowSub"></div>
           </div>
@@ -118,7 +118,7 @@
 </div>
 
 <div class="pop" id="pop" hidden data-testid="doubt-pop"></div>
-<div class="sr-only" aria-live="polite" id="srChord"></div>
+<div class="sr-only" aria-live="polite" id="srChord" translate="no"></div>
 <div class="toast" id="toast" hidden data-testid="toast"></div>
 <div class="stage" id="stage" hidden data-testid="stage">
   <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><b class="st-section" id="stSection" data-testid="stage-section"></b><span id="stTop"></span><span class="map" id="stMap" aria-hidden="true"></span></span><button class="btn" id="stageExit" type="button" data-testid="stage-exit">Exit stage mode (Esc)</button></div>

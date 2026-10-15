@@ -15,7 +15,7 @@ def bg(page: Any) -> str:
 
 
 def test_the_page_is_dark_by_default_light_on_demand_and_remembers(browser: Browser, pages_root: str) -> None:
-    context = browser.new_context(color_scheme="light")  # even when the computer is set to light
+    context = browser.new_context(color_scheme="light", locale="en-US")  # even when the computer is set to light
     page = context.new_page()
     url = (built("pop", True, pages_root) / "index.html").as_uri()
     page.goto(url)

@@ -17,7 +17,7 @@
     function element(id) {
       if (!els[id]) {
         const t = tracks.find((x) => x.id === id);
-        if (!t) throw new Error("No track " + id);
+        if (!t) throw new Error(W.t("No track {id}", { id }));
         const el = document.createElement("audio");
         el.preload = id === current ? "auto" : "none";
         el.src = t.file;
@@ -33,7 +33,7 @@
           stopWatching();
           onEnded && onEnded();
         });
-        el.addEventListener("error", () => onError && onError(new Error("The track " + t.file + " could not be read."), id));
+        el.addEventListener("error", () => onError && onError(new Error(W.t("The track {file} could not be read.", { file: t.file })), id));
         // Throttled tabs run no animation frames: timeupdate still checks the loop.
         el.addEventListener("timeupdate", () => el === els[current] && checkLoop(el));
         document.body.appendChild(el);

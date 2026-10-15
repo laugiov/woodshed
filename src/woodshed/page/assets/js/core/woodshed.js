@@ -40,9 +40,10 @@
   };
 
   // Chord and note names with real flat and sharp signs: "Bb" -> B, then a ♭ in its own span.
+  // The song's own names: never translated (core/i18n.js), nor by the browser.
   W.chordNode = function chordNode(name, cls) {
     const m = /^([A-G])([b#]?)(.*)$/.exec(name);
-    const el = W.h("span", { class: cls || "cn" });
+    const el = W.h("span", { class: cls || "cn", translate: "no" });
     if (!m) return W.append(el, [name]);
     const acc = m[2] === "b" ? "♭" : m[2] === "#" ? "♯" : "";
     return W.append(el, [m[1], acc ? W.h("span", { class: "acc" }, acc) : null, m[3]]);

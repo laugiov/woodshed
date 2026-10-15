@@ -300,7 +300,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .acc { position: relative; top: -0.3em; font-size: 0.82em; line-height: 0; margin: 0 0.04em 0 0.02em;
        -webkit-text-stroke: 0.06em currentColor; }
 .big .acc, .stage-now .acc, .stage-next .acc { font-size: 0.6em; top: -0.55em; -webkit-text-stroke: 0.04em currentColor; }
-.brandrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-height: 32px; padding-right: 44px; }
+.brandrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-height: 32px; padding-right: 130px; }
+.seg-ctl.lang button { padding: 4px 9px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .facts { display: flex; gap: 4px 16px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin-top: 6px; font-variant-numeric: tabular-nums; align-items: baseline; }
 .facts b { color: var(--ink); }

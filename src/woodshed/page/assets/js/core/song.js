@@ -8,10 +8,10 @@
 
   function read() {
     const el = document.getElementById("woodshed-data");
-    if (!el) throw new Error("This page has no song data.");
+    if (!el) throw new Error(W.t("This page has no song data."));
     const data = JSON.parse(el.textContent);
     if (data.song.schema_version !== SONG_VERSION || data.view.view_version !== VIEW_VERSION) {
-      throw new Error("This page was made by another version of woodshed. Rebuild it with this one.");
+      throw new Error(W.t("This page was made by another version of woodshed. Rebuild it with this one."));
     }
     return data;
   }

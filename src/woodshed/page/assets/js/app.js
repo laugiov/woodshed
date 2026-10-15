@@ -51,21 +51,22 @@
     app.nameFor = (c, shift, s) => song.chordName(c, s.transpose - (shift || 0));
     app.showShapes = (s) => s.inst === "guitar" && s.pos === "open" && s.capo > 0 && s.view === "shapes";
     app.nowHint = function nowHint(c, s) {
-      if (c.pc < 0) return "no chord";
+      if (c.pc < 0) return W.t("no chord");
       const tones = () => I.triadOf(c.pc, c.quality).map((pc) => chordNode(song.noteName(pc, s.transpose), "tone"));
       if (s.inst === "guitar") {
         if (s.pos === "open" && s.capo) {
           return app.showShapes(s)
-            ? ["sounds ", h("b", null, chordNode(app.nameFor(c, 0, s))), ", capo " + s.capo]
-            : ["play the ", h("b", null, chordNode(app.nameFor(c, s.capo, s))), " shape, capo " + s.capo];
+            ? W.nodes(W.t("sounds {chord}, capo {n}", { n: s.capo }), { chord: h("b", null, chordNode(app.nameFor(c, 0, s))) })
+            : W.nodes(W.t("play the {chord} shape, capo {n}", { n: s.capo }), { chord: h("b", null, chordNode(app.nameFor(c, s.capo, s))) });
         }
-        return s.pos === "funk" ? "funk triad on strings 3-2-1" : s.pos === "barre" ? "barre chord, no capo" : "open shape";
+        return s.pos === "funk" ? W.t("funk triad on strings 3-2-1") : s.pos === "barre" ? W.t("barre chord, no capo") : W.t("open shape");
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
-        return ["kick on ", h("b", null, I.hitsText(g.kick, song.per)), ", snare on ", h("b", null, I.hitsText(g.snare, song.per))];
+        const hits = { kick: h("b", null, I.hitsText(g.kick, song.per)), snare: h("b", null, I.hitsText(g.snare, song.per)) };
+        return W.nodes(W.t("kick on {kick}, snare on {snare}"), hits);
       }
-      return [s.inst === "voice" ? "chord tones " : "notes ", h("b", null, tones())];
+      return W.nodes(s.inst === "voice" ? W.t("chord tones {notes}") : W.t("notes {notes}"), { notes: h("b", null, tones()) });
     };
 
     const popups = W.views.popups(app);
@@ -78,7 +79,7 @@
       onEnded: () => store.set({ playing: false }),
       onError: (err, trackId) => {
         if (!trackId) {
-          app.toast("The browser blocked playback: press play again.");
+          app.toast(W.t("The browser blocked playback: press play again."));
           return;
         }
         app.toast(err.message);
@@ -89,7 +90,7 @@
         const s = store.get();
         if (s.trainer && s.bpm < songBpm) {
           setBpm(Math.min(songBpm, s.bpm + 5));
-          app.toast("Trainer: " + store.get().bpm + " BPM");
+          app.toast(W.t("Trainer: {bpm} BPM", { bpm: store.get().bpm }));
         }
       },
     });
@@ -99,7 +100,7 @@
 
     // A follower's position comes from the leader: nothing on the device moves it or makes sound.
     const following = () => !!(W.band && W.band.mode() === "follow");
-    const leaderMoves = () => app.toast("The leader moves the band. Press Stop following to play on your own.");
+    const leaderMoves = () => app.toast(W.t("The leader moves the band. Press Stop following to play on your own."));
 
     function setBpm(v) {
       const bpm = Math.max(app.minBpm, Math.min(app.maxBpm, Math.round(v)));
@@ -132,7 +133,8 @@
       setLoop(lineOf(u), true);
       app.seekBar(lineOf(u)[0]);
       const sec = app.sectionOf(u);
-      app.toast("Looping " + (sec ? sec.name : "bars " + (lineOf(u)[0] + 1) + "–" + (lineOf(u)[1] + 1)) + ". Press play.");
+      const [from, to] = lineOf(u);
+      app.toast(sec ? W.t("Looping {part}. Press play.", { part: W.partName(sec.name) }) : W.t("Looping bars {from}–{to}. Press play.", { from: from + 1, to: to + 1 }));
     };
     const curBar = () => Math.floor(store.get().beat / song.per);
 
@@ -202,7 +204,7 @@
         const kept = song.tracks.find((t) => t.id === transport.track);
         const failed = song.tracks.find((t) => t.id === id);
         store.set({ track: transport.track });
-        app.toast("Could not read " + failed.file + ". Still playing: " + kept.label + ".");
+        app.toast(W.t("Could not read {file}. Still playing: {track}.", { file: failed.file, track: W.t(kept.label) }));
       }
       return ok;
     };
@@ -214,38 +216,51 @@
     app.transposeTo = function transposeTo(t) {
       const transpose = Math.max(-6, Math.min(6, t));
       store.set({ transpose, capo: song.capoFor(transpose) });
-      app.toast("Transposed to " + W.prettyText(song.keyName(transpose)) + ": the chart and the shapes follow. The recording keeps its key.");
+      app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: W.prettyText(song.keyName(transpose)) }));
     };
     app.setStep = function setStep(n, quiet) {
       const s = store.get();
       const stem = STEM_OF[s.inst];
       const has = (id) => song.tracks.some((t) => t.id === id);
-      const part = { guitar: "guitar", bass: "bass", piano: "keys", drums: "drums", voice: "voice" }[s.inst];
       let message = "";
       if (n === 1) {
         setLoop(null, false);
         store.set({ trainer: false, countIn: false });
         setBpm(songBpm);
         app.setTrack("mix");
-        message = "Step 1: the full band at " + songBpm + " BPM. Follow the big chord and the chart.";
+        message = W.t("Step 1: the full band at {bpm} BPM. Follow the big chord and the chart.", { bpm: songBpm });
       } else if (n === 2) {
         setLoop(null, false);
         store.set({ trainer: false, countIn: false });
         setBpm(songBpm);
         app.setTrack(has("solo-" + stem) ? "solo-" + stem : "mix");
-        message = has("solo-" + stem) ? "Step 2: the " + part + " alone, isolated from the recording." : "Step 2: learn the chords with the panel on the right.";
+        const alone = {
+          guitar: W.t("Step 2: the guitar alone, isolated from the recording."),
+          bass: W.t("Step 2: the bass alone, isolated from the recording."),
+          piano: W.t("Step 2: the keys alone, isolated from the recording."),
+          drums: W.t("Step 2: the drums alone, isolated from the recording."),
+          voice: W.t("Step 2: the voice alone, isolated from the recording."),
+        }[s.inst];
+        message = has("solo-" + stem) ? alone : W.t("Step 2: learn the chords with the panel on the right.");
       } else if (n === 3) {
         setLoop(s.loop || lineOf(curBar()), true);
         store.set({ trainer: true, countIn: true });
         setBpm(Math.round(songBpm * 0.7));
         const l = store.get().loop;
-        message = "Step 3: bars " + (l[0] + 1) + "–" + (l[1] + 1) + " loop from " + store.get().bpm + " BPM, 5 faster each pass. Drag across bars to pick others.";
+        message = W.t("Step 3: bars {from}–{to} loop from {bpm} BPM, 5 faster each pass. Drag across bars to pick others.", { from: l[0] + 1, to: l[1] + 1, bpm: store.get().bpm });
       } else {
         setLoop(null, false);
         store.set({ trainer: false, countIn: true });
         setBpm(songBpm);
         app.setTrack(has("minus-" + stem) ? "minus-" + stem : "mix");
-        message = has("minus-" + stem) ? "Step 4: the recording without the " + part + ". One bar of count-in, then it is you." : "Step 4: play along with the full mix, after one bar of count-in.";
+        const without = {
+          guitar: W.t("Step 4: the recording without the guitar. One bar of count-in, then it is you."),
+          bass: W.t("Step 4: the recording without the bass. One bar of count-in, then it is you."),
+          piano: W.t("Step 4: the recording without the keys. One bar of count-in, then it is you."),
+          drums: W.t("Step 4: the recording without the drums. One bar of count-in, then it is you."),
+          voice: W.t("Step 4: the recording without the voice. One bar of count-in, then it is you."),
+        }[s.inst];
+        message = has("minus-" + stem) ? without : W.t("Step 4: play along with the full mix, after one bar of count-in.");
       }
       store.set({ step: n });
       if (!quiet) app.toast(message);
@@ -334,8 +349,8 @@
       popups.closeAll();
       store.set({ corrections: store.get().corrections + 1 });
       const shared = app.shareFixes ? app.shareFixes(fixes) : false;
-      const where = shared ? "The band sees it on every device." : "This browser remembers it for this song.";
-      app.toast("Saved: " + W.prettyText(app.nameFor(alt, 0, store.get())) + ". " + where);
+      const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
+      app.toast(W.t("Saved: {chord}. {where}", { chord: W.prettyText(app.nameFor(alt, 0, store.get())), where }));
     };
 
     restoreCorrections();
@@ -453,11 +468,11 @@
       const g = song.parts && song.parts.groove;
       if (!box || !g) return;
       if (!window.Vex || !window.Vex.Flow) {
-        W.clear(box, h("p", { class: "hint", style: { margin: "6px" } }, "Drawing the notation…"));
+        W.clear(box, h("p", { class: "hint", style: { margin: "6px" } }, W.t("Drawing the notation…")));
         const el = document.createElement("script");
         el.src = "assets/vendor/vexflow-4.2.2-bravura.js";
         el.onload = drawDrumStaff;
-        el.onerror = () => W.clear(box, h("p", { class: "hint" }, "The notation could not be drawn. The grid below shows the same groove."));
+        el.onerror = () => W.clear(box, h("p", { class: "hint" }, W.t("The notation could not be drawn. The grid below shows the same groove.")));
         document.head.appendChild(el);
         return;
       }
@@ -511,7 +526,7 @@
           for (const attr of ["fill", "stroke"]) if (/^(black|#000000|#999999)$/.test(el.getAttribute(attr) || "")) el.setAttribute(attr, "currentColor");
         });
       } catch (err) {
-        W.clear(box, h("p", { class: "hint" }, "The notation could not be drawn. The grid below shows the same groove."));
+        W.clear(box, h("p", { class: "hint" }, W.t("The notation could not be drawn. The grid below shows the same groove.")));
       }
     };
 
@@ -522,6 +537,15 @@
     const chart = views[1];
     const dock = views[3];
     for (const v of views) v.render(store.get());
+    // The other language, chosen while playing: every view says it again, the music goes on.
+    W.onLang.push(() => {
+      $("toast").hidden = true; // said in the other language
+      for (const v of views) v.render(store.get());
+      words.relabel();
+      renderExports();
+      renderMore();
+      renderStagePlay(store.get());
+    });
 
     // Input.
     let drag = null;
@@ -549,7 +573,7 @@
         if (!drag.word) app.seekBar(drag.start);
       } else {
         const l = store.get().loop;
-        app.toast("Looping bars " + (l[0] + 1) + "–" + (l[1] + 1) + ". Press play.");
+        app.toast(W.t("Looping bars {from}–{to}. Press play.", { from: l[0] + 1, to: l[1] + 1 }));
         app.seekBar(l[0]);
       }
       drag = null;
@@ -639,7 +663,7 @@
       store.set({ trainer: on });
       if (on && s.bpm >= songBpm) setBpm(Math.round(songBpm * 0.7));
       if (on && !s.loopOn) setLoop(s.loop || lineOf(curBar()), true);
-      app.toast(on ? "Trainer on: " + store.get().bpm + " BPM, +5 BPM each loop up to " + songBpm + "." : "Trainer off.");
+      app.toast(on ? W.t("Trainer on: {bpm} BPM, +5 BPM each loop up to {max}.", { bpm: store.get().bpm, max: songBpm }) : W.t("Trainer off."));
     });
     $("countBtn").addEventListener("click", () => store.set({ countIn: !store.get().countIn }));
     $("clickBtn").addEventListener("click", () => {
@@ -681,25 +705,29 @@
     // Export: every format made here, with your corrections.
     const stem = (meta.file.replace(/\.[^.]*$/, "") || "song").replace(/[<>:"/\\|?*]/g, "_");
     const item = (label, detail, attrs) => h("button", { type: "button", class: "item", ...attrs }, h("span", null, label), h("small", null, detail));
-    W.clear(
-      $("exportItems"),
-      item("ChordPro", "With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps", {
-        "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words), "text/plain"),
-      }),
-      item("Chord timeline (.lab)", "With your corrections. Start, end and chord, for analysis tools", {
-        "data-testid": "export-lab", onclick: () => W.exports.save(stem + ".lab", W.exports.lab(song), "text/plain"),
-      }),
-      item("JSON", "With your corrections. The whole analysis, for developers", {
-        "data-testid": "export-json", onclick: () => W.exports.save(stem + ".json", W.exports.json(song), "application/json"),
-      }),
-      item("MIDI", "With your corrections. Chords, bass and drums, for a sequencer or a DAW", {
-        "data-testid": "export-midi", onclick: () => W.exports.save(stem + ".mid", W.exports.midi(song), "audio/midi"),
-      }),
-      item("MusicXML", "With your corrections. Chord symbols and bass line, for MuseScore", {
-        "data-testid": "export-musicxml", onclick: () => W.exports.save(stem + ".musicxml", W.exports.musicxml(song), "application/vnd.recordare.musicxml+xml"),
-      }),
-      item("Print the chart", "One page for the music stand", { "data-testid": "export-print", onclick: () => window.print() }),
-    );
+    // Format names are names: ChordPro, JSON, MIDI and MusicXML are not translated.
+    function renderExports() {
+      W.clear(
+        $("exportItems"),
+        item("ChordPro", W.t("With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps"), {
+          "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words), "text/plain"),
+        }),
+        item(W.t("Chord timeline (.lab)"), W.t("With your corrections. Start, end and chord, for analysis tools"), {
+          "data-testid": "export-lab", onclick: () => W.exports.save(stem + ".lab", W.exports.lab(song), "text/plain"),
+        }),
+        item("JSON", W.t("With your corrections. The whole analysis, for developers"), {
+          "data-testid": "export-json", onclick: () => W.exports.save(stem + ".json", W.exports.json(song), "application/json"),
+        }),
+        item("MIDI", W.t("With your corrections. Chords, bass and drums, for a sequencer or a DAW"), {
+          "data-testid": "export-midi", onclick: () => W.exports.save(stem + ".mid", W.exports.midi(song), "audio/midi"),
+        }),
+        item("MusicXML", W.t("With your corrections. Chord symbols and bass line, for MuseScore"), {
+          "data-testid": "export-musicxml", onclick: () => W.exports.save(stem + ".musicxml", W.exports.musicxml(song), "application/vnd.recordare.musicxml+xml"),
+        }),
+        item(W.t("Print the chart"), W.t("One page for the music stand"), { "data-testid": "export-print", onclick: () => window.print() }),
+      );
+    }
+    renderExports();
 
     for (const [button, menu] of [["mixBtn", "mixMenu"], ["helpBtn", "helpMenu"], ["exportBtn", "exportMenu"]]) {
       const anchor = $(button);
@@ -709,10 +737,13 @@
         popups.openMenu(menu, anchor);
       });
     }
+    function renderMore() {
+      $("moreBtn").textContent = $("dock").classList.contains("open") ? W.t("Hide") : W.t("Controls");
+    }
     $("moreBtn").addEventListener("click", function () {
       const open = $("dock").classList.toggle("open");
       this.setAttribute("aria-expanded", String(open));
-      this.textContent = open ? "Hide" : "Controls";
+      renderMore();
     });
 
     // Full screen needs a gesture: a stage carried over from the previous song shows without it.
@@ -742,10 +773,12 @@
     document.addEventListener("keyup", (e) => {
       if (e.key === " " && e.target.closest && e.target.closest("#stage button")) e.preventDefault();
     });
-    store.on((s, changed) => {
-      if (!changed.has("playing") && !changed.has("stage")) return;
+    function renderStagePlay(s) {
       $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones
-      $("stPlay").setAttribute("aria-label", s.playing ? "Pause" : "Play");
+      $("stPlay").setAttribute("aria-label", s.playing ? W.t("Pause") : W.t("Play"));
+    }
+    store.on((s, changed) => {
+      if (changed.has("playing") || changed.has("stage")) renderStagePlay(s);
     });
     document.addEventListener("fullscreenchange", () => {
       if (!document.fullscreenElement && store.get().stage) setStage(false);

@@ -55,8 +55,9 @@ lyrics on the singer's voice. Then it gives every musician in the band their own
 
 <img src="docs/images/lyrics.png" alt="The Lyrics view: chords above the words, bar lines numbered, the line being sung lit" width="100%">
 
-Paste the words once and woodshed places them on the singer's voice, line by line, then puts each
-chord above the word it lands on. Bar lines are numbered, pushes are marked, and the line being sung
+Press **+ Add the words** on the song page, paste them, and woodshed places them on the singer's
+voice, line by line (a progress bar shows how far it is), then puts each chord above the word it
+lands on. Bar lines are numbered, pushes are marked, and the line being sung
 lights up as the song plays. Click a word to jump there. Instrumental bars stay a grid, so a solo
 never hides inside a lyric line.
 
@@ -79,7 +80,16 @@ Change the key and everything follows: the chart, the shapes, the tab, the keybo
 Every page walks you through the same four steps: **listen** with the full band, **learn** your
 part alone, **loop it slow** (from 70 % tempo, 5 BPM faster on each pass) and **play along** with
 your own part muted. A count-in, a click and per-instrument tracks are one button away. Drag across
-bars to loop them, use a pedal or the arrow keys to move bar by bar.
+bars to loop them, use a pedal or the arrow keys to move bar by bar. While the song plays, the page
+scrolls with it: your hands stay on the instrument.
+
+### English or French, dark or light
+
+<img src="docs/images/french-light.png" alt="The song page in French, in the light theme" width="100%">
+
+The page speaks English or French (your browser's language at first), dark by default or light for
+a sunny room: two buttons at the top, remembered, and switched without stopping the music. Chord
+names, titles and words are never translated.
 
 ### Trust the chart, or fix it
 
@@ -87,14 +97,15 @@ bars to loop them, use a pedal or the arrow keys to move bar by bar.
 
 Where the analysis hesitates, woodshed says so instead of guessing quietly. The spots to check are
 marked on the chart: press one, hear each candidate chord played over that bar of the recording,
-and keep the one your ear agrees with. Your corrections stay with the page and go into the exports.
+and keep the one your ear agrees with. Your corrections go into the exports, and through the
+library every device of the band sees them.
 
 ### Built for the rehearsal room
 
 <img src="docs/images/band.png" alt="Band mode: one computer leads, a phone follows the same bar" width="100%">
 
 - **Stage mode**: the chord now and next in huge type, the words, where you are in the section.
-  Readable from the drum stool.
+  Readable from the drum stool, with big buttons for a tablet: previous part, play, next part.
 - **Lead and follow**: one device leads, every phone on the network follows to the bar. Start,
   stop, loop and seek once, for the whole band.
 - **Set list**: line up the evening's songs. At the end of a song, the pedal (or `N`) takes the
@@ -113,6 +124,10 @@ becomes a practice page: first with the full mix after a few seconds, then with 
 track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
 **MusicXML** (MuseScore), a
 chord timeline (`.lab`) or **JSON**, or print a one-page chart for the music stand.
+
+**Share a song**: zip its `.woodshed` folder and send it. Unzipped, `index.html` opens in any
+browser, offline, with every track, the words and the parts. **After an update** of woodshed, the
+library gives every page the new interface when it starts, without analysing anything again.
 
 ---
 
@@ -275,7 +290,8 @@ by module: **[Under the hood](docs/architecture.md)**.
 
 Everything runs on your computer: the analysis, the models, the library server (which listens on
 this computer only unless you say otherwise). Your recordings, your corrections and your lyrics
-never leave it. The page keeps your corrections in your browser.
+never leave it. Your corrections stay in your browser and, when the band shares them, in your own
+library.
 
 ## Models and licences
 

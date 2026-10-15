@@ -5,6 +5,9 @@
   "use strict";
   const W = window.Woodshed;
 
+  // The sampled instruments, as a message names them.
+  const NAMES = () => ({ guitar: W.t("guitar"), piano: W.t("piano"), rhodes: W.t("rhodes"), bass: W.t("bass"), drums: W.t("drums") });
+
   W.createSounds = function createSounds(onMessage) {
     let ctx = null;
     let master = null;
@@ -17,7 +20,7 @@
     function ensureContext() {
       if (ctx) return ctx;
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) throw new Error("Audio is not available in this browser.");
+      if (!AC) throw new Error(W.t("Audio is not available in this browser."));
       ctx = new AC();
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -18;
@@ -71,7 +74,7 @@
           el.onload = () => resolve();
           el.onerror = () => {
             delete scripts[src];
-            reject(new Error("Could not load " + src));
+            reject(new Error(W.t("Could not load {file}", { file: src })));
           };
           document.head.appendChild(el);
         });
@@ -93,7 +96,7 @@
       if (!loading[name]) {
         loading[name] = loadScript("assets/samples/samples-" + name + ".js").then(() => {
           const src = window.WOODSHED_SAMPLES && window.WOODSHED_SAMPLES[name];
-          if (!src) throw new Error("Samples missing for " + name);
+          if (!src) throw new Error(W.t("Samples missing for {name}", { name: NAMES()[name] || name }));
           decoded[name] = {};
           return src;
         });
@@ -111,7 +114,7 @@
         ),
       );
       keysOf[name] = Object.keys(decoded[name]).map(Number).sort((a, b) => a - b);
-      if (!keysOf[name].length) throw new Error("No playable samples for " + name);
+      if (!keysOf[name].length) throw new Error(W.t("No playable samples for {name}", { name: NAMES()[name] || name }));
     }
 
     function note(name, midi, t, dur, vel, out, release) {
@@ -142,7 +145,7 @@
         ensureContext();
         if (ctx.state === "suspended") await ctx.resume();
         const pending = names.filter((n) => !loading[n]);
-        if (pending.length && onMessage) onMessage("Loading sounds: " + pending.join(", ") + "…");
+        if (pending.length && onMessage) onMessage(W.t("Loading sounds: {names}…", { names: pending.map((n) => NAMES()[n] || n).join(", ") }));
         await Promise.all(names.map((n) => ensureNotes(n, needs[n] || [])));
         fn(ctx.currentTime + 0.05);
         return true;

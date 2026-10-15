@@ -136,9 +136,9 @@
     const top = Math.max(...shares);
     const on = [];
     shares.forEach((p, i) => {
-      if (p > 0.6 * top && p > 0.2) on.push(i % 4 === 0 ? c[i] : "the " + c[i] + " of " + (Math.floor(i / 4) + 1));
+      if (p > 0.6 * top && p > 0.2) on.push(i % 4 === 0 ? c[i] : W.t("the {count} of {beat}", { count: c[i], beat: Math.floor(i / 4) + 1 }));
     });
-    return on.length > 1 ? on.slice(0, -1).join(", ") + " and " + on[on.length - 1] : on.join("");
+    return on.length > 1 ? W.t("{list} and {last}", { list: on.slice(0, -1).join(", "), last: on[on.length - 1] }) : on.join("");
   }
 
   W.instruments = {

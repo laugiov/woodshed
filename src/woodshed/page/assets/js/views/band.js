@@ -79,7 +79,7 @@
           body: JSON.stringify(body),
         });
       } catch (err) {
-        return { ok: false, status: 0, data: { error: "the app did not answer" } };
+        return { ok: false, status: 0, data: { error: W.t("the app did not answer") } };
       }
       const data = await res.json().catch(() => ({}));
       if (res.status === 403 && body !== undefined && again && (await fetchToken())) return api(path, body, false);
@@ -117,7 +117,7 @@
       if (claim) body.lead = true;
       sent = { time: body.time, at: Date.now() / 1000, playing: body.playing, rate: body.rate };
       return api("/api/live", body).then((r) => {
-        if (r.status === 409) setMode("follow", "Another device leads the band now: you follow it.");
+        if (r.status === 409) setMode("follow", W.t("Another device leads the band now: you follow it."));
         return r;
       });
     }
@@ -184,7 +184,7 @@
     function share(fixes) {
       api("/api/corrections", { page: folder, key: app.fixesKey, fixes }).then((r) => {
         if (r.ok && typeof r.data.rev === "number") fixesRev = Math.max(fixesRev, r.data.rev);
-        else app.toast("Saved on this device only: the app did not answer, the band does not see it yet.");
+        else app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
       });
       return true;
     }
@@ -201,10 +201,10 @@
       if (offsets.length > OFFSETS) offsets.shift();
       last = state;
       if (mode === "lead") {
-        if (state.leader && state.leader !== id) setMode("follow", "Another device leads the band now: you follow it.");
+        if (state.leader && state.leader !== id) setMode("follow", W.t("Another device leads the band now: you follow it."));
         else if (!state.leader) {
           say(true); // the app restarted: lead again
-          app.toast("The band had no leader: this device leads again.");
+          app.toast(W.t("The band had no leader: this device leads again."));
         }
         return;
       }
@@ -270,7 +270,8 @@
         const r = await say(true);
         if (!r.ok) {
           mode = "alone";
-          app.toast("Could not lead the band: " + (r.data.error || "the app did not answer") + ".");
+          // The app's fixed reasons are in core/i18n-fr.js; any other stays in English.
+          app.toast(W.t("Could not lead the band: {why}.", { why: W.t(r.data.error || "the app did not answer") }));
         } else startHeartbeat();
       }
       if (next === "follow") {
@@ -292,7 +293,7 @@
       const target = nextSong();
       if (!target) return false;
       if (mode === "follow") {
-        app.toast("The leader chooses the next song.");
+        app.toast(W.t("The leader chooses the next song."));
         return true;
       }
       if (mode === "lead") {
@@ -314,11 +315,11 @@
       box.hidden = false;
       clear(
         box,
-        h("span", { class: "label" }, "Band"),
+        h("span", { class: "label" }, W.t("Band")),
         h(
           "div",
-          { class: "seg-ctl", role: "group", "aria-label": "Band" },
-          [["alone", "Alone"], ["lead", "Lead"], ["follow", "Follow"]].map(([m, text]) =>
+          { class: "seg-ctl", role: "group", "aria-label": W.t("Band") },
+          [["alone", W.t("Alone")], ["lead", W.t("Lead")], ["follow", W.t("Follow")]].map(([m, text]) =>
             h("button", { type: "button", class: mode === m ? "on" : "", "data-testid": "band-" + m, "aria-pressed": String(mode === m), onclick: () => setMode(m) }, text),
           ),
         ),
@@ -330,17 +331,21 @@
         banner.hidden = false;
         banner.toggleAttribute("data-stale", gone);
         const status = !last || !last.leader
-          ? [h("b", null, "Waiting for a leader"), h("span", null, " · another device presses Lead")]
+          ? [h("b", null, W.t("Waiting for a leader")), h("span", null, " · " + W.t("another device presses Lead"))]
           : gone
-            ? [h("b", null, "The leader is silent"), h("span", null, " · its page closed or its screen locked")]
-            : [h("b", null, "Following the leader"), h("span", null, (last.playing ? " · playing" : " · stopped") + (sec ? " · " + sec.name : ""))];
-        clear(banner, status, h("button", { type: "button", class: "linkbtn", onclick: () => setMode("alone") }, "Stop following"));
+            ? [h("b", null, W.t("The leader is silent")), h("span", null, " · " + W.t("its page closed or its screen locked"))]
+            : [h("b", null, W.t("Following the leader")), h("span", null, " · " + (last.playing ? W.t("playing") : W.t("stopped")) + (sec ? " · " + W.partName(sec.name) : ""))];
+        clear(banner, status, h("button", { type: "button", class: "linkbtn", onclick: () => setMode("alone") }, W.t("Stop following")));
       } else banner.hidden = true;
       const next = nextSong();
       const link = $("nextSong");
       link.hidden = !next;
-      if (next) clear(link, "Next: ", h("b", null, titleOf(next)), " →");
-      clear($("stNextSong"), next ? h("button", { type: "button", class: "btn st-next-btn", title: "N, or → at the end of the song", onclick: () => app.nextSong() }, "Next song: ", h("b", null, titleOf(next)), " ⏭\ufe0e") : null);
+      const title = () => h("b", { translate: "no" }, titleOf(next));
+      if (next) clear(link, W.nodes(W.t("Next: {song}"), { song: title() }), " →");
+      clear(
+        $("stNextSong"),
+        next ? h("button", { type: "button", class: "btn st-next-btn", title: W.t("N, or → at the end of the song"), onclick: () => app.nextSong() }, W.nodes(W.t("Next song: {song}"), { song: title() }), " ⏭\ufe0e") : null,
+      );
     }
 
     store.on((s, changed) => {

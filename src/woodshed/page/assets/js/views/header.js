@@ -4,15 +4,15 @@
   const W = window.Woodshed;
   const { h, $, clear, chordNode, fmt } = W;
 
-  const INSTRUMENTS = [["guitar", "Guitar"], ["bass", "Bass"], ["piano", "Keys"], ["drums", "Drums"], ["voice", "Voice"]];
+  const INSTRUMENTS = () => [["guitar", W.t("Guitar")], ["bass", W.t("Bass")], ["piano", W.t("Keys")], ["drums", W.t("Drums")], ["voice", W.t("Voice")]];
   const PART = { guitar: "guitar", bass: "bass", piano: "keys", drums: "drums", voice: "voice" };
-  const LEARN = {
-    guitar: ["Learn the shapes", "Your part alone. Click a shape to hear it."],
-    bass: ["Learn the line", "The bass alone, with its tab."],
-    piano: ["Learn the voicings", "The chords alone, as played on the record."],
-    drums: ["Learn the groove", "The drums alone, with the notation."],
-    voice: ["Find your key", "The voice alone. Set your voice type on the right."],
-  };
+  const LEARN = () => ({
+    guitar: [W.t("Learn the shapes"), W.t("Your part alone. Click a shape to hear it.")],
+    bass: [W.t("Learn the line"), W.t("The bass alone, with its tab.")],
+    piano: [W.t("Learn the voicings"), W.t("The chords alone, as played on the record.")],
+    drums: [W.t("Learn the groove"), W.t("The drums alone, with the notation.")],
+    voice: [W.t("Find your key"), W.t("The voice alone. Set your voice type on the right.")],
+  });
 
   W.views = W.views || {};
 
@@ -29,19 +29,19 @@
         $("facts"),
         h("span", null, h("b", null, String(app.songBpm)), " BPM"),
         h("span", null, h("b", null, meta.beats_per_bar + "/4")),
-        h("span", null, "Key ", h("b", null, chordNode(minor ? key.slice(0, -1) : key), minor ? " minor" : " major")),
+        h("span", null, W.nodes(W.t("Key {key}"), { key: h("b", null, chordNode(minor ? key.slice(0, -1) : key), " " + (minor ? W.t("minor") : W.t("major"))) })),
         h("span", null, fmt(meta.duration)),
         spots
-          ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots + " spot" + (spots > 1 ? "s" : "") + " to check by ear")
-          : h("span", { class: "okfact" }, "Nothing to check by ear"),
-        meta.analysis.chords_reliable ? null : h("span", { class: "warnfact", "data-testid": "unreliable" }, "Little harmony found: chords may be wrong"),
+          ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
+          : h("span", { class: "okfact" }, W.t("Nothing to check by ear")),
+        meta.analysis.chords_reliable ? null : h("span", { class: "warnfact", "data-testid": "unreliable" }, W.t("Little harmony found: chords may be wrong")),
       );
     }
 
     function renderInstruments(s) {
       clear(
         $("instruments"),
-        INSTRUMENTS.map(([id, label]) =>
+        INSTRUMENTS().map(([id, label]) =>
           h("button", { type: "button", class: s.inst === id ? "on" : "", "data-inst": id, "data-testid": "inst-" + id, onclick: () => app.setInstrument(id) }, label),
         ),
       );
@@ -49,12 +49,12 @@
 
     function renderPath(s) {
       const stems = song.tracks.length > 1;
-      const [t2, d2] = stems ? LEARN[s.inst] : ["Learn the chords", "The chart and your panel, with the full mix."];
+      const [t2, d2] = stems ? LEARN()[s.inst] : [W.t("Learn the chords"), W.t("The chart and your panel, with the full mix.")];
       const steps = [
-        ["Listen", "Full band, original tempo. Follow the chart."],
+        [W.t("Listen"), W.t("Full band, original tempo. Follow the chart.")],
         [t2, d2],
-        ["Loop it slow", "From 70% tempo, 5 BPM faster each pass."],
-        ["Play along", stems ? "Your part is muted. The band is yours." : "The full mix, with a count-in."],
+        [W.t("Loop it slow"), W.t("From 70% tempo, 5 BPM faster each pass.")],
+        [W.t("Play along"), stems ? W.t("Your part is muted. The band is yours.") : W.t("The full mix, with a count-in.")],
       ];
       clear(
         $("path"),
@@ -62,7 +62,7 @@
           h(
             "button",
             { type: "button", class: "step" + (s.step === i + 1 ? " on" : ""), "data-step": i + 1, "data-testid": "step-" + (i + 1), onclick: () => app.setStep(i + 1) },
-            h("span", { class: "n" }, "Step " + (i + 1)),
+            h("span", { class: "n" }, W.t("Step {n}", { n: i + 1 })),
             h("span", { class: "t" }, title),
             h("span", { class: "d" }, detail),
           ),
@@ -72,12 +72,15 @@
 
     function renderCredits() {
       const a = meta.analysis;
+      const file = h("span", { translate: "no" }, meta.file);
       const lines = [
-        "Made with woodshed " + meta.meta.version + " from " + meta.file + ", on this computer: nothing was uploaded.",
+        W.nodes(W.t("Made with woodshed {version} from {file}, on this computer: nothing was uploaded.", { version: meta.meta.version }), { file }),
         a.stems
-          ? "Instrument tracks separated with Demucs (MIT)" + (a.beats === "beat_this" ? ", beats and downbeats found with beat_this (MIT)." : ".")
-          : "Analysed from the full mix only (no stems): instrument parts need woodshed with stems.",
-        "Notation drawn with VexFlow (MIT). Preview sounds: FluidR3_GM SoundFont by Frank Wen (MIT). Fonts: Barlow Condensed, Atkinson Hyperlegible, JetBrains Mono, Noto Music (SIL Open Font License).",
+          ? a.beats === "beat_this"
+            ? W.t("Instrument tracks separated with Demucs (MIT), beats and downbeats found with beat_this (MIT).")
+            : W.t("Instrument tracks separated with Demucs (MIT).")
+          : W.t("Analysed from the full mix only (no stems): instrument parts need woodshed with stems."),
+        W.t("Notation drawn with VexFlow (MIT). Preview sounds: FluidR3_GM SoundFont by Frank Wen (MIT). Fonts: Barlow Condensed, Atkinson Hyperlegible, JetBrains Mono, Noto Music (SIL Open Font License)."),
       ];
       clear($("foot"), lines.map((l) => h("span", null, l)));
     }
@@ -96,9 +99,10 @@
         const pending = song.view.pending;
         if (pending) {
           const minutes = Math.max(1, Math.round(pending.eta_seconds / 60));
-          $("pending").textContent =
-            "Separating the instruments on this computer. Reload this page in about " + minutes + " min" +
-            " for the instrument tracks and parts; until then it plays the full mix.";
+          $("pending").textContent = W.t(
+            "Separating the instruments on this computer. Reload this page in about {n} min for the instrument tracks and parts; until then it plays the full mix.",
+            { n: minutes },
+          );
           $("pending").hidden = false;
         }
         renderFacts(s);
@@ -121,22 +125,22 @@
       const shift = app.showShapes(s) ? s.capo : 0;
       clear($("stNow"), chordNode(app.nameFor(c, shift, s)));
       clear($("stShape"), app.nowHint(c, s));
-      clear($("stNext"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : "end");
+      clear($("stNext"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : W.t("end"));
       clear($("stThen"), up[1] ? chordNode(app.nameFor(up[1], shift, s)) : "");
       // Where the band is: the section, the bar in it, and the next section two bars ahead.
       const list = app.sections();
       const k = list.length ? song.sectionIndex(u, list) : -1;
-      const sec = k >= 0 ? list[k] : { name: "Bar " + (u + 1), start: u, end: u + 1 };
+      const sec = k >= 0 ? list[k] : { name: W.t("Bar {n}", { n: u + 1 }), start: u, end: u + 1 };
       const len = sec.end - sec.start;
       const per = Math.ceil(len / 16); // a dot per bar, or per few bars in a long section
       const at = Math.floor((u - sec.start) / per);
       clear($("stMap"), Array.from({ length: Math.ceil(len / per) }, (_, i) => h("i", { class: i === at ? "on" : i < at ? "done" : "" })));
-      $("stSection").textContent = sec.name;
-      $("stTop").textContent = "bar " + (u - sec.start + 1) + " of " + len + " · " + s.bpm + " BPM";
+      $("stSection").textContent = W.partName(sec.name);
+      $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM";
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
-      const what = next ? next.name : k >= 0 && k === list.length - 1 ? "End" : "";
-      $("stComing").textContent = what && left <= 2 ? what + (left === 1 ? " next bar" : " in " + left + " bars") : "";
+      const what = next ? W.partName(next.name) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
+      $("stComing").textContent = what && left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
       renderLyrics(s, list);
     }
 
@@ -160,7 +164,7 @@
       shown.forEach((r, i) => {
         const sec = app.sectionOf(r.firstBar);
         const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
-        if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, sec.name));
+        if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec.name)));
         const now = i === 0 && k >= 0;
         out.push(h("div", { class: "st-line" + (now ? " now" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
         if (now) {
@@ -231,24 +235,24 @@
       const pop = $("pop");
       clear(
         pop,
-        h("h3", null, "Which one do you hear?"),
-        h("p", null, chord.doubt.why),
+        h("h3", null, W.t("Which one do you hear?")),
+        h("p", null, W.t(chord.doubt.why)), // one of the analysis's texts, in core/i18n-fr.js
         chord.doubt.alternatives.map((alt, i) =>
           h(
             "div",
             { class: "alt", "data-testid": "alternative" },
             h("span", { class: "an" }, W.chordNode(app.nameFor(alt, 0, s))),
             h("span", { class: "meter" }, h("i", { style: { width: alt.share + "%" } })),
-            h("span", { class: "pc" }, alt.share + "%"),
+            h("span", { class: "pc" }, W.t("{n}%", { n: alt.share })),
             h(
               "span",
               { class: "acts" },
-              h("button", { type: "button", "aria-label": "Hear it in this bar", "data-testid": "hear-alternative", onclick: () => app.audition(u, alt) }, "▶"),
-              h("button", { type: "button", class: "pick", "data-testid": i === 0 ? "pick-first" : "pick", onclick: () => app.correct(u, k, alt) }, "Use"),
+              h("button", { type: "button", "aria-label": W.t("Hear it in this bar"), "data-testid": "hear-alternative", onclick: () => app.audition(u, alt) }, "▶"),
+              h("button", { type: "button", class: "pick", "data-testid": i === 0 ? "pick-first" : "pick", onclick: () => app.correct(u, k, alt) }, W.t("Use")),
             ),
           ),
         ),
-        h("p", null, "▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear."),
+        h("p", null, W.t("▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.")),
       );
       pop.hidden = false;
       opener = button;

@@ -52,13 +52,16 @@
       g.fillStyle = colours.muted;
       g.font = "11px " + colours.font;
       // Each section's name where it fits, else its first letters (V1 for Verse 1), else nothing.
+      // The short names are abbreviations of the part names, one table per language.
+      const SHORT = W.lang() === "fr"
+        ? { intro: "In", verse: "C", prechorus: "PR", chorus: "R", bridge: "P", instrumental: "Inst", outro: "Out" }
+        : { intro: "In", verse: "V", prechorus: "Pre", chorus: "C", bridge: "Br", instrumental: "Inst", outro: "Out" };
       sections.forEach((sec) => {
         const x = X(barStart(sec.start));
         const room = X(barStart(sec.end)) - x - 5;
-        const SHORT = { intro: "In", verse: "V", prechorus: "Pre", chorus: "C", bridge: "Br", instrumental: "Inst", outro: "Out" };
         const number = (sec.name.match(/ (\d+)$/) || ["", ""])[1];
         const short = SHORT[sec.role] ? SHORT[sec.role] + number : sec.letter;
-        const text = [sec.name, short].find((t) => g.measureText(t).width <= room);
+        const text = [W.partName(sec.name), short].find((t) => g.measureText(t).width <= room);
         if (text) g.fillText(text, x + 3, 12);
       });
     }
@@ -91,15 +94,15 @@
       if (tenth !== shownTenth) clear($("posInfo"), h("b", null, fmt(s.time, true)), " / " + fmt(duration));
       shownTenth = tenth;
       const looped = s.loop && app.sections().find((sec) => sec.start === s.loop[0] && sec.end === s.loop[1] + 1);
-      const what = !s.loop ? "" : looped ? looped.name : "bars " + (s.loop[0] + 1) + "–" + (s.loop[1] + 1);
-      $("loopInfo").textContent = s.loopOn && s.loop ? "Looping " + what + (s.trainer ? " · trainer on" : "") : "No loop";
+      const what = !s.loop ? "" : looped ? W.partName(looped.name) : W.t("bars {from}–{to}", { from: s.loop[0] + 1, to: s.loop[1] + 1 });
+      $("loopInfo").textContent = s.loopOn && s.loop ? W.t("Looping {part}", { part: what }) + (s.trainer ? " · " + W.t("trainer on") : "") : W.t("No loop");
       $("loopBtn").classList.toggle("on", !!s.loopOn);
       $("trainBtn").classList.toggle("on", !!s.trainer);
       $("countBtn").classList.toggle("on", !!s.countIn);
       $("clickBtn").classList.toggle("on", !!s.click);
       const play = $("playBtn");
       play.textContent = s.playing ? "❚❚" : "▶";
-      play.setAttribute("aria-label", s.playing ? "Pause" : "Play");
+      play.setAttribute("aria-label", s.playing ? W.t("Pause") : W.t("Play"));
     }
 
     function renderTempo(s) {
@@ -111,9 +114,9 @@
       $("bpmReset").classList.toggle("on", s.bpm === app.songBpm);
     }
 
-    function renderTracks(s) {
+    function renderTracks(s, relabel) {
       const existing = $("mixer").querySelectorAll("[data-track]");
-      if (existing.length === song.tracks.length) {
+      if (existing.length === song.tracks.length && !relabel) {
         // Update in place: rebuilding would drop the keyboard focus inside the menu.
         existing.forEach((b) => {
           const on = b.getAttribute("data-track") === s.track;
@@ -127,20 +130,20 @@
         h(
           "button",
           { type: "button", class: "item" + (s.track === t.id ? " cur" : ""), "data-track": t.id, "data-testid": "track-" + t.id, "aria-pressed": String(s.track === t.id), onclick: () => app.setTrack(t.id) },
-          h("span", null, t.label),
+          h("span", null, W.t(t.label)), // tracks.track_list's labels, in core/i18n-fr.js
         ),
       );
       clear($("mixer"), rows);
       clear(
         $("soundCtl"),
-        [["guitar", "Guitar"], ["rhodes", "Rhodes"], ["piano", "Piano"]].map(([id, label]) =>
+        [["guitar", W.t("Guitar")], ["rhodes", W.t("Rhodes")], ["piano", W.t("Piano")]].map(([id, label]) =>
           h("button", { type: "button", class: s.chordSound === id ? "on" : "", "data-testid": "sound-" + id, onclick: () => store.set({ chordSound: id }) }, label),
         ),
       );
       $("mixNote").textContent =
         song.tracks.length > 1
-          ? "Tracks isolated on this computer. One plays at a time, so they never drift apart."
-          : "Only the full mix: this page was made without stems.";
+          ? W.t("Tracks isolated on this computer. One plays at a time, so they never drift apart.")
+          : W.t("Only the full mix: this page was made without stems.");
     }
 
     store.on((s, changed) => {
@@ -162,7 +165,7 @@
         drawWave(s, true);
         renderPosition(s);
         renderTempo(s);
-        renderTracks(s);
+        renderTracks(s, true);
       },
       timeAt(clientX) {
         const r = $("wave").getBoundingClientRect();

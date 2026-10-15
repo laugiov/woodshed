@@ -42,7 +42,9 @@ The rules the checks enforce, and the ones they can't:
   with the synthesiser in `tests/`.
 - **The page works offline**: no CDN, no fetch to the internet. Vendored files are pinned by hash.
 - **Every change comes with tests**, the page included: Playwright tests run in Chromium and Firefox.
-- **English** in code, comments, docs and messages.
+- **English** in code, comments, docs and messages. The page itself speaks English and French: a
+  text it shows goes through `W.t("...")` with its French in `core/i18n-fr.js` (a test checks it),
+  and the song's own text (title, chords, words) is marked `translate="no"`.
 - **Audio quality is never traded for speed**: no mono, no lossy re-encoding, no truncated notes.
 - Python 3.10 to 3.14, typed (`mypy --strict`), formatted with `ruff`.
 

@@ -24,7 +24,7 @@ def wait(page: Page, expression: str, timeout: float = 5.0) -> None:
 
 def tablet(browser: Browser, pages_root: str) -> Page:
     context = browser.new_context(
-        viewport={"width": 820, "height": 1180}, device_scale_factor=2, has_touch=True, is_mobile=True
+        locale="en-US", viewport={"width": 820, "height": 1180}, device_scale_factor=2, has_touch=True, is_mobile=True
     )
     page = context.new_page()
     page.goto((built("pop", True, pages_root) / "index.html").as_uri())
@@ -104,7 +104,7 @@ def test_previous_restarts_the_part_unless_it_has_just_begun(open_page: Any) -> 
 
 def test_a_phone_held_sideways_keeps_the_controls_on_screen(browser: Browser, pages_root: str) -> None:
     context = browser.new_context(
-        viewport={"width": 844, "height": 390}, device_scale_factor=3, has_touch=True, is_mobile=True
+        locale="en-US", viewport={"width": 844, "height": 390}, device_scale_factor=3, has_touch=True, is_mobile=True
     )
     page = context.new_page()
     page.goto((built("pop", True, pages_root) / "index.html").as_uri())

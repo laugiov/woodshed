@@ -50,7 +50,7 @@ def until(page: Page, expression: str, timeout: float = 10, arg: Any = None) -> 
 
 
 def device(browser: Browser, url: str, problems: list[str]) -> Page:
-    page = browser.new_context(viewport={"width": 1280, "height": 800}).new_page()
+    page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="en-US").new_page()
     page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: problems.append(str(e)))
     page.goto(url)
@@ -199,7 +199,7 @@ def test_from_disk_there_is_no_band(open_page: Any) -> None:
 def test_the_set_list_is_made_on_the_home_page(browser: Browser, server: app.AppServer) -> None:
     server.library.set_setlist({"songs": []})
     problems: list[str] = []
-    page = browser.new_context().new_page()
+    page = browser.new_context(locale="en-US").new_page()
     page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
     page.goto(server.url)
     expect(page.get_by_test_id("set-add")).to_have_count(2)

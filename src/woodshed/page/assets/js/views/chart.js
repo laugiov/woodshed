@@ -30,11 +30,11 @@
       const inner = c.doubt && !c.fixed
         ? h(
             "button",
-            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": ref, "data-testid": "doubt", "data-kind": c.doubt.kind, title: timing ? "Placement to check by ear" : "Check by ear" },
+            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": ref, "data-testid": "doubt", "data-kind": c.doubt.kind, title: timing ? W.t("Placement to check by ear") : W.t("Check by ear") },
             main,
             timing ? null : h("sup", null, "?"),
           )
-        : [main, c.fixed ? h("span", { class: "fixed-dot", title: "Your correction" }) : null];
+        : [main, c.fixed ? h("span", { class: "fixed-dot", title: W.t("Your correction") }) : null];
       return h(
         "span",
         { class: "ch" + (small ? " small" : "") },
@@ -58,12 +58,13 @@
     function sectionHead(sec, k) {
       const first = bar(sec.start);
       const n = sec.end - sec.start;
+      const part = W.partName(sec.name);
       return h(
         "div",
         { class: "sec-head", "data-testid": "section", "data-section": k, "data-role": sec.role },
-        h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: "Go to " + sec.name }, sec.name),
-        h("span", { class: "sec-meta" }, fmt(first.start) + " · " + n + (n === 1 ? " bar" : " bars")),
-        h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: "Loop " + sec.name }, "⟲ Loop"),
+        h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: W.t("Go to {part}", { part }) }, part),
+        h("span", { class: "sec-meta" }, fmt(first.start) + " · " + (n === 1 ? W.t("1 bar") : W.t("{n} bars", { n }))),
+        h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: W.t("Loop {part}", { part }) }, W.t("⟲ Loop")),
       );
     }
 
@@ -73,7 +74,7 @@
       clear(
         $("form"),
         list.map((sec, k) =>
-          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, "data-goto": sec.start, "data-testid": "form-chip" }, sec.name),
+          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec.name)),
         ),
       );
     }
@@ -85,18 +86,18 @@
       const shift = app.showShapes(s) ? s.capo : 0;
       const mark = (p) => {
         const name = chordNode(app.nameFor(p.chord, shift, s));
-        const push = p.push ? h("span", { class: "push" }, "push") : null;
+        const push = p.push ? h("span", { class: "push" }, W.t("push")) : null;
         if (!opts.stage && p.chord.doubt && !p.chord.fixed) {
           const timing = p.chord.doubt.kind === "timing";
           return h(
             "button",
-            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": p.bar + "_" + p.index, "data-testid": "doubt", "data-kind": p.chord.doubt.kind, title: timing ? "Placement to check by ear" : "Check by ear", "aria-label": "Check this chord by ear, bar " + (p.bar + 1) },
+            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": p.bar + "_" + p.index, "data-testid": "doubt", "data-kind": p.chord.doubt.kind, title: timing ? W.t("Placement to check by ear") : W.t("Check by ear"), "aria-label": W.t("Check this chord by ear, bar {n}", { n: p.bar + 1 }) },
             name,
             timing ? null : h("sup", null, "?"),
             push,
           );
         }
-        return [name, p.chord.fixed && !opts.stage ? h("span", { class: "fixed-dot", title: "Your correction" }) : null, push];
+        return [name, p.chord.fixed && !opts.stage ? h("span", { class: "fixed-dot", title: W.t("Your correction") }) : null, push];
       };
       const word = (item) => {
         const checks = !opts.stage && item.chords.some((p) => p.chord.doubt && !p.chord.fixed);
@@ -104,7 +105,7 @@
         const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]));
         if (item.kind === "gap") return h("span", { class: "lw gap" }, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));
         const seek = !opts.stage && item.timed ? item.t.toFixed(3) : null;
-        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, lc, h("span", { class: "wt" }, item.text));
+        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, lc, h("span", { class: "wt", translate: "no" }, item.text));
       };
       const parts = [];
       row.bars.forEach((b, i) => {
@@ -114,10 +115,12 @@
         if (i) parts.push(" ");
         parts.push(h("span", { class: "nb", "data-bar": b.cont ? null : b.bar }, inner));
       });
-      const backing = row.line.backing && row.line.backing.length ? h("span", { class: "bv" }, " (" + row.line.backing.join(") (") + ")") : null;
+      const backing = row.line.backing && row.line.backing.length ? h("span", { class: "bv", translate: "no" }, " (" + row.line.backing.join(") (") + ")") : null;
       return h("span", { class: "lwords" }, parts, backing);
     }
     app.lyricLine = lyricLine;
+
+    const barLabel = (b, u, s) => W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
 
     // Bars no sung line holds (an intro, a solo, an ending), as bars of the grid, four a row.
     function freeRow(list, s) {
@@ -132,10 +135,10 @@
         cells.push(
           h(
             "div",
-            { class: "bar", "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": "Bar " + (u + 1) + ": " + b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", "), "data-testid": "bar" },
+            { class: "bar", "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
-            h("span", { class: "rn" }, b.chords.map((c) => song.roman(c)).join(" ")),
+            h("span", { class: "rn", translate: "no" }, b.chords.map((c) => song.roman(c)).join(" ")),
           ),
         );
       }
@@ -176,8 +179,9 @@
         out.push(
           h(
             "div",
-            { class: "lline" + (r.line.check ? " check" : ""), "data-line": r.li, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check || null },
-            h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": "Play from " + fmt(r.line.start) + ": " + r.line.text }, fmt(r.line.start)),
+            // The check is one of the texts woodshed lyrics writes, in core/i18n-fr.js.
+            { class: "lline" + (r.line.check ? " check" : ""), "data-line": r.li, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null },
+            h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) }, fmt(r.line.start)),
             lyricLine(r, s, { stage: false }),
           ),
         );
@@ -228,10 +232,10 @@
         cells.push(
           h(
             "div",
-            { class: "bar", "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "aria-label": "Bar " + (u + 1) + ": " + b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", "), "data-testid": "bar" },
+            { class: "bar", "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
-            h("span", { class: "rn" }, b.chords.map((c) => song.roman(c)).join(" ")),
+            h("span", { class: "rn", translate: "no" }, b.chords.map((c) => song.roman(c)).join(" ")),
           ),
         );
       }
@@ -255,14 +259,14 @@
       const sheetCtl = app.words
         ? h(
             "div",
-            { class: "seg-ctl", role: "group", "aria-label": "Chart with" },
-            h("button", { type: "button", class: mode === "grid" ? "on" : "", "aria-pressed": String(mode === "grid"), "data-testid": "sheet-grid", onclick: () => store.set({ sheet: "grid" }) }, "Grid"),
-            h("button", { type: "button", class: mode === "lyrics" ? "on" : "", "aria-pressed": String(mode === "lyrics"), "data-testid": "sheet-lyrics", onclick: () => store.set({ sheet: "lyrics" }) }, "Lyrics"),
+            { class: "seg-ctl", role: "group", "aria-label": W.t("Chart with") },
+            h("button", { type: "button", class: mode === "grid" ? "on" : "", "aria-pressed": String(mode === "grid"), "data-testid": "sheet-grid", onclick: () => store.set({ sheet: "grid" }) }, W.t("Grid")),
+            h("button", { type: "button", class: mode === "lyrics" ? "on" : "", "aria-pressed": String(mode === "lyrics"), "data-testid": "sheet-lyrics", onclick: () => store.set({ sheet: "lyrics" }) }, W.t("Lyrics")),
           )
         : null;
       // The words are placed on the singer's track: offered once the page has it.
       const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals")
-        ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? "Edit the words" : "Add the words")
+        ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? W.t("Edit the words") : W.t("Add the words"))
         : null;
       if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
         clear(
@@ -271,12 +275,12 @@
           wordsBtn,
           h(
             "div",
-            { class: "seg-ctl", role: "group", "aria-label": "Chart shows" },
-            h("button", { type: "button", class: s.view === "concert" ? "on" : "", onclick: () => store.set({ view: "concert" }) }, "Real chords"),
-            h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, "Shapes, capo " + s.capo),
+            { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
+            h("button", { type: "button", class: s.view === "concert" ? "on" : "", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
+            h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })),
           ),
         );
-      } else clear(el, sheetCtl, wordsBtn, h("span", { class: "hint" }, "Real chords, concert pitch"));
+      } else clear(el, sheetCtl, wordsBtn, h("span", { class: "hint" }, W.t("Real chords, concert pitch")));
     }
 
     function barEl(u, s) {
@@ -322,15 +326,15 @@
       clear($("bigChord"), chordNode(app.nameFor(c, shift, s)));
       $("bigRoman").textContent = song.roman(c) || "–";
       clear($("nowSub"), app.nowHint(c, s));
-      clear($("nextChord"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : "end");
+      clear($("nextChord"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : W.t("end"));
       clear($("thenChord"), up[1] ? chordNode(app.nameFor(up[1], shift, s)) : "");
       for (const box of [$("beats"), $("stBeats")]) {
         if (box.children.length !== song.per) clear(box, Array.from({ length: song.per }, (_, i) => h("div", { class: "beat" + (i === 0 ? " one" : "") })));
         for (let i = 0; i < box.children.length; i++) box.children[i].classList.toggle("on", i === b % song.per);
       }
       const sec = app.sectionOf(u);
-      $("barInfo").textContent = sec ? sec.name : "Bar " + (u + 1);
-      $("passInfo").textContent = sec ? "bar " + (u - sec.start + 1) + " of " + (sec.end - sec.start) : "of " + song.bars.length;
+      $("barInfo").textContent = sec ? W.partName(sec.name) : W.t("Bar {n}", { n: u + 1 });
+      $("passInfo").textContent = sec ? W.t("bar {n} of {len}", { n: u - sec.start + 1, len: sec.end - sec.start }) : W.t("of {len}", { len: song.bars.length });
       renderTime(s);
     }
 
@@ -341,15 +345,15 @@
     function renderHarmony(s) {
       const key = song.keyName(s.transpose);
       const minor = key.endsWith("m");
-      clear($("keyTitle"), chordNode(minor ? key.slice(0, -1) : key, "kn"), minor ? " minor" : " major");
-      if (!song.song.key.known) $("keyTitle").append(h("small", { class: "hint" }, " (uncertain)"));
+      clear($("keyTitle"), chordNode(minor ? key.slice(0, -1) : key, "kn"), " " + (minor ? W.t("minor") : W.t("major")));
+      if (!song.song.key.known) $("keyTitle").append(h("small", { class: "hint" }, " " + W.t("(uncertain)")));
       const sections = song.song.harmony;
       // Harmony is summarised per family of lines (A, B); the page names them after the part
       // where each family is first heard (Verse, Chorus), the names the chart shows.
       const partOf = (family) => {
         const g = song.song.groups.find((gr) => gr.family === family);
         const sec = g && app.sectionOf(g.occurrences[0][0]);
-        return sec ? sec.name.replace(/ \d+$/, "") : family;
+        return sec ? W.partName(sec.name.replace(/ \d+$/, "")) : family;
       };
       const used = new Map();
       const labelOf = (label) => {
@@ -365,8 +369,11 @@
         // One row per section; the chips are direct children of .prog, as the stylesheet expects.
         if (n > 0) prog.append(h("div", { style: { flexBasis: "100%", height: "0" } }));
         if (sections.length > 1) prog.append(h("b", { class: "prog-sec" }, labels[n]));
-        sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s)), h("small", null, sec.romans[i]))));
-        if (sec.name) text.push((sections.length > 1 ? labels[n] + ": " : "") + sec.name.charAt(0).toUpperCase() + sec.name.slice(1) + ".");
+        sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s)), h("small", { translate: "no" }, sec.romans[i]))));
+        if (!sec.name) return;
+        const named = W.t(sec.name); // a well-known progression's name (theory.PROGRESSIONS), in core/i18n-fr.js
+        const said = named.charAt(0).toUpperCase() + named.slice(1) + ".";
+        text.push(sections.length > 1 ? W.t("{part}: {progression}", { part: labels[n], progression: said }) : said);
       });
       $("progText").textContent = text.join(" ");
       const items = [];
@@ -378,12 +385,12 @@
           h(
             "li",
             null,
-            h("button", { type: "button", "data-goto": d.bar }, "Bar " + (d.bar + 1)),
-            h("span", null, chordNode(app.nameFor(d.chord, 0, s)), "? " + d.chord.doubt.why),
+            h("button", { type: "button", "data-goto": d.bar }, W.t("Bar {n}", { n: d.bar + 1 })),
+            h("span", null, chordNode(app.nameFor(d.chord, 0, s)), "? " + W.t(d.chord.doubt.why)),
           ),
         );
       }
-      clear($("checks"), items.length ? items : h("li", { class: "ok" }, h("span", null, "Nothing left to check by ear.")));
+      clear($("checks"), items.length ? items : h("li", { class: "ok" }, h("span", null, W.t("Nothing left to check by ear."))));
     }
 
     let lastPass = null;

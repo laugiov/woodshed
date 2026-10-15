@@ -455,7 +455,7 @@ def test_correcting_a_doubt_twice_gives_the_same_chart_after_a_reload(open_page:
 def test_the_waveform_layer_is_not_rebuilt_while_playing_at_fractional_zoom(browser: Any, pages_root: str) -> None:
     from tests.page.conftest import built
 
-    context = browser.new_context(device_scale_factor=1.5)
+    context = browser.new_context(device_scale_factor=1.5, locale="en-US")
     page = context.new_page()
     page.goto((built("pop", True, pages_root) / "index.html").as_uri())
     for _ in range(100):

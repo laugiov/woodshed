@@ -266,7 +266,7 @@ All thresholds carry their measurements in comments. The bass tab and the drum g
 
 You paste the words. woodshed does not invent them. It only finds when each word is sung.
 
-Two ways in, one function behind them (`add_to_page` in `src/woodshed/lyrics.py`):
+Two ways in, one function behind them (`add_to_page` in `src/woodshed/lyrics.py`), which reports how far it is (each 30-second window of the voice heard is a step; the page shows a progress bar):
 
 - In the library app, **Add the words** on a song page (`page/assets/js/views/words.js`) sends them to `POST /api/lyrics`. The placement is a job of the library queue (section 11), and the page reloads with the words when it is done. Opened from disk, the page has no app behind it: the dialog gives the command instead.
 - On the command line:
@@ -367,12 +367,25 @@ No bundler and no modules. The page uses classic `<script>` tags that all add to
 
 The load order is fixed in `template.html`, and a test checks that every script is loaded in dependency order:
 
-- `core/`: `prefs.js` (theme, in `<head>`), `woodshed.js`, `song.js`, `lyrics.js`, `state.js`, `instruments.js`, `exports.js`
+- `core/`: `prefs.js` (theme and language, in `<head>`), `woodshed.js`, `i18n.js`, `i18n-fr.js`, `song.js`, `lyrics.js`, `state.js`, `instruments.js`, `exports.js`
 - `audio/`: `sounds.js`, `transport.js`
-- `views/`: `header.js`, `chart.js`, `desk.js`, `dock.js`, `band.js`
+- `views/`: `header.js`, `chart.js`, `desk.js`, `dock.js`, `band.js`, `words.js` (the words dialog)
 - `app.js` last, to wire it together
 
 `core/state.js` is the store, and it is small: a frozen state object, `set(patch)` merges and tells listeners which keys changed, `on(fn)` subscribes. Views read from it and subscribe. Nothing else holds state.
+
+### English or French, dark or light
+
+`core/prefs.js` runs in `<head>`, before the page is drawn: it sets the theme (`data-theme`, dark unless light was chosen) and the language (`<html lang>`, the browser's at first, English or French), both kept in the browser's storage.
+
+- Every sentence of the page's own goes through `W.t` (`core/i18n.js`): the English text is the key, `{names}` are filled in, and `core/i18n-fr.js` holds the French. The fixed text of `body.html` and `home.html` is translated by `W.translatePage`.
+- The song's own text (title, chord names, roman numerals, words) is never translated, and is marked `translate="no"` so a browser's translator leaves it alone too. The names the analysis gives the parts ("Verse 2", "Part B") are translated for display (`W.partName`), also when the words named them (their tags set the role, the name is the analysis's).
+- Switching language redraws every view from the store: the music goes on.
+- `tests/test_page_sources.py` fails on any text of the page code or of the HTML without its French; `tests/page/test_french.py` opens every menu, panel and stage mode in French and fails on any text of the dictionary left in English. Python's texts shown by the page (doubt reasons, progressions, track labels) are checked too.
+
+### Following the song
+
+While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the bar or the sung line playing stays in the upper part of the screen, above the dock. A scroll by hand (wheel, touch, scroll keys, the scrollbar) wins for four seconds; the page's own keys (a pedal's Page Down) do not count as one. It does not move a page whose chart is off screen (a phone reading the instrument panel under it), nor in stage mode.
 
 ### Audio playback and time-stretch
 
