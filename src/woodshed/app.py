@@ -16,6 +16,7 @@ import ipaddress
 import json
 import math
 import mimetypes
+import os
 import queue
 import re
 import secrets
@@ -505,6 +506,21 @@ def lan_addresses() -> list[str]:
     return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
 
 
+def in_container() -> bool:
+    """In the Docker image: its own address is on Docker's bridge, the phones cannot reach it."""
+    return os.environ.get("WOODSHED_CONTAINER") == "1"
+
+
+def public_urls() -> list[str]:
+    """WOODSHED_PUBLIC_URL: the addresses the phones type, when the app cannot know them (Docker)."""
+    out = []
+    for raw in os.environ.get("WOODSHED_PUBLIC_URL", "").split(","):
+        url = raw.strip()
+        if re.fullmatch(r"https?://[A-Za-z0-9.\-\[\]:]+(:\d+)?/?", url):
+            out.append(url if url.endswith("/") else url + "/")
+    return out
+
+
 def home_html(token: str) -> str:
     page = resources.files("woodshed").joinpath("page").joinpath("home.html").read_text(encoding="utf-8")
     return page.replace("{{TOKEN}}", token)
@@ -530,19 +546,21 @@ class Handler(BaseHTTPRequestHandler):
             return False
 
     def _host_ok(self) -> bool:
-        host = self.headers.get("Host", "")
-        if host in self.server.hosts:
+        """DNS rebinding: a site whose name now points here still sends its own name. This computer's
+        names and, on the network, address literals are accepted, on any port: a port published by
+        Docker or a proxy differs from the app's own, and a port proves nothing against rebinding."""
+        name, _, port = self.headers.get("Host", "").rpartition(":")
+        if not name or not port.isdigit():
+            return False
+        if name in self.server.names:
             return True
         if not self.server.network:
             return False
-        # On the network, the phones of the band use this computer's address. A DNS rebinding
-        # attack needs a name: an address literal on the app's port is safe to accept.
-        name, _, port = host.rpartition(":")
         try:
             ipaddress.ip_address(name.strip("[]"))
         except ValueError:
             return False
-        return port == str(self.server.port)
+        return True
 
     def _send(self, status: int, body: bytes, kind: str, extra: dict[str, str] | None = None) -> None:
         self.send_response(status)
@@ -593,6 +611,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/songs":
             state = self.server.library.state()
             state["addresses"] = self.server.lan_urls()
+            state["container"] = in_container()
             state["can_upload"] = self._may_upload()
             self._json(HTTPStatus.OK, state)
         elif path == "/api/token":
@@ -839,8 +858,7 @@ class AppServer(ThreadingHTTPServer):
             self.assets = Path(page).resolve()
         bound = self.server_address[1]
         self.port = int(bound)
-        names = {"127.0.0.1", "localhost", "[::1]"} | ({host} if host not in ("0.0.0.0", "::") else set())
-        self.hosts = {f"{name}:{self.port}" for name in names}
+        self.names = {"127.0.0.1", "localhost", "[::1]"} | ({host} if host not in ("0.0.0.0", "::") else set())
 
     @property
     def url(self) -> str:
@@ -851,7 +869,11 @@ class AppServer(ThreadingHTTPServer):
         if not self.network:
             return []
         if self._addresses is None:
-            self._addresses = [f"http://{a}:{self.port}/" for a in lan_addresses()]
+            self._addresses = (
+                public_urls()
+                if os.environ.get("WOODSHED_PUBLIC_URL")
+                else ([] if in_container() else [f"http://{a}:{self.port}/" for a in lan_addresses()])
+            )
         return self._addresses
 
     def server_close(self) -> None:

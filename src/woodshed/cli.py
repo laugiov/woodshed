@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import traceback
@@ -135,6 +136,13 @@ def run_app(argv: Sequence[str]) -> int:
         print("woodshed app: stopped", file=sys.stderr)
     except OSError as exc:  # the port is taken, the folder cannot be written...
         print(f"woodshed app: {exc}", file=sys.stderr)
+        if isinstance(exc, PermissionError) and os.environ.get("WOODSHED_CONTAINER") == "1":
+            # Docker created the missing library folder for root: the container's user cannot write it.
+            print(
+                "woodshed app: create the library folder before starting the container (mkdir woodshed),"
+                " or give it to the container's user: sudo chown 1000:1000 woodshed",
+                file=sys.stderr,
+            )
         return EXIT_ERROR
     return EXIT_OK
 

@@ -1,0 +1,24 @@
+# woodshed with Docker Compose: `docker compose up -d`, then open http://localhost:8000.
+#
+# Your songs and their practice pages live in the `woodshed` folder next to this file (change the
+# left side of the first volume to use another folder). The models (about 1.5 GB with the lyrics
+# one) are downloaded once, at the first analysis, into the `woodshed-cache` volume.
+
+services:
+  woodshed:
+    image: ghcr.io/laugiov/woodshed:latest
+    build: .
+    ports:
+      # This computer only. For the band's phones on the same network, use "8000:8000" instead:
+      # then anyone on the network can open the library and add songs.
+      - "127.0.0.1:8000:8000"
+    # The address the band's phones type, shown on the library page (the app cannot see it from
+    # inside the container): this computer's address on the network, for example
+    # environment: [WOODSHED_PUBLIC_URL=http://192.168.1.20:8000]
+    volumes:
+      - ./woodshed:/library
+      - woodshed-cache:/cache
+    restart: unless-stopped
+
+volumes:
+  woodshed-cache:

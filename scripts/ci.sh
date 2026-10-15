@@ -52,7 +52,7 @@ if [ "$FULL" = 1 ]; then
   done
 
   step "workflows"
-  docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml
+  docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml .github/workflows/install.yml .github/workflows/docker.yml
 fi
 
 printf '\nAll checks passed in %d s.\n' $((SECONDS - started))

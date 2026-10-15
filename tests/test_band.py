@@ -176,14 +176,34 @@ def test_closing_the_app_ends_the_streams(server: app.AppServer) -> None:
     [
         ("192.168.1.20:{port}", True),
         ("[fe80::1]:{port}", True),
-        ("192.168.1.20:1", False),
-        ("band.local:{port}", False),
+        ("192.168.1.20:8090", True),  # Docker publishes the app on another port
+        ("band.local:{port}", False),  # a name: DNS rebinding stays refused
     ],
 )
 def test_on_the_network_phones_use_the_computer_address(server: app.AppServer, host: str, ok: bool) -> None:
     server.network = True  # as with --host 0.0.0.0 --allow-network
     status, _, _ = request(server, "GET", "/api/songs", host=host.format(port=server.port))
     assert (status == 200) is ok
+
+
+def test_this_computer_on_another_port_is_accepted(server: app.AppServer) -> None:
+    # docker run -p 8090:8000: the browser says localhost:8090, the app listens on 8000.
+    for host in ("localhost:8090", "127.0.0.1:8090", "[::1]:8090"):
+        assert request(server, "GET", "/api/songs", host=host)[0] == 200
+
+
+def test_in_a_container_the_phones_are_told_what_to_type(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server.network = True
+    monkeypatch.setenv("WOODSHED_CONTAINER", "1")  # the container's own address means nothing to a phone
+    server._addresses = None
+    state = json.loads(request(server, "GET", "/api/songs")[2])
+    assert state["addresses"] == [] and state["container"] is True
+    monkeypatch.setenv("WOODSHED_PUBLIC_URL", "http://192.168.1.20:8000/, http://studio.local:8000")
+    server._addresses = None
+    state = json.loads(request(server, "GET", "/api/songs")[2])
+    assert state["addresses"] == ["http://192.168.1.20:8000/", "http://studio.local:8000/"]
 
 
 def test_only_loopback_names_without_the_network(server: app.AppServer) -> None:

@@ -118,25 +118,69 @@ chord timeline (`.lab`) or **JSON**, or print a one-page chart for the music sta
 
 ## Install
 
-> **Alpha.** woodshed works on real songs today, but expect rough edges. A Docker image (nothing to
-> install but Docker) is on the way.
+> **Alpha.** woodshed works on real songs today, but expect rough edges.
 
-You need Python 3.10 or newer, and [ffmpeg](https://ffmpeg.org/download.html) to read MP3, AAC and
-video files (WAV, FLAC and Ogg work without it).
+No GPU needed, and no Python to install first. Pick one of the three ways below.
+
+### With Docker: Windows, macOS or Linux
+
+Nothing to install but [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker
+on Linux). In a new folder, save [`compose.yaml`](compose.yaml), then:
+
+```bash
+mkdir woodshed            # your songs and their practice pages go here
+docker compose up -d
+```
+
+Open **http://localhost:8000**, drop a song on the page, and play. The first analysis downloads the
+models (about 160 MB, and 1.2 GB more for the lyrics) into a Docker volume, once. The container
+needs no sound card: your browser plays the music.
+
+Without Compose: `docker run -d -p 127.0.0.1:8000:8000 -v "$PWD/woodshed:/library" -v woodshed-cache:/cache ghcr.io/laugiov/woodshed`
+(in PowerShell, `${PWD}` instead of `$PWD`). On Linux, if the page says it cannot write the
+library, give the folder to the container's user: `sudo chown 1000:1000 woodshed`.
+
+### On Linux or macOS
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/install.sh | sh
+```
+
+The script installs [uv](https://docs.astral.sh/uv/) if needed, then woodshed with its own Python
+and the CPU build of PyTorch, in your home folder: no sudo, nothing system-wide (uv adds its
+folder to your PATH). On Linux it adds
+woodshed to the applications menu. It tells you if [ffmpeg](https://ffmpeg.org/download.html) is
+missing (to read MP3, AAC and video files; WAV and FLAC work without it).
+
+### On Windows
+
+In PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/install.ps1 | iex"
+```
+
+The same as above for your user, no administrator rights; ffmpeg comes with winget when it is
+available, and woodshed gets a Start menu shortcut.
+
+Uninstall: `uv tool uninstall woodshed`. Read the scripts before running them if you like:
+[install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1).
+
+### By hand
+
+With Python 3.10 or newer, [pipx](https://pipx.pypa.io/) and ffmpeg:
 
 ```bash
 pipx install "woodshed[stems] @ git+https://github.com/laugiov/woodshed" \
   --pip-args="--extra-index-url https://download.pytorch.org/whl/cpu"
 ```
 
-The `stems` extra brings PyTorch and the models that split the instruments and find the beats. The
-extra index gets the CPU build of PyTorch (about 1.4 GB installed) instead of the GPU build (around
-5 GB on Linux), which woodshed doesn't need. The models download once, on first use, then everything works
-offline. Without the extra, woodshed still reads the chords from the full mix, but there are no
-instrument tracks or parts.
+The `stems` extra brings PyTorch and the models that split the instruments and find the beats (the
+extra index gets the CPU build of PyTorch, about 1.4 GB, instead of the 5 GB GPU build). Without
+it, woodshed still reads the chords from the full mix, but there are no instrument tracks or parts.
 
-No GPU needed: on a recent laptop CPU a song takes about twice its length to analyse. The page
-opens with the full mix after a few seconds, and the instrument tracks follow.
+On a recent laptop a song takes about twice its length to analyse. The page opens with the full mix
+after a few seconds, and the instrument tracks follow.
 
 ## Use it
 
@@ -164,6 +208,10 @@ then open it on every phone:
 ```bash
 woodshed app --host 0.0.0.0 --allow-network
 ```
+
+With Docker, publish the port to the network instead: in `compose.yaml`, `"8000:8000"` in place of
+`"127.0.0.1:8000:8000"`. To place the words of a song from Docker:
+`docker compose exec woodshed woodshed lyrics "/library/Song.woodshed" /library/words.txt`.
 
 Useful options: `--bpm 65` settles a half-time or double-time doubt, `--beats-per-bar 3` for a
 waltz, `--sevenths` adds 7th chords, `--offline` never downloads models. `woodshed --help` lists

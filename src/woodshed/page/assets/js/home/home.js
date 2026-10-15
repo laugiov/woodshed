@@ -124,7 +124,9 @@
     for (const s of data.songs) titles[s.folder] = s.title;
     $("phones").textContent = data.addresses && data.addresses.length
       ? "Bandmates on the same Wi-Fi: open " + data.addresses.join(" or ") + " on their phones, and set them not to lock their screen while you play."
-      : "Phones of the band: start the library with  woodshed app --host 0.0.0.0 --allow-network  and they can follow.";
+      : data.container
+        ? "Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how."
+        : "Phones of the band: start the library with  woodshed app --host 0.0.0.0 --allow-network  and they can follow.";
     const jobs = data.jobs;
     const byFolder = new Map(jobs.filter((j) => j.page).map((j) => [j.page, j]));
     const rows = data.songs.map((s) => row(s, byFolder.get(s.folder)));

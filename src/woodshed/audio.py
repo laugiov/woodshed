@@ -114,6 +114,9 @@ def _load_with_ffmpeg(src: Path, sr: int, channels: int) -> npt.NDArray[np.float
         proc = subprocess.run(cmd, capture_output=True, check=False, timeout=TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as exc:
         raise AudioError(f"{src.name}: decoding took longer than {TIMEOUT_SECONDS} s") from exc
+    if proc.returncode < 0:  # killed by a signal: a bug of this ffmpeg build, not of the file alone
+        signal = -proc.returncode
+        raise AudioError(f"{src.name}: ffmpeg crashed reading it (signal {signal}); try another ffmpeg version")
     if proc.returncode != 0:
         if b"not on whitelist" in proc.stderr:
             raise AudioError(f"{src.name}: this kind of file is not supported (not an audio or video container)")

@@ -27,7 +27,7 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen mypy src tests scripts
-      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml
+      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml .github/workflows/install.yml .github/workflows/docker.yml
 
   tests:
     name: Tests, ${{ matrix.os }}, Python ${{ matrix.python }}
@@ -48,7 +48,12 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      # The distribution's ffmpeg on Linux, as users have it (the action's static 7.0.2 build crashes
+      # on AAC in MPEG-TS); the action's build on macOS and Windows.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - if: runner.os != 'Linux'
+        uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
       - run: uv run --frozen --group dev pytest -m "not page" --cov --cov-report=term-missing:skip-covered -q
 
   page:
@@ -62,7 +67,13 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: "3.13"
-      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      # ffmpeg, and a sound server with a null output: without an audio device Firefox refuses to
+      # play the tracks ("OnMediaSinkAudioError").
+      - run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=silence
+          pactl set-default-sink silence
       - run: uv run --frozen --group dev playwright install --with-deps chromium firefox
       - run: uv run --frozen --group dev pytest -q -m page --browser chromium --browser firefox
 
@@ -99,7 +110,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
       # Saved only after the real tests pass, so only with both models complete. Bump the key
       # when a model changes.
       - id: models

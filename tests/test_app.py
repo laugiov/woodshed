@@ -205,6 +205,8 @@ def test_another_host_name_is_refused(server: app.AppServer) -> None:
     # DNS rebinding: a site whose name now points to 127.0.0.1 still sends its own Host.
     status, _, _ = request(server, "GET", "/api/songs", host="evil.example:80")
     assert status == 421
+    status, _, _ = request(server, "GET", "/api/songs", host=f"evil.example:{server.port}")
+    assert status == 421
     status, _, _ = request(
         server, "POST", "/api/songs?name=x.wav", b"data", {app.TOKEN_HEADER: server.token}, host="evil.example"
     )
@@ -626,3 +628,18 @@ def test_a_taken_port_still_puts_the_stop_signal_back(tmp_path: Path, monkeypatc
     finally:
         busy.server_close()
     assert handlers == [signal.SIGTERM, signal.SIGTERM]
+
+
+def test_in_docker_a_library_the_container_cannot_write_says_what_to_do(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from woodshed import cli
+
+    def refused(*args: Any, **kwargs: Any) -> None:
+        raise PermissionError(13, "Permission denied", "/library/songs")
+
+    monkeypatch.setattr("woodshed.app.serve", refused)
+    monkeypatch.setenv("WOODSHED_CONTAINER", "1")
+    assert cli.main(["app", "/library", "--no-open"]) != 0
+    err = capsys.readouterr().err
+    assert "Permission denied" in err and "mkdir" in err and "chown" in err

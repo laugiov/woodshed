@@ -58,6 +58,9 @@ def test_common_formats_pass_the_whitelist(tmp_path: Path, ext: str, codec: str)
     cmd = ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=1", "-c:a", codec, "-y", str(out)]
     if subprocess.run(cmd, check=False).returncode != 0:
         pytest.skip(f"this ffmpeg cannot encode {codec}")
+    plain = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-f", "null", "-"], check=False)
+    if plain.returncode < 0:  # the static ffmpeg 7.0.2 build crashes on AAC in MPEG-TS: not woodshed's doing
+        pytest.skip(f"this ffmpeg crashes decoding {codec} in .{ext}")
     assert abs(audio.load(out).size / audio.SR - 1.0) < 0.1
 
 
@@ -71,6 +74,17 @@ def test_a_decoder_that_hangs_is_an_audio_error(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr("woodshed.audio.shutil.which", lambda _name: "/usr/bin/ffmpeg")
     monkeypatch.setattr("woodshed.audio.subprocess.run", hang)
     with pytest.raises(AudioError, match="longer than"):
+        audio.load(song)
+
+
+def test_a_decoder_that_crashes_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    song = tmp_path / "song.wav"
+    sf.write(song, np.zeros(22050), 22050)
+    crashed = subprocess.CompletedProcess(args=["ffmpeg"], returncode=-11, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr("woodshed.audio.shutil.which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr("woodshed.audio.subprocess.run", lambda *a, **k: crashed)
+    with pytest.raises(AudioError, match="ffmpeg crashed"):
         audio.load(song)
 
 

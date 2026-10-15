@@ -16,6 +16,8 @@ htmlcov/
 
 # Never published: recordings, references, generated practice rooms
 private/
+# The library of compose.yaml (your songs and pages)
+/woodshed/
 .woodshed-cache/
 *.woodshed/
 *.wav

@@ -1,0 +1,77 @@
+name: Install
+
+# The ways a musician installs woodshed, tried on real machines: the install scripts on Linux,
+# macOS and Windows (from this checkout), then a page built from the demo song; and the Docker image.
+
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/install.*", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+  pull_request:
+    paths: ["scripts/install.*", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unix:
+    name: Install script, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Install woodshed with the script
+        run: WOODSHED_SOURCE="$PWD" sh scripts/install.sh
+      - name: A page from the demo song (the mix only, the models are not downloaded here)
+        run: |
+          "$(uv tool dir --bin)/woodshed" "demo/As I Am.mp3" --no-stems --no-open -o out
+          test -f "out/As I Am.woodshed/index.html"
+
+  windows:
+    name: Install script, windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      - name: Install woodshed with the script
+        shell: pwsh
+        run: |
+          $env:WOODSHED_SOURCE = (Get-Location).Path
+          ./scripts/install.ps1
+      - name: A page from the demo song, and the Start menu shortcut
+        shell: pwsh
+        run: |
+          $exe = Join-Path (uv tool dir --bin).Trim() "woodshed.exe"
+          & $exe "demo/As I Am.mp3" --no-stems --no-open -o out
+          if ($LASTEXITCODE -ne 0) { throw "the page was not built" }
+          if (-not (Test-Path "out/As I Am.woodshed/index.html")) { throw "no page" }
+          $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
+          if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: docker build -t woodshed:test .
+      - name: The library serves its home page
+        run: |
+          mkdir library
+          sudo chown 1000:1000 library
+          docker run -d --name woodshed -p 127.0.0.1:8000:8000 -v "$PWD/library:/library" woodshed:test
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8000/ > /dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/ | grep -q "woodshed"
+          docker run --rm --entrypoint woodshed woodshed:test --version
+      - if: failure()
+        run: docker logs woodshed
