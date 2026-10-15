@@ -125,20 +125,34 @@ No GPU needed, and no Python to install first. Pick one of the three ways below.
 ### With Docker: Windows, macOS or Linux
 
 Nothing to install but [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker
-on Linux). In a new folder, save [`compose.yaml`](compose.yaml), then:
+on Linux). On Linux or macOS, one command downloads `compose.yaml` into `~/woodshed-docker`, starts
+woodshed, waits until it answers and opens your browser:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/install-docker.sh | sh
+```
+
+Or by hand (also on Windows): in a new folder, save [`compose.yaml`](compose.yaml), then:
 
 ```bash
 mkdir woodshed            # your songs and their practice pages go here
-docker compose up -d
+docker compose up -d --wait
 ```
 
-Open **http://localhost:8000**, drop a song on the page, and play. The first analysis downloads the
-models (about 160 MB, and 1.2 GB more for the lyrics) into a Docker volume, once. The container
-needs no sound card: your browser plays the music.
+Open **http://localhost:8000**, drop a song on the page, and play. The first start pulls the image
+(about 2 GB). The first analysis downloads the models (about 160 MB, and 1.2 GB more for the lyrics)
+into a Docker volume, once; a song then takes about twice its length to analyse, on a CPU. The
+container needs no sound card: your browser plays the music.
 
-Without Compose: `docker run -d -p 127.0.0.1:8000:8000 -v "$PWD/woodshed:/library" -v woodshed-cache:/cache ghcr.io/laugiov/woodshed`
-(in PowerShell, `${PWD}` instead of `$PWD`). On Linux, if the page says it cannot write the
-library, give the folder to the container's user: `sudo chown 1000:1000 woodshed`.
+Stop it with `docker compose down` (your songs and the models stay). `docker compose down --volumes`
+also removes the models.
+
+On Linux, if your user id is not 1000 (`id -u`), start with
+`WOODSHED_UID=$(id -u) WOODSHED_GID=$(id -g) docker compose up -d` (the install script does this for
+you).
+
+Without Compose: `docker run -d -p 127.0.0.1:8000:8000 --user "$(id -u):$(id -g)" -v "$PWD/woodshed:/library" -v woodshed-cache:/cache ghcr.io/laugiov/woodshed`
+(in PowerShell, `${PWD}` instead of `$PWD`, and no `--user`).
 
 ### On Linux or macOS
 
@@ -191,6 +205,8 @@ git clone https://github.com/laugiov/woodshed && cd woodshed
 woodshed "demo/As I Am.mp3"                                # the page opens in your browser
 woodshed lyrics "demo/As I Am.woodshed" "demo/As I Am.txt"  # and the words on the chart
 ```
+
+With Docker, drop `demo/As I Am.mp3` on the library page (http://localhost:8000).
 
 Then on your own songs:
 

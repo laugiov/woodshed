@@ -44,16 +44,21 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 woodshed \
     && mkdir -p /library /cache \
-    && chown woodshed:woodshed /library /cache
+    && chown woodshed:woodshed /library /cache \
+    && chmod 1777 /cache
 COPY --from=build /opt/woodshed /opt/woodshed
 ENV PATH=/opt/woodshed/bin:$PATH \
     WOODSHED_CACHE=/cache \
     WOODSHED_CONTAINER=1 \
     NUMBA_CACHE_DIR=/cache/numba \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HF_HUB_VERBOSITY=error
 USER woodshed
 VOLUME ["/library", "/cache"]
 EXPOSE 8000
+# "healthy" once the library answers: `docker compose ps` and `up --wait` then say when it is ready.
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 \
+    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/', timeout=2)"]
 ENTRYPOINT ["woodshed"]
 # Inside the container every visitor comes through Docker's network, never from loopback: the app
 # must accept them, and their uploads. Who can reach it is decided by the published port (compose.yaml).

@@ -78,8 +78,17 @@ jobs:
           mkdir library
           sudo chown 1000:1000 library
           docker run -d --name woodshed -p 127.0.0.1:8000:8000 -v "$PWD/library:/library" woodshed:test
-          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8000/ > /dev/null && break; sleep 1; done
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' woodshed)" = healthy ] && break
+            sleep 1
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' woodshed)" = healthy
           curl -sf http://127.0.0.1:8000/ | grep -q "woodshed"
           docker run --rm --entrypoint woodshed woodshed:test --version
+      - name: Another user id can write the library and the cache
+        run: |
+          mkdir other && sudo chown 4321:4321 other
+          docker run --rm --user 4321:4321 -v "$PWD/other:/library" -v woodshed-other-cache:/cache \
+            --entrypoint sh woodshed:test -c 'touch /library/ok /cache/ok'
       - if: failure()
         run: docker logs woodshed
