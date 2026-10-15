@@ -168,6 +168,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .pop .alt .tag { margin-left: 6px; font: 600 11px var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .pop .alt.in-use .an { color: var(--accent); }
 .shape-card .barre-tag { color: var(--warn); font-weight: 700; }
+.back-to-song { position: fixed; right: 18px; bottom: calc(var(--dock-h, 96px) + 68px); z-index: 16; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
 .fixed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; margin-left: 3px; vertical-align: super; }
 .variation { margin-left: 64px; font-size: 13.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .variation .ch { font-size: 19px; display: inline; }
@@ -282,7 +283,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .alt .acts button { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 7px; cursor: pointer; font-size: 12.5px; }
 .alt .acts button.pick { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 14px; z-index: 40; max-width: calc(100vw - 32px); }
-.stage { position: fixed; inset: 0; z-index: 50; background: var(--bg); color: var(--ink); display: grid; grid-template-rows: auto 1fr auto auto auto; padding: calc(18px + env(safe-area-inset-top, 0px)) 24px calc(18px + env(safe-area-inset-bottom, 0px)); }
+.stage { position: fixed; inset: 0; z-index: 50; background: var(--bg); color: var(--ink); display: grid; grid-template-rows: auto 1fr auto auto; padding: calc(18px + env(safe-area-inset-top, 0px)) 24px calc(18px + env(safe-area-inset-bottom, 0px)); }
 .stage-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 16px; font-variant-numeric: tabular-nums; }
 .stage-mid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: center; }
 .stage-now { font-family: var(--font-chord); font-weight: 700; font-size: clamp(120px, 26vw, 340px); line-height: 0.8; }
@@ -424,6 +425,13 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .st-next-song .st-next-btn { font-size: 18px; padding: 10px 18px; }
 /* The stage's own controls, for a finger on a tablet or a phone: 56 px targets at least. */
 .stage-ctl { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 12px; }
+/* The top of the stand: where we are, then the next song, the theme and the way out, away from Play. */
+.st-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.st-tools .st-next-song { margin: 0; min-height: 0; font-size: 13px; }
+.st-tools .st-next-btn { font-size: 13px; padding: 6px 10px; }
+.st-follow { display: none; font-weight: 700; color: var(--accent); }
+body.following .st-follow { display: inline; }
+@media (hover: none) { .kbd-hint { display: none; } }
 .st-btn { min-width: 84px; min-height: 56px; padding: 0 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 24px var(--font-body); display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; touch-action: manipulation; }
 .st-btn small { font-size: 14px; color: var(--muted); }
 .st-btn.st-play { min-width: 120px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-size: 28px; }

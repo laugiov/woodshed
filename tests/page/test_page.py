@@ -844,3 +844,39 @@ def test_space_still_presses_a_button_in_a_menu(open_page: Any) -> None:
     o.page.keyboard.press(" ")  # a keyboard user picks a track in the menu
     until(o, "Woodshed.app.store.get().track === 'minus-drums'")
     assert o.js("Woodshed.debug().playing") is False
+
+
+def test_reading_ahead_pauses_following_with_a_way_back_to_the_song(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 1000, "height": 420})
+    o.js(PEEK)
+    o.page.get_by_test_id("play").click()
+    until(o, IN_BAND)
+    o.page.mouse.move(40, 100)
+    for _ in range(6):  # the musician scrolls on, reading ahead
+        o.page.mouse.wheel(0, 400)
+        o.page.wait_for_timeout(50)
+    back = o.page.get_by_test_id("back-to-song")
+    expect(back).to_be_visible(timeout=4000)  # following waits, and says how to come back
+    at = o.js("scrollY")
+    o.page.wait_for_timeout(2500)  # a bar or more: the page does not pull the reader back
+    assert o.js("scrollY") == at
+    back.click()
+    until(o, IN_BAND, 3.0)
+    expect(back).to_be_hidden()
+
+
+def test_following_comes_back_when_the_bar_playing_is_where_the_page_would_put_it(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 1000, "height": 420})
+    o.js("Woodshed.app.setBpm(Woodshed.app.minBpm)")  # slow: the bar playing stays while the test scrolls
+    o.js(PEEK)
+    o.page.get_by_test_id("play").click()
+    until(o, IN_BAND)
+    o.page.wait_for_timeout(700)  # the page's smooth scroll ends
+    o.page.mouse.move(40, 100)
+    o.page.mouse.wheel(0, -120)  # reading the bars before: the bar playing drops low on the screen
+    back = o.page.get_by_test_id("back-to-song")
+    expect(back).to_be_visible(timeout=4000)
+    o.page.mouse.wheel(0, 90)  # back where the page keeps the bar playing
+    expect(back).to_be_hidden(timeout=4000)  # following again, by itself

@@ -277,3 +277,19 @@ def test_the_chordpro_rows_are_the_same_in_the_page_and_in_python_for_hard_cases
     assert page == python
     body = python.split("{start_of_", 1)[1]
     assert "\n#" not in body and "{five}" not in body  # no line read as a comment, no brace as a directive
+
+
+def test_a_jump_to_the_next_part_does_not_light_the_line_before_it(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-named")
+    data = json.loads((o.folder / "lyrics.json").read_text())
+    bar = o.js("Woodshed.current.bars[1].start - Woodshed.current.bars[0].start")
+    for w in data["lines"][1]["words"]:  # the chorus line now starts a bar into the chorus
+        if w["start"] is not None:
+            w["start"], w["end"] = w["start"] + bar, w["end"] + bar
+    o.js(f"Woodshed.app.words = Woodshed.lyrics(Woodshed.current, {json.dumps(data)})")
+    per = o.js("Woodshed.current.per")
+    chorus = o.js("Woodshed.current.bars[4].start")
+    ended = o.js(f"Woodshed.app.lineNow({{time: {chorus} - 0.2, beat: {4 * per - 1}}}).now")
+    jumped = o.js(f"Woodshed.app.lineNow({{time: {chorus} + 0.1, beat: {4 * per}}}).now")
+    assert ended == 0  # the verse's last line still held, in the verse
+    assert jumped == -1  # the chorus has started: the verse's line is over, nothing lit yet

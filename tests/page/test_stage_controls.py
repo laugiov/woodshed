@@ -113,3 +113,22 @@ def test_a_phone_held_sideways_keeps_the_controls_on_screen(browser: Browser, pa
     for testid in ("stage-prev", "stage-play", "stage-next-part"):
         assert on_top(page, testid), testid
     assert page.evaluate("document.getElementById('stage').scrollHeight <= innerHeight")
+
+
+def test_on_a_laptop_screen_the_stage_fits_and_has_its_own_theme_button(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.set_viewport_size({"width": 1366, "height": 768})
+    o.page.get_by_test_id("stage-open").click()
+    play = o.page.get_by_test_id("stage-play").bounding_box()
+    assert play is not None and play["y"] + play["height"] <= 768  # the controls on screen, nothing below
+    theme = o.js("document.documentElement.dataset.theme")
+    o.page.get_by_test_id("stage-theme").click()  # a bright room: no need to leave the stage
+    assert o.js("document.documentElement.dataset.theme") != theme
+    assert " ".join(o.page.get_by_test_id("stage-exit").inner_text().split()) == "Exit stage mode (Esc)"
+
+
+def test_a_touch_screen_is_not_told_about_the_escape_key(browser: Browser, pages_root: str) -> None:
+    page = tablet(browser, pages_root)
+    page.get_by_test_id("stage-open").click()
+    assert " ".join(page.get_by_test_id("stage-exit").inner_text().split()) == "Exit stage mode"  # as shown
+    page.context.close()

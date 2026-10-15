@@ -204,7 +204,7 @@
 
     function paintLyrics(s) {
       if (app.sheetMode(s) !== "lyrics") return;
-      const k = app.words.lineAt(s.time).now;
+      const k = app.lineNow(s).now;
       document.querySelectorAll(".lline").forEach((el) => el.classList.toggle("cur", +el.getAttribute("data-line") === k));
     }
 
@@ -422,13 +422,29 @@
       if (full) renderHarmony(s);
       lastPass = pass;
       if (s.playing && (full || changed.has("beat"))) keepInView(s);
+      if (changed.has("playing")) {
+        if (s.playing) paused = false; // a new play: the page follows again
+        else back.hidden = true;
+      }
     });
 
     // While the song plays the page scrolls with it: the bar or the sung line playing stays in the
     // upper part of the screen, above the dock. Only while the chart is on screen (a phone reading the
-    // instrument panel under it stays there), and a scroll by hand wins for a few seconds.
-    let byHandAt = -Infinity;
-    const byHand = () => (byHandAt = performance.now());
+    // instrument panel under it stays there). A scroll by hand wins: following waits while the
+    // musician reads elsewhere, with a button back to the song, and comes back by itself when the bar
+    // playing is where the page would put it (the music reached what they read, or they scrolled
+    // back to it), on play, and on a jump they ask for.
+    let paused = false;
+    const byHand = () => (paused = true);
+    app.followAgain = () => (paused = false);
+    const back = h("button", { type: "button", class: "btn back-to-song", hidden: "", "data-testid": "back-to-song" }, W.t("Back to the song"));
+    back.addEventListener("click", () => {
+      paused = false;
+      followed = null;
+      keepInView(store.get(), true);
+    });
+    document.body.appendChild(back);
+    W.onLang.push(() => (back.textContent = W.t("Back to the song")));
     const inside = (e, sel) => e.target instanceof Element && !!e.target.closest(sel);
     // Dragging the tempo slider or the waveform of the dock is not a scroll.
     const scrolled = (e) => inside(e, "#dock, input") || byHand();
@@ -443,13 +459,24 @@
       if (e.target === document.documentElement) byHand(); // the scrollbar
     });
     let followed = null;
-    function keepInView(s) {
+    // `asked`: the musician pressed Back to the song, wherever the page is.
+    function keepInView(s, asked) {
       // In the Lyrics view an intro or a solo is a free bar, between the sung lines.
       const el = app.sheetMode(s) === "lyrics" ? document.querySelector(".bar[data-free].cur") || document.querySelector(".lline.cur") : document.querySelector(".bar.cur");
-      if (!el || el === followed || s.stage || performance.now() - byHandAt < 4000) return;
+      if (!el || s.stage) return;
       const seen = window.innerHeight - $("dock").offsetHeight;
+      if (paused) {
+        const box = el.getBoundingClientRect();
+        if (!(box.top >= seen * 0.12 && box.bottom <= seen * 0.75)) {
+          back.hidden = !s.playing;
+          return;
+        }
+        paused = false; // the bar playing is where the eyes are
+      }
+      back.hidden = true;
+      if (el === followed) return;
       const sheet = $("sheet").getBoundingClientRect();
-      if (sheet.bottom <= 0 || sheet.top >= seen) return; // the musician reads something else
+      if (!asked && (sheet.bottom <= 0 || sheet.top >= seen)) return; // the musician reads something else
       followed = el;
       const r = el.getBoundingClientRect();
       if (r.top >= seen * 0.12 && r.bottom <= seen * 0.75) return;

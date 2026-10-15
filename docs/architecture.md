@@ -385,7 +385,7 @@ The load order is fixed in `template.html`, and a test checks that every script 
 
 ### Following the song
 
-While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the bar or the sung line playing stays in the upper part of the screen, above the dock. A scroll by hand (wheel, touch, scroll keys, the scrollbar) wins for four seconds; the page's own keys (a pedal's Page Down) do not count as one. It does not move a page whose chart is off screen (a phone reading the instrument panel under it), nor in stage mode.
+While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the bar or the sung line playing stays in the upper part of the screen, above the dock. A scroll by hand (wheel, touch, scroll keys, the scrollbar) wins: following waits while the musician reads elsewhere, a "Back to the song" button shows, and following comes back by itself when the music reaches what they are reading. The page's own keys (a pedal's Page Down) do not count as a scroll. It does not move a page whose chart is off screen (a phone reading the instrument panel under it), nor in stage mode.
 
 ### Audio playback and time-stretch
 

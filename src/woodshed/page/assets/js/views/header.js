@@ -155,7 +155,7 @@
       box.hidden = !words;
       if (!words) return;
       const { rows } = app.words.rows();
-      const at = app.words.lineAt(s.time);
+      const at = app.lineNow(s);
       const k = at.now;
       // Between lines (a solo), no line is lit: the next ones wait, with the part they start.
       const from = k >= 0 ? k : at.next;

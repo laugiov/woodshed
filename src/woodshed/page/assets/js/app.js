@@ -121,6 +121,17 @@
     // What the chart shows: the words for those who sing or play chords, the grid for bass and drums.
     app.sheetMode = (s) => (!app.words ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
 
+    // The sung line lit now: the last one begun, held a bar after its end for a long note, unless a
+    // new part has started since (a jump to the next part does not light the line before it).
+    app.lineNow = (s) => {
+      if (!app.words) return { now: -1, next: 0 };
+      const at = app.words.lineAt(s.time);
+      const ln = at.now >= 0 ? app.words.lines[at.now] : null;
+      const part = app.sectionOf(Math.floor(s.beat / song.per));
+      if (ln && part && s.time > ln.end && song.barAt(ln.start + 0.15) < part.start) return { now: -1, next: at.next };
+      return at;
+    };
+
     // The song's sections, as the analysis named them.
     app.sections = () => (app.words && app.words.sections) || meta.sections; // named by the words, when placed
     app.sectionOf = (u) => {
@@ -161,11 +172,17 @@
       const next = partStarts().find((b) => b > curBar());
       if (next !== undefined) app.seekBar(next);
     };
+    // A jump the musician asks for: the page follows the music again (views/chart.js).
     app.seekBar = function seekBar(u) {
       if (following()) return leaderMoves();
+      if (app.followAgain) app.followAgain();
       transport.seek(barStart(Math.max(0, Math.min(song.bars.length - 1, u))));
     };
-    app.seekTime = (t) => (following() ? leaderMoves() : transport.seek(Math.max(0, t)));
+    app.seekTime = (t) => {
+      if (following()) return leaderMoves();
+      if (app.followAgain) app.followAgain();
+      transport.seek(Math.max(0, t));
+    };
     app.setBpm = (v) => setBpm(v);
     app.setLoop = (range, on) => setLoop(range, on);
     // A count-in in progress: pressing play again cancels it.
@@ -548,6 +565,7 @@
     app.openWords = () => words.open();
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
+    app.chart = chart; // its bars, for the tests and the console
     const dock = views[3];
     for (const v of views) v.render(store.get());
     // The other language, chosen while playing: every view says it again, the music goes on.

@@ -65,7 +65,8 @@
     "Next song of the set (served by woodshed app)": "Morceau suivant du set (avec woodshed app)",
     "Bluetooth page-turner pedals work too: they send Space, arrows or Page Up and Page Down.":
       "Les pédales tourne-page Bluetooth marchent aussi : elles envoient Espace, les flèches ou Page préc. et Page suiv.",
-    "Exit stage mode (Esc)": "Quitter le mode scène (Échap)",
+    "Exit stage mode": "Quitter le mode scène",
+    "(Esc)": "(Échap)",
     Playback: "Lecture",
     "Previous part": "Partie précédente",
     Part: "Partie",
@@ -211,6 +212,7 @@
     "bar {n} of {len}": "mesure {n} sur {len}",
     "{part} next bar": "{part} à la prochaine mesure",
     "{part} in {n} bars": "{part} dans {n} mesures",
+    "Back to the song": "Revenir au morceau",
     "Bar {n}: which one do you hear?": "Mesure {n} : lequel entends-tu ?",
     "The chart keeps {chord}: the bars around it point to it. Heard alone, this bar sounds more like {top}.":
       "La grille garde {chord} : les mesures autour y mènent. Écoutée seule, cette mesure sonne plutôt comme {top}.",
