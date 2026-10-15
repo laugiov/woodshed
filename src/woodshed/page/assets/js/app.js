@@ -43,6 +43,7 @@
       time: 0, beat: 0, playing: false, transpose: 0, capo: song.capoFor(0), inst: "guitar", pos: "open",
       view: "concert", step: 1, loop: null, loopOn: false, trainer: false, countIn: false, bpm: songBpm,
       voiceType: null, stage: false, track: "mix", corrections: 0, click: false, chordSound: "guitar",
+      sheet: null, // "grid" or "lyrics"; null: as suits the instrument
     });
     app.store = store;
 
@@ -109,6 +110,11 @@
       transport.setLoop(on && range ? [barStart(range[0]), barStart(range[1] + 1)] : null);
       store.set({ loop: range, loopOn: !!(on && range) });
     }
+    // The words, when they were placed on the voice (woodshed lyrics): read with the chart as it is.
+    app.words = W.lyrics(song, window.WOODSHED_LYRICS);
+    // What the chart shows: the words for those who sing or play chords, the grid for bass and drums.
+    app.sheetMode = (s) => (!app.words ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
+
     // The song's sections, as the analysis named them.
     app.sections = () => meta.sections;
     app.sectionOf = (u) => {
@@ -134,6 +140,7 @@
       if (following()) return leaderMoves();
       transport.seek(barStart(Math.max(0, Math.min(song.bars.length - 1, u))));
     };
+    app.seekTime = (t) => (following() ? leaderMoves() : transport.seek(Math.max(0, t)));
     app.setBpm = (v) => setBpm(v);
     app.setLoop = (range, on) => setLoop(range, on);
     // A count-in in progress: pressing play again cancels it.
@@ -331,10 +338,19 @@
       app.cancelTimers();
       if (await transport.play()) {
         store.set({ playing: true });
-        oneShot = setTimeout(() => {
+        // Stop on the recording's own time: the sound starts a little after play() returns, a
+        // timer alone cut the last beat short.
+        const end = barStart(u + n);
+        const stop = () => {
+          const left = (end - transport.time) / (s.bpm / songBpm);
+          if (left > 0.03 && transport.playing) {
+            oneShot = setTimeout(stop, left * 1000);
+            return;
+          }
           transport.pause();
           store.set({ playing: false });
-        }, seconds * 1000);
+        };
+        oneShot = setTimeout(stop, seconds * 1000);
       }
     };
     app.hearArpeggio = (c) => {
@@ -469,26 +485,29 @@
 
     // Input.
     let drag = null;
+    const BARS = ".bar:not(.empty), .lline .nb[data-bar]"; // the grid's bars, the sung bars of the Lyrics view
     document.addEventListener("pointerdown", (e) => {
       if (e.target.closest(".doubt")) return;
-      const el = e.target.closest(".bar:not(.empty)");
+      const el = e.target.closest(BARS);
       if (!el) return;
-      if (following()) return leaderMoves();
+      if (following()) return e.target.closest("[data-seek]") ? undefined : leaderMoves(); // a word: its click says it
       const u = chart.barFromEl(el);
-      drag = { start: u, end: u };
+      // A press on a word seeks to the word (the click), unless it becomes a drag over bars.
+      drag = { start: u, end: u, word: !!e.target.closest("[data-seek]") };
     });
     document.addEventListener("pointermove", (e) => {
       if (!drag) return;
       const hit = document.elementFromPoint(e.clientX, e.clientY);
-      const el = hit && hit.closest(".bar:not(.empty)");
+      const el = hit && hit.closest(BARS);
       if (!el) return;
       drag.end = chart.barFromEl(el);
       if (drag.end !== drag.start) setLoop([Math.min(drag.start, drag.end), Math.max(drag.start, drag.end)], true);
     });
     document.addEventListener("pointerup", () => {
       if (!drag) return;
-      if (drag.end === drag.start) app.seekBar(drag.start);
-      else {
+      if (drag.end === drag.start) {
+        if (!drag.word) app.seekBar(drag.start);
+      } else {
         const l = store.get().loop;
         app.toast("Looping bars " + (l[0] + 1) + "–" + (l[1] + 1) + ". Press play.");
         app.seekBar(l[0]);
@@ -504,6 +523,11 @@
         return;
       }
       if (!e.target.closest("#pop") && !e.target.closest(".menu") && !e.target.closest("[data-menu-anchor]")) popups.closeAll();
+      const word = e.target.closest("[data-seek]");
+      if (word) {
+        app.seekTime(+word.getAttribute("data-seek"));
+        return;
+      }
       const loop = e.target.closest("[data-loop]");
       if (loop) {
         app.loopSection(+loop.getAttribute("data-loop"));

@@ -381,6 +381,61 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .st-next-song { text-align: center; color: var(--muted); font-size: 18px; margin-top: 10px; min-height: 1.4em; }
 body.following #playBtn { opacity: 0.45; }
 
+/* Lyrics: chords above the words, bar lines in the words (chart and stage mode). A word is a
+   column (its chords over it), as wide as the wider of the two: chords never overlap. A bar
+   (.nb) moves to the next row whole when it does not fit. */
+.lline { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: end; gap: 10px; padding: 8px 6px 8px; border-radius: 8px; }
+.lline .t { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); padding: 0 0 4px; background: none; border: 0; text-align: left; cursor: pointer; }
+.lline .t:hover { color: var(--accent); }
+.lline.cur { background: var(--accent-soft); }
+.lline.check .wt { text-decoration: underline dotted 1px var(--warn); text-underline-offset: 6px; }
+.lwords { font-size: 21px; line-height: 1.15; }
+.lwords .nb { display: inline-block; vertical-align: bottom; margin: 15px 0 4px; }
+.lw { display: inline-flex; flex-direction: column; vertical-align: bottom; cursor: pointer; }
+.lw .lc { min-height: 1.2em; font-family: var(--font-chord); font-size: 1.05em; font-weight: 700; color: var(--ink); white-space: nowrap; padding-right: 0.35em; }
+.lw .lc .doubt { font-size: 1em; }
+.lw.gap { color: var(--muted); cursor: default; }
+.lw .push { font-family: var(--font-body); font-size: 0.45em; font-weight: 600; color: var(--muted); margin-left: 2px; vertical-align: super; }
+.lwords .bl { display: inline-block; position: relative; width: 2px; height: 2.3em; background: var(--muted); margin: 0 8px 0 10px; vertical-align: bottom; }
+.lwords .nb:first-child .bl { margin-left: 0; }
+.lwords .bl i { position: absolute; top: -15px; left: 0; font: 11px var(--font-mono); color: var(--muted); font-style: normal; }  /* over the bar line, clear of the chord */
+.lwords .bv { font-style: italic; color: var(--muted); }
+.lline .nb[data-bar] { touch-action: pan-y; user-select: none; }
+.lline .nb.inloop { box-shadow: inset 0 -3px 0 var(--accent); border-radius: 2px; }
+#stage.st-lyrics .stage-mid { grid-template-columns: minmax(220px, 0.8fr) minmax(0, 2fr); grid-template-areas: "now words" "next words"; align-items: center; }
+#stage.st-lyrics .stage-mid > div:first-child { grid-area: now; }
+#stage.st-lyrics .stage-next { grid-area: next; }
+#stage.st-lyrics .stage-lyrics { grid-area: words; }
+#stage.st-lyrics .stage-now { font-size: clamp(80px, min(15vw, 22vh), 220px); }
+#stage.st-voice .stage-mid { grid-template-columns: minmax(0, 1fr); }
+#stage.st-voice .stage-mid > :not(.stage-lyrics) { display: none; }
+.stage-lyrics { padding-right: 32px; min-width: 0; overflow: hidden; }
+.stage-lyrics .lw { cursor: default; }
+.stage-lyrics .nb { display: inline; margin: 0; }  /* no bar lines on the stand: the words flow */
+.stage-lyrics .st-line .lwords { font-size: clamp(24px, min(3.6vw, 6vh), 54px); }
+.stage-lyrics .st-line.later { opacity: 0.8; }
+.stage-lyrics .st-line.later .lwords { font-size: clamp(20px, min(2.9vw, 4.8vh), 43px); }
+#stage.st-voice .stage-lyrics .st-line .lwords { font-size: clamp(26px, min(5vw, 6.5vh), 72px); }
+#stage.st-voice .stage-lyrics .lw .lc { font-size: 0.5em; min-height: 1.2em; color: var(--muted); }
+.st-progress { height: 5px; border-radius: 3px; background: var(--line); margin: 4px 0 6px; }
+.st-progress i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.st-next-part { font-family: var(--font-chord); font-weight: 700; font-size: clamp(18px, min(2.4vw, 4vh), 30px); color: var(--warn); margin-top: 10px; }
+@media (max-width: 700px) {
+  #stage.st-lyrics .stage-mid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "now" "words"; gap: 8px; }
+  #stage.st-lyrics .stage-next { display: none; }
+  #stage.st-lyrics .stage-now { font-size: clamp(56px, 18vw, 96px); }
+  .stage-lyrics { padding-right: 0; }
+  .lline { grid-template-columns: 40px minmax(0, 1fr); gap: 6px; }
+  .lwords { font-size: 18px; }
+}
+@media print {
+  .lline.cur { background: none; }
+  .lline .nb.inloop { box-shadow: none; }
+  .lline { break-inside: avoid; }
+  .lline .t { color: #000; }
+  .lline.check .wt { text-decoration: none; }
+}
+
 /* Sections: a header per part of the song, and the song's form as a row of buttons. */
 .form { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
 .form-chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 999px; padding: 4px 11px; font: 600 13px var(--font-body); color: var(--ink); cursor: pointer; }

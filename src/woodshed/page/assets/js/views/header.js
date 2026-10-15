@@ -137,9 +137,43 @@
       const left = sec.end - u;
       const what = next ? next.name : k >= 0 && k === list.length - 1 ? "End" : "";
       $("stComing").textContent = what && left <= 2 ? what + (left === 1 ? " next bar" : " in " + left + " bars") : "";
+      renderLyrics(s, list);
+    }
+
+    // The words on the stand: the line sung now, a bar showing how far into it, then the next
+    // lines, with the name of the part they start. The singer gets them full width; guitar and
+    // keys next to the chords; bass and drums keep the chords and the bars.
+    function renderLyrics(s, list) {
+      const box = $("stLyrics");
+      const words = app.words && app.sheetMode(s) === "lyrics" && s.inst !== "bass" && s.inst !== "drums";
+      $("stage").classList.toggle("st-lyrics", !!words && s.inst !== "voice");
+      $("stage").classList.toggle("st-voice", !!words && s.inst === "voice");
+      box.hidden = !words;
+      if (!words) return;
+      const { rows } = app.words.rows();
+      const at = app.words.lineAt(s.time);
+      const k = at.now;
+      // Between lines (a solo), no line is lit: the next ones wait, with the part they start.
+      const from = k >= 0 ? k : at.next;
+      const shown = rows.slice(from, from + 3);
+      const out = [];
+      shown.forEach((r, i) => {
+        const sec = app.sectionOf(r.firstBar);
+        const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
+        if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, sec.name));
+        const now = i === 0 && k >= 0;
+        out.push(h("div", { class: "st-line" + (now ? " now" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
+        if (now) {
+          const span = Math.max(0.1, (rows[k + 1] ? rows[k + 1].line.start : r.line.end) - r.line.start);
+          const done = Math.max(0, Math.min(1, (s.time - r.line.start) / span));
+          out.push(h("div", { class: "st-progress", "aria-hidden": "true" }, h("i", { style: { width: (done * 100).toFixed(1) + "%" } })));
+        }
+      });
+      clear(box, out);
     }
     store.on((s, changed) => {
-      if (changed.has("stage") || (s.stage && (changed.has("beat") || changed.has("transpose") || changed.has("capo") || changed.has("bpm")))) render(s);
+      const keys = ["beat", "transpose", "capo", "bpm", "inst", "sheet", "view", "corrections"];
+      if (changed.has("stage") || (s.stage && keys.some((key) => changed.has(key)))) render(s);
     });
     return { render };
   };

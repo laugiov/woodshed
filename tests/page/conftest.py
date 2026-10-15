@@ -80,6 +80,10 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     assert match is not None
     data = json.loads(match.group(2))
     change(data["song"])
+    if data["song"].pop("_lyrics", False):
+        lyrics = lyrics_for(data["song"])
+        (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(lyrics) + ";\n")
+        (folder / "lyrics.json").write_text(json.dumps(lyrics))
     page.write_text(text[: match.start(2)] + build.script_json(data) + text[match.end(2) :], encoding="utf-8")
     return folder
 
@@ -102,7 +106,46 @@ def _no_sections(song: dict[str, Any]) -> None:
     song["sections"] = []
 
 
-VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {"sections": _two_sections, "nosections": _no_sections}
+def lyrics_for(song: dict[str, Any]) -> dict[str, Any]:
+    """Two sung lines on pop (bars 1-4, 5-6): a word at each bar start and one in between; bars 7-8
+    are not sung (an ending)."""
+    starts = [b["start"] for b in song["bars"]]
+
+    def words(bars: range, texts: list[str]) -> list[dict[str, Any]]:
+        out = []
+        for k, u in enumerate(bars):
+            half = (starts[u + 1] - starts[u]) / 2 if u + 1 < len(starts) else 1.0
+            out.append({"text": texts[2 * k], "start": starts[u], "end": starts[u] + half * 0.8})
+            out.append({"text": texts[2 * k + 1], "start": starts[u] + half, "end": starts[u] + half * 1.8})
+        return out
+
+    line: dict[str, Any] = {"tag": None, "block": 0, "backing": [], "sung": True, "check": None}
+    return {
+        "version": 1, "language": "en", "text": "", "chords": [],
+        "lines": [
+            {**line, "text": "Morning comes in on the harbour road,",
+             "words": words(range(0, 4), ["Morning", "comes", "in", "on", "the", "harbour", "road,", "yes"])},
+            {**line, "text": "the radio hums", "backing": ["hums"], "check": "placed by the order of the text",
+             "words": words(range(4, 6), ["the", "radio", "hums", "what"])},
+            {**line, "text": "not in this recording", "sung": False, "check": "not heard",
+             "words": [{"text": "not", "start": None, "end": None}]},
+        ],
+    }  # fmt: skip
+
+
+def _with_lyrics(song: dict[str, Any]) -> None:
+    song["_lyrics"] = True  # marker: the folder gets lyrics.js below
+
+
+def _lyrics_no_sections(song: dict[str, Any]) -> None:
+    _no_sections(song)
+    _with_lyrics(song)
+
+
+VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
+    "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
+    "lyrics-nosections": _lyrics_no_sections,
+}  # fmt: skip
 
 
 @pytest.fixture(scope="session")

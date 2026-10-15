@@ -78,8 +78,129 @@
       );
     }
 
+    // A sung line on its bars: each bar kept whole (a bar line, numbered, then its words), each
+    // chord above the word it lands on, a chord with no word under it over a dash, a push marked.
+    // Shared with stage mode (opts.stage: no bar lines, no seeking, no checks).
+    function lyricLine(row, s, opts) {
+      const shift = app.showShapes(s) ? s.capo : 0;
+      const mark = (p) => {
+        const name = chordNode(app.nameFor(p.chord, shift, s));
+        const push = p.push ? h("span", { class: "push" }, "push") : null;
+        if (!opts.stage && p.chord.doubt && !p.chord.fixed) {
+          const timing = p.chord.doubt.kind === "timing";
+          return h(
+            "button",
+            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": p.bar + "_" + p.index, "data-testid": "doubt", "data-kind": p.chord.doubt.kind, title: timing ? "Placement to check by ear" : "Check by ear", "aria-label": "Check this chord by ear, bar " + (p.bar + 1) },
+            name,
+            timing ? null : h("sup", null, "?"),
+            push,
+          );
+        }
+        return [name, p.chord.fixed && !opts.stage ? h("span", { class: "fixed-dot", title: "Your correction" }) : null, push];
+      };
+      const word = (item) => {
+        const checks = !opts.stage && item.chords.some((p) => p.chord.doubt && !p.chord.fixed);
+        // The chord names are for the eye: a screen reader reads the words, and the checks.
+        const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]));
+        if (item.kind === "gap") return h("span", { class: "lw gap" }, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));
+        const seek = !opts.stage && item.timed ? item.t.toFixed(3) : null;
+        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, lc, h("span", { class: "wt" }, item.text));
+      };
+      const parts = [];
+      row.bars.forEach((b, i) => {
+        const inner = [];
+        if (!opts.stage && !b.cont) inner.push(h("span", { class: "bl", "aria-hidden": "true" }, h("i", null, String(b.bar + 1))));
+        b.items.forEach((item, j) => inner.push(j ? " " : "", word(item)));
+        if (i) parts.push(" ");
+        parts.push(h("span", { class: "nb", "data-bar": b.cont ? null : b.bar }, inner));
+      });
+      const backing = row.line.backing && row.line.backing.length ? h("span", { class: "bv" }, " (" + row.line.backing.join(") (") + ")") : null;
+      return h("span", { class: "lwords" }, parts, backing);
+    }
+    app.lyricLine = lyricLine;
+
+    // Bars no sung line holds (an intro, a solo, an ending), as bars of the grid, four a row.
+    function freeRow(list, s) {
+      const cells = [];
+      for (let col = 0; col < 4; col++) {
+        const u = list[col];
+        if (u === undefined) {
+          cells.push(h("div", { class: "bar empty", "aria-hidden": "true" }));
+          continue;
+        }
+        const b = bar(u);
+        cells.push(
+          h(
+            "div",
+            { class: "bar", "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": "Bar " + (u + 1) + ": " + b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", "), "data-testid": "bar" },
+            barContent(b, u, s),
+            h("span", { class: "num" }, String(u + 1)),
+            h("span", { class: "rn" }, b.chords.map((c) => song.roman(c)).join(" ")),
+          ),
+        );
+      }
+      return h(
+        "div",
+        { class: "line", "data-testid": "line" },
+        h("div", { class: "line-label" }, h("span", { class: "t" }, fmt(bar(list[0]).start))),
+        h("div", { class: "staff four" }, h("div", { class: "plain-bar" }), cells, h("div", { class: "plain-end" })),
+      );
+    }
+
+    // The song in order: sung lines and runs of free bars, under the heads of their sections.
+    function renderLyrics(s, sections) {
+      const { rows, owner } = app.words.rows();
+      const blocks = rows.map((r) => ({ at: r.firstBar, t: r.line.start, row: r }));
+      let run = null;
+      owner.forEach((li, u) => {
+        const head = sections.some((sec) => sec.start === u);
+        if (li >= 0) run = null;
+        else if (run && run.free.length < 4 && !head) run.free.push(u);
+        else blocks.push((run = { at: u, t: bar(u).start, free: [u] }));
+      });
+      blocks.sort((x, y) => x.t - y.t);
+      const out = [];
+      let shown = -1;
+      for (const x of blocks) {
+        const k = sections.length ? song.sectionIndex(x.at, sections) : -1;
+        while (k > shown) {
+          shown++;
+          out.push(sectionHead(sections[shown], shown));
+        }
+        if (x.free) {
+          out.push(freeRow(x.free, s));
+          continue;
+        }
+        const r = x.row;
+        const last = r.bars[r.bars.length - 1].bar;
+        out.push(
+          h(
+            "div",
+            { class: "lline" + (r.line.check ? " check" : ""), "data-line": r.li, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check || null },
+            h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": "Play from " + fmt(r.line.start) + ": " + r.line.text }, fmt(r.line.start)),
+            lyricLine(r, s, { stage: false }),
+          ),
+        );
+      }
+      clear($("sheet"), out);
+      paintLyrics(s);
+    }
+
+    function paintLyrics(s) {
+      if (app.sheetMode(s) !== "lyrics") return;
+      const k = app.words.lineAt(s.time).now;
+      document.querySelectorAll(".lline").forEach((el) => el.classList.toggle("cur", +el.getAttribute("data-line") === k));
+    }
+
     function renderSheet(s) {
       const sections = app.sections();
+      if (app.sheetMode(s) === "lyrics") {
+        renderLyrics(s, sections);
+        renderForm(s);
+        renderViewControl(s);
+        paintBars(s);
+        return;
+      }
       const headAt = new Map(sections.map((sec, k) => [sec.start, [sec, k]]));
       const lines = [];
       song.song.groups.forEach((gr, g) => {
@@ -130,9 +251,19 @@
 
     function renderViewControl(s) {
       const el = $("viewCtl");
+      const mode = app.sheetMode(s);
+      const sheetCtl = app.words
+        ? h(
+            "div",
+            { class: "seg-ctl", role: "group", "aria-label": "Chart with" },
+            h("button", { type: "button", class: mode === "grid" ? "on" : "", "aria-pressed": String(mode === "grid"), "data-testid": "sheet-grid", onclick: () => store.set({ sheet: "grid" }) }, "Grid"),
+            h("button", { type: "button", class: mode === "lyrics" ? "on" : "", "aria-pressed": String(mode === "lyrics"), "data-testid": "sheet-lyrics", onclick: () => store.set({ sheet: "lyrics" }) }, "Lyrics"),
+          )
+        : null;
       if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
         clear(
           el,
+          sheetCtl,
           h(
             "div",
             { class: "seg-ctl", role: "group", "aria-label": "Chart shows" },
@@ -140,29 +271,39 @@
             h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, "Shapes, capo " + s.capo),
           ),
         );
-      } else clear(el, h("span", { class: "hint" }, "Real chords, concert pitch"));
+      } else clear(el, sheetCtl, h("span", { class: "hint" }, "Real chords, concert pitch"));
     }
 
     function barEl(u, s) {
+      if (app.sheetMode(s) === "lyrics") {
+        const free = document.querySelector('.bar[data-free][data-bar="' + u + '"]');
+        if (free) return free;
+        return [...document.querySelectorAll(".lline")].find((el) => +el.getAttribute("data-from") <= u && u <= +el.getAttribute("data-to")) || null;
+      }
       const b = bar(u);
       if (barShown(b.group, b.column, s) !== u) return null;
       return document.querySelector('.bar[data-group="' + b.group + '"][data-col="' + b.column + '"]');
     }
 
+    // The bar to paint: a bar of the grid, or in the Lyrics view a sung bar (.nb) or a free one.
+    function paintEl(u, s) {
+      if (app.sheetMode(s) === "lyrics") return document.querySelector('.bar[data-free][data-bar="' + u + '"], .lline .nb[data-bar="' + u + '"]');
+      return barEl(u, s);
+    }
+
     function paintBars(s) {
-      document.querySelectorAll(".bar").forEach((e) => {
+      document.querySelectorAll(".bar, .lline .nb").forEach((e) => {
         e.classList.remove("cur", "inloop");
         const c = e.querySelector(".cursor");
         if (c) c.remove();
       });
-      const u = curBar(s);
-      const el = barEl(u, s);
-      if (el) {
+      const el = paintEl(curBar(s), s);
+      if (el && el.classList.contains("bar")) {
         el.classList.add("cur");
         el.appendChild(h("span", { class: "cursor", style: { left: ((s.beat % song.per) * 100) / song.per + "%" } }));
       }
       if (s.loopOn && s.loop) for (let i = s.loop[0]; i <= s.loop[1]; i++) {
-        const le = barEl(i, s);
+        const le = paintEl(i, s);
         if (le) le.classList.add("inloop");
       }
     }
@@ -245,9 +386,11 @@
     store.on((s, changed) => {
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
-      const full = ["transpose", "capo", "inst", "pos", "view", "corrections"].some((k) => changed.has(k));
-      if (full || pass !== lastPass) renderSheet(s);
+      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet"].some((k) => changed.has(k));
+      // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
+      if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);
       else if (changed.has("beat") || changed.has("loop") || changed.has("loopOn")) paintBars(s);
+      if (!full && changed.has("beat")) paintLyrics(s);
       // Every animation frame changes the time: the chord panel redraws on a new beat only.
       if (full || changed.has("beat")) renderNow(s);
       else if (changed.has("time") && Math.floor(s.time * 10) !== shownTenth) renderTime(s);
@@ -263,7 +406,8 @@
         renderHarmony(s);
       },
       barEl: (u) => barEl(u, store.get()),
-      barFromEl: (el) => barShown(+el.getAttribute("data-group"), +el.getAttribute("data-col"), store.get()),
+      // A bar of the grid shows the pass playing; a free bar or a sung bar (.nb) is one bar.
+      barFromEl: (el) => (el.classList.contains("bar") && !el.hasAttribute("data-free") ? barShown(+el.getAttribute("data-group"), +el.getAttribute("data-col"), store.get()) : +el.getAttribute("data-bar")),
     };
   };
 })();
