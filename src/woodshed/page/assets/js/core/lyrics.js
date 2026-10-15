@@ -139,6 +139,16 @@
       return { now: k, next };
     }
 
-    return { lines, rows, lineAt, place, changes };
+    // The parts as the words name them (lyrics.sections_by_words), when they fit this chart: in
+    // order, without overlap, within its bars. Otherwise the chart's own names.
+    const named = data.sections;
+    const fits =
+      Array.isArray(named) && named.length > 0 &&
+      named.every((p, k) => p && typeof p.name === "string" && typeof p.role === "string" && typeof p.letter === "string" &&
+        Number.isInteger(p.start) && Number.isInteger(p.end) && p.start >= 0 && p.start < p.end && p.end <= song.bars.length &&
+        (k === 0 || p.start >= named[k - 1].end));
+    const sections = fits ? named.map((p) => ({ name: p.name, role: p.role, letter: p.letter, start: p.start, end: p.end })) : null;
+
+    return { lines, rows, lineAt, place, changes, sections };
   };
 })();

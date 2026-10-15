@@ -296,3 +296,98 @@ def test_in_a_container_uploads_from_the_network_are_an_explicit_choice(
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# Corrections: a chord picked by ear on one device is the band's chart.
+
+
+def fixes(page: str = "One.woodshed", **extra: Any) -> dict[str, Any]:
+    return {"page": page, "key": "a1b2c3", "fixes": {"3": [9, "m"], "7": [7, ""]}, **extra}
+
+
+def test_corrections_are_kept_by_the_library_for_every_device(server: app.AppServer) -> None:
+    status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
+    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0}
+    status, answer = post(server, "/api/corrections", fixes())
+    assert status == 200 and answer["fixes"] == {"3": [9, "m"], "7": [7, ""]} and answer["rev"] > 0
+    status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
+    assert json.loads(body) == answer  # another device reads them
+    assert not (server.library.root / "One.woodshed" / "corrections.json").exists()  # kept by the library
+
+
+def test_two_devices_correcting_at_once_keep_both_chords(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes(fixes={"3": [9, "m"]}))
+    _, answer = post(server, "/api/corrections", fixes(fixes={"7": [7, ""]}))  # did not hear of 3 yet
+    assert answer["fixes"] == {"3": [9, "m"], "7": [7, ""]}
+    _, answer = post(server, "/api/corrections", fixes(fixes={"3": [0, ""]}))  # a later choice wins
+    assert answer["fixes"]["3"] == [0, ""]
+
+
+def test_a_page_of_another_analysis_does_not_hide_the_corrections_of_this_one(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    post(server, "/api/corrections", fixes(key="old999", fixes={"1": [2, ""]}))  # a tab left open before a rebuild
+    _, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
+    assert json.loads(body)["fixes"] == {"3": [9, "m"], "7": [7, ""]}
+
+
+def test_the_revision_keeps_growing_when_the_app_restarts(server: app.AppServer) -> None:
+    _, first = post(server, "/api/corrections", fixes())
+    again = app.Library(server.library.root, server.library.opts)  # the app started again
+    assert again.set_corrections(fixes(fixes={"9": [4, "m"]}))["rev"] > first["rev"]
+
+
+def test_the_stream_never_tells_an_older_revision(server: app.AppServer) -> None:
+    server.live.corrected("One.woodshed", 6)
+    server.live.corrected("One.woodshed", 5)  # two corrections answered in the other order
+    assert server.live.fixes["One.woodshed"] == 6
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        fixes(page="Nope.woodshed"),
+        fixes(page="../One.woodshed"),
+        fixes(fixes={"3": [12, "m"]}),
+        fixes(fixes={"3": [9, "maj9"]}),
+        fixes(fixes={"3": "Am"}),
+        fixes(fixes=[1, 2]),
+        fixes(key=7),
+        fixes(fixes={str(k): [0, ""] for k in range(5000)}),
+    ],
+)
+def test_corrections_are_checked(server: app.AppServer, data: dict[str, Any]) -> None:
+    status, _ = post(server, "/api/corrections", data)
+    assert status in (400, 413)
+    assert not list((server.library.root / app.CORRECTIONS_DIR).glob("*"))
+
+
+def test_corrections_need_the_token(server: app.AppServer) -> None:
+    status, _ = post(server, "/api/corrections", fixes(), token="wrong")
+    assert status == 403
+    status, _, _ = request(server, "GET", "/api/corrections?page=../etc&key=a1")
+    assert status == 400
+
+
+def test_followers_hear_that_the_chart_was_corrected(server: app.AppServer) -> None:
+    follower = Stream(server)
+    try:
+        follower.next()
+        post(server, "/api/live", live(lead=True))
+        first = follower.next()
+        assert isinstance(first, dict) and "fixes" not in first  # nothing corrected yet
+        _, saved = post(server, "/api/corrections", fixes())
+        event = follower.next()
+        assert isinstance(event, dict) and event["fixes"] == {"One.woodshed": saved["rev"]}
+    finally:
+        follower.close()
+
+
+def test_a_damaged_entry_does_not_lose_the_others(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    post(server, "/api/corrections", fixes(key="other1", fixes={"1": [2, ""]}))
+    store = server.library.root / app.CORRECTIONS_DIR / "One.woodshed.json"
+    data = json.loads(store.read_text())
+    data["by_key"]["other1"]["fixes"] = {"1": [99, "?"]}  # edited by hand
+    store.write_text(json.dumps(data))
+    _, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
+    assert json.loads(body)["fixes"] == {"3": [9, "m"], "7": [7, ""]} and json.loads(body)["rev"] == data["rev"]

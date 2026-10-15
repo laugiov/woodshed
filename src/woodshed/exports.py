@@ -6,6 +6,7 @@ listener's corrections) can be exported the same way.
 
 from __future__ import annotations
 
+import bisect
 import json
 import math
 import re
@@ -71,10 +72,137 @@ def chord_spans(song: Song) -> list[tuple[int, int, dict[str, Any]]]:
     return out
 
 
-# ChordPro: the chart as a grid, with sections and repeats, for songbook apps.
+# ChordPro: the chart for songbook apps. Each part under its name; a sung part as its words with
+# each chord on the word it lands on, a part without words as a grid of its bars. A chord to check is
+# not marked in its name (songbook apps would read "E?" as a chord): the bars are listed in a comment.
+
+ENVIRONMENT = {"chorus": "chorus", "bridge": "bridge"}  # the other sung parts are verses in ChordPro
 
 
-def chordpro(song: Song) -> str:
+def lyric_text(text: str) -> str:
+    """Words as ChordPro reads them: a brace would open a directive, so braces become parentheses."""
+    return CONTROL.sub("", text).replace("{", "(").replace("}", ")")
+
+
+def lyric_row(row: str) -> str:
+    """A row starting with # would be a ChordPro comment: a space before it keeps it a lyric."""
+    return " " + row if row.startswith("#") else row
+
+
+def _cells(song: Song, u: int, key: theory.Key) -> str:
+    cells: list[str] = []
+    for c in song["bars"][u]["chords"]:
+        cells += [_name(c, key)] + ["."] * (c["beats"] - 1)
+    return " ".join(cells)
+
+
+def _grid(song: Song, label: str, rows: list[tuple[list[int], int]], key: theory.Key) -> list[str]:
+    """A grid: rows of bars, each played `times` times."""
+    out = ['{start_of_grid label="' + directive_text(label).replace('"', "'") + '"}']
+    for bars, times in rows:
+        text = " | ".join(_cells(song, u, key) for u in bars)
+        out.append("|: " + text + " :|" + (f" x{times}" if times > 2 else "") if times > 1 else "| " + text + " |")
+    out.append("{end_of_grid}")
+    return out
+
+
+def _rows(song: Song, bars: list[int], key: theory.Key) -> list[tuple[list[int], int]]:
+    """Bars four a row; the same row again is a repeat."""
+    rows: list[tuple[list[int], int]] = []
+    for i in range(0, len(bars), 4):
+        row = bars[i : i + 4]
+        if rows and [_cells(song, u, key) for u in rows[-1][0]] == [_cells(song, u, key) for u in row]:
+            rows[-1] = (rows[-1][0], rows[-1][1] + 1)
+        else:
+            rows.append((row, 1))
+    return rows
+
+
+def _to_check(song: Song) -> list[int]:
+    return [
+        u + 1
+        for u, bar in enumerate(song["bars"])
+        if any(c.get("doubt") and c["doubt"].get("kind", "chord") == "chord" for c in bar["chords"])
+    ]
+
+
+def _sung(
+    song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any]], key: theory.Key
+) -> dict[int, list[str]]:
+    """The rows of each sung section: its lines with the chords on their words, and the chords
+    between lines on rows of their own. Placed as the page places them (lyrics.place_chords).
+    Between lines only the changes are written: bars held on one chord are not counted there."""
+    from woodshed import lyrics
+
+    lines = (words or {}).get("lines") or []
+
+    def has_time(w: dict[str, Any]) -> bool:  # a start and an end, as the page reads a word
+        return isinstance(w.get("start"), (int, float)) and isinstance(w.get("end"), (int, float))
+
+    timed = {
+        li: [(w["start"], w["end"]) if has_time(w) else (math.nan, math.nan) for w in line["words"]]
+        for li, line in enumerate(lines)
+        if line.get("sung") and any(has_time(w) for w in line["words"])
+    }
+    if not timed or not sections:
+        return {}
+    changes = lyrics.chord_changes(song)
+    placed = lyrics.place_chords(changes, timed, float(song["bpm"]), int(song["beats_per_bar"]))
+    starts = lyrics.bar_starts(song)
+    bar_time = 60 / float(song["bpm"]) * int(song["beats_per_bar"])
+    half_bar = bar_time / 2
+    first_bars = [sec["start"] for sec in sections]
+
+    def section_of_bar(u: int) -> int:
+        return max(0, bisect.bisect_right(first_bars, u) - 1)
+
+    def name(p: dict[str, Any]) -> str:
+        return "[" + _name(song["bars"][p["bar"]]["chords"][p["index"]], key) + "]"
+
+    begin = {li: min(s for s, _ in ws if s == s) for li, ws in timed.items()}
+    finish = {li: max(e for _, e in ws if e == e) for li, ws in timed.items()}
+    by_section: dict[int, list[int]] = {}
+    for li in sorted(timed, key=lambda li: (begin[li], li)):
+        u = max(0, bisect.bisect_right(starts, begin[li] + half_bar) - 1)
+        by_section.setdefault(section_of_bar(u), []).append(li)
+    gaps: dict[int, list[tuple[float, dict[str, Any]]]] = {}
+    on_word: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for (t, _, _), p in zip(changes, placed, strict=True):
+        if p["line"] is None:
+            gaps.setdefault(section_of_bar(p["bar"]), []).append((t, p))
+        else:
+            on_word.setdefault((p["line"], p["word"]), []).append(p)
+
+    out: dict[int, list[str]] = {}
+    for k, ids in by_section.items():
+        rows: list[str] = []
+        waiting = list(gaps.get(k, []))
+        for li in ids:
+            # Chords before the line: those of the bar leading into it go on its first word.
+            lead = [p for t, p in waiting if begin[li] - bar_time <= t < begin[li]]
+            before = [p for t, p in waiting if t < begin[li] - bar_time]
+            if before:
+                rows.append(" ".join(name(p) for p in before))
+            inside = [(t, p) for t, p in waiting if begin[li] <= t < finish[li]]
+            waiting = [(t, p) for t, p in waiting if t >= finish[li]]
+            tokens = []
+            for wi, w in enumerate(lines[li]["words"]):
+                start = timed[li][wi][0]
+                ahead = [p for t, p in inside if start == start and t <= start]
+                inside = [(t, p) for t, p in inside if not (start == start and t <= start)]
+                chords = (lead if wi == 0 else []) + ahead + on_word.get((li, wi), [])
+                tokens.append("".join(name(p) for p in chords) + lyric_text(w["text"]))
+            tokens += [name(p) for _, p in inside]
+            backing = lines[li].get("backing") or []
+            rows.append(lyric_row(" ".join(tokens) + "".join(f" ({lyric_text(b)})" for b in backing)))
+        if waiting:
+            rows.append(" ".join(name(p) for _, p in waiting))
+        out[k] = rows
+    return out
+
+
+def chordpro(song: Song, words: dict[str, Any] | None = None) -> str:
+    """The song in ChordPro; with the words placed on it (lyrics.json), each chord on its word."""
     key = _key(song)
     per = song["beats_per_bar"]
     key_name = theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
@@ -83,24 +211,32 @@ def chordpro(song: Song) -> str:
         "{key: " + key_name + "}",
         "{tempo: " + str(half_up(song["bpm"])) + "}",
         "{time: " + f"{per}/4" + "}",
-        "{comment: chords found by woodshed from " + directive_text(song["file"]) + "; check the ones marked ?}",
-        "",
+        "{comment: chords found by woodshed from " + directive_text(song["file"]) + "}",
     ]
-    for group in song["groups"]:
-        lines.append('{start_of_grid label="' + directive_text(group["label"]).replace('"', "'") + '"}')
-        bars = []
-        for u in group["occurrences"][0]:
-            cells: list[str] = []
-            for c in song["bars"][u]["chords"]:
-                name = _name(c, key) + ("?" if c["doubt"] and c["doubt"].get("kind", "chord") == "chord" else "")
-                cells += [name] + ["."] * (c["beats"] - 1)
-            bars.append(" ".join(cells))
-        times = len(group["occurrences"])
-        if times > 1:
-            lines.append("|: " + " | ".join(bars) + " :|" + (f" x{times}" if times > 2 else ""))
+    check = _to_check(song)
+    if check:
+        lines.append(
+            "{comment: check by ear: " + ("bar " if len(check) == 1 else "bars ") + ", ".join(map(str, check)) + "}"
+        )
+    from woodshed import lyrics
+
+    named = lyrics.fitting_sections((words or {}).get("sections"), len(song["bars"]))
+    sections = named or list(song.get("sections") or [])
+    if not sections:  # no parts named: the chart's lines and their repeats
+        for group in song["groups"]:
+            rows = [(group["occurrences"][0], len(group["occurrences"]))]
+            lines += ["", *_grid(song, group["label"], rows, key)]
+        return "\n".join(lines) + "\n"
+    sung = _sung(song, words, sections, key)
+    for k, sec in enumerate(sections):
+        lines.append("")
+        if k in sung:
+            env = ENVIRONMENT.get(sec["role"], "verse")
+            lines.append(f'{{start_of_{env}: label="' + directive_text(sec["name"]).replace('"', "'") + '"}')
+            lines += sung[k]
+            lines.append(f"{{end_of_{env}}}")
         else:
-            lines.append("| " + " | ".join(bars) + " |")
-        lines.append("{end_of_grid}")
+            lines += _grid(song, sec["name"], _rows(song, list(range(sec["start"], sec["end"])), key), key)
     return "\n".join(lines) + "\n"
 
 
@@ -313,6 +449,11 @@ def file_stem(song: Song) -> str:
     stem = Path(song["file"]).stem.encode("ascii", "ignore").decode()
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")[:80] or "song"
     return "_" + stem if re.fullmatch(r"(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?", stem, re.IGNORECASE) else stem
+
+
+def write_chordpro(song: Song, folder: Path, words: dict[str, Any] | None) -> None:
+    """The page's ChordPro file again, with the words placed since (woodshed lyrics, a rebuild)."""
+    (folder / f"{file_stem(song)}.cho").write_text(chordpro(song, words), encoding="utf-8")
 
 
 def write_all(song: Song, folder: Path) -> list[Path]:

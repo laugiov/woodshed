@@ -174,3 +174,103 @@ def test_a_chord_to_check_that_repeats_the_one_before_keeps_its_button(open_page
     o.page.get_by_test_id("sheet-grid").click()
     o.page.get_by_test_id("sheet-lyrics").click()
     expect(o.page.locator(f'.lline .doubt[data-ref="{ref}"]')).to_have_count(1)
+
+
+def test_the_parts_take_the_names_the_words_gave_them(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-named")
+    heads = o.page.get_by_test_id("section").locator(".sec-name")
+    expect(heads).to_have_text(["Verse 1", "Chorus 1"])
+    expect(o.page.get_by_test_id("form-chip")).to_have_text(["Verse 1", "Chorus 1"])
+    o.page.get_by_test_id("sheet-grid").click()  # the grid shows the same parts
+    expect(o.page.get_by_test_id("section").locator(".sec-name")).to_have_text(["Verse 1", "Chorus 1"])
+    o.page.get_by_test_id("stage-open").click()
+    o.js("Woodshed.app.seekBar(5)")
+    expect(o.page.get_by_test_id("stage-section")).to_have_text("Chorus 1")
+
+
+def part(name: str, start: int, end: int) -> dict[str, Any]:
+    return {"name": name, "role": "verse", "letter": "A", "start": start, "end": end}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        [part("X", 0, 999)],  # past the last bar
+        [part("X", 2, 1)],  # backwards
+        [part("X", 0, 4), part("Y", 2, 8)],  # overlapping
+        [{"name": 3, "start": 0, "end": 4}],  # not a part
+        "Chorus",
+    ],
+)
+def test_damaged_part_names_are_ignored(open_page: Any, bad: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    data = json.loads((o.folder / "lyrics.json").read_text())
+    names = o.js("Woodshed.app.sections().map((s) => s.name)")
+    data["sections"] = bad
+    o.js(f"Woodshed.app.words = Woodshed.lyrics(Woodshed.current, {json.dumps(data)})")
+    assert o.js("Woodshed.app.sections().map((s) => s.name)") == names
+
+
+@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named"])
+def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, variant: str) -> None:
+    from tests.page.test_page import download
+    from woodshed import exports
+
+    o = open_page("pop", variant=variant)
+    data = o.js("Woodshed.current.song")
+    words = json.loads((o.folder / "lyrics.json").read_text())
+    text = download(o, "export-chordpro")
+    assert text == exports.chordpro(data, words)
+    assert "Morning comes" in text and "{start_of_" in text
+    if variant == "lyrics-named":
+        assert '{start_of_chorus: label="Chorus 1"}' in text  # the parts as the page names them
+
+
+def test_the_chordpro_carries_a_correction_on_its_word(open_page: Any) -> None:
+    from tests.page.test_page import download
+
+    o = open_page("pop", variant="lyrics")
+    # The chart as a correction leaves it: the first chord replaced (app.correct applies fixes so).
+    o.js("Object.assign(Woodshed.current.bars[0].chords[0], { pc: 9, quality: 'm', fixed: true })")
+    assert "[Am]Morning" in download(o, "export-chordpro")
+
+
+def hard_words(data: dict[str, Any]) -> dict[str, Any]:
+    """Words that test every branch of the ChordPro rows: a word without a time, a chord on no word
+    inside a line, chords in the bar leading into a line, chords between lines, backing vocals, a
+    line that would read as a ChordPro comment or directive."""
+    starts = [b["start"] for b in data["bars"]]
+    beat = 60 / data["bpm"]
+    base: dict[str, Any] = {"tag": None, "block": 0, "backing": [], "sung": True, "check": None}
+
+    def w(text: str, start: float | None, length: float = 0.3) -> dict[str, Any]:
+        return {"text": text, "start": start, "end": None if start is None else start + length}
+
+    lines = [
+        {
+            **base,
+            "text": "one two three",
+            "words": [w("one", starts[0]), w("two", None), w("three", starts[1] + 2 * beat)],
+        },
+        {
+            **base,
+            "text": "#four {five}",
+            "backing": ["six"],
+            "words": [w("#four", starts[3] + 2 * beat), w("{five}", starts[3] + 3 * beat)],
+        },
+        {**base, "text": "seven", "words": [w("seven", starts[6] + 2.5 * beat)]},
+    ]
+    return {"version": 1, "language": "en", "text": "", "chords": [], "lines": lines}
+
+
+def test_the_chordpro_rows_are_the_same_in_the_page_and_in_python_for_hard_cases(open_page: Any) -> None:
+    from woodshed import exports
+
+    o = open_page("pop", variant="lyrics")
+    data = o.js("Woodshed.current.song")
+    words = hard_words(data)
+    page = o.js(f"Woodshed.exports.chordpro(Woodshed.current, Woodshed.lyrics(Woodshed.current, {json.dumps(words)}))")
+    python = exports.chordpro(data, words)
+    assert page == python
+    body = python.split("{start_of_", 1)[1]
+    assert "\n#" not in body and "{five}" not in body  # no line read as a comment, no brace as a directive

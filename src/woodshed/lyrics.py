@@ -24,8 +24,10 @@ puts it.
 
 from __future__ import annotations
 
+import bisect
 import itertools
 import json
+import math
 import os
 import re
 import unicodedata
@@ -40,6 +42,7 @@ import numpy as np
 import numpy.typing as npt
 
 from woodshed.errors import WoodshedError
+from woodshed.sections import ROLE_NAMES
 
 FRAME = 0.02  # seconds per model frame (wav2vec2 at 16 kHz)
 VOICE_DB = 25.0  # the voice: within this of its loud singing...
@@ -689,7 +692,170 @@ def place(text: str, voice: Voice, song: dict[str, Any], language: str = "auto")
             }
         )
     chords = place_chords(chord_changes(song), words, float(song["bpm"]), int(song["beats_per_bar"]))
-    return {"version": 1, "language": language, "text": text, "lines": out_lines, "chords": chords}
+    out = {"version": 1, "language": language, "text": text, "lines": out_lines, "chords": chords}
+    named = sections_by_words(song, out)
+    if named is not None:
+        out["sections"] = named
+    return out
+
+
+# Naming the parts by their words.
+
+SHARED_LINES = 0.5  # two parts sharing this share of the lines of the shorter one are one part
+
+
+def bar_starts(song: dict[str, Any]) -> list[float]:
+    """The time each bar starts: its first beat, or counted on from the tracked beats."""
+    beats, first, per = song["beats"], int(song["first_beat"]), int(song["beats_per_bar"])
+    beat = 60 / float(song["bpm"])
+    out = []
+    for u, bar in enumerate(song["bars"]):
+        i = first + u * per
+        if isinstance(bar.get("start"), (int, float)):
+            out.append(float(bar["start"]))
+        elif 0 <= i < len(beats):
+            out.append(float(beats[i]))
+        else:
+            edge = 0 if i < 0 else len(beats) - 1
+            out.append(float(beats[edge]) + (i - edge) * beat if beats else i * beat)
+    return out
+
+
+def fitting_sections(sections: Any, bars: int) -> list[dict[str, Any]] | None:
+    """Saved part names that fit a chart of `bars` bars (in order, no overlap, within its bars), as
+    the page checks them (core/lyrics.js); anything else is None: the chart's own names are used."""
+    if not isinstance(sections, list) or not sections:
+        return None
+
+    def whole(v: Any) -> bool:  # Number.isInteger in the page: 2 and 2.0 alike
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer()
+
+    end = 0
+    for sec in sections:
+        ok = isinstance(sec, dict) and all(isinstance(sec.get(k), str) for k in ("name", "role", "letter"))
+        if not ok or not (whole(sec.get("start")) and whole(sec.get("end"))):
+            return None
+        if not (end <= sec["start"] < sec["end"] <= bars):
+            return None
+        end = sec["end"]
+    keys = ("name", "role", "letter")
+    return [{**{k: sec[k] for k in keys}, "start": int(sec["start"]), "end": int(sec["end"])} for sec in sections]
+
+
+def sections_by_words(song: dict[str, Any], data: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """The chart's sections named again with the words placed on the song, or None when the words
+    agree with them. The analysis names parts by their chords and loudness; the words say more:
+    the same lines are the same part (a chorus whose chords were read differently the first time),
+    a part sung each time just before the chorus is the pre-chorus, and the end of a stanza stays
+    with its verse."""
+    secs = [dict(sec) for sec in song.get("sections") or []]
+    if len(secs) < 2:
+        return None
+    starts = bar_starts(song)
+    half_bar = 60 / float(song["bpm"]) * int(song["beats_per_bar"]) / 2
+    first_bars = [sec["start"] for sec in secs]
+    keys: list[list[str]] = [[] for _ in secs]
+    blocks: list[set[Any]] = [set() for _ in secs]
+    for line in data.get("lines") or []:
+        times = [w["start"] for w in line.get("words") or [] if isinstance(w.get("start"), (int, float))]
+        key = letters_of(str(line.get("text", "")))
+        if not line.get("sung") or not times or not key:
+            continue
+        u = max(0, bisect.bisect_right(starts, min(times) + half_bar) - 1)  # the bar it is sung in
+        k = max(0, bisect.bisect_right(first_bars, u) - 1)
+        keys[k].append(key)
+        blocks[k].add(line.get("block"))
+
+    # The end of a stanza, in a part the chart could not name, stays with the verse it ends (when
+    # the words were pasted in stanzas: without blank lines, one stanza says nothing).
+    stanzas = len({b for found in blocks for b in found}) > 1
+    parts: list[dict[str, Any]] = []
+    for k, sec in enumerate(secs):
+        prev = parts[-1] if parts else None
+        joins = prev and stanzas and sec["role"] == "part" and prev["role"] == "verse"
+        if prev and joins and keys[k] and blocks[k] <= prev["blocks"]:
+            prev["end"] = sec["end"]
+            prev["keys"] += keys[k]
+            continue
+        parts.append({**sec, "keys": list(keys[k]), "blocks": set(blocks[k])})
+
+    # One part per music (the chart's letter) and per words (the lines they share).
+    n = len(parts)
+    root = list(range(n))
+
+    def find(i: int) -> int:
+        while root[i] != i:
+            root[i] = root[root[i]]
+            i = root[i]
+        return i
+
+    def same_words(i: int, j: int) -> bool:
+        """At least half the lines of the shorter part, and two of them (one for a one-line part):
+        a hook line sung in a verse too does not make the verse the chorus."""
+        a, b = set(parts[i]["keys"]), set(parts[j]["keys"])
+        if not a or not b:
+            return False
+        shorter = min(len(a), len(b))
+        return len(a & b) >= (1 if shorter == 1 else max(2, math.ceil(SHARED_LINES * shorter)))
+
+    known: list[set[str]] = [{sec["role"]} for sec in parts]  # the roles the chart gave, per group
+    for i, j in itertools.combinations(range(n), 2):
+        ri, rj = find(i), find(j)
+        if ri == rj or not (parts[i]["letter"] == parts[j]["letter"] or same_words(i, j)):
+            continue
+        apart = ("verse" in known[ri] and "chorus" in known[rj]) or ("chorus" in known[ri] and "verse" in known[rj])
+        if apart:
+            continue  # a verse and a chorus the chart told apart stay apart
+        root[ri] = rj
+        known[rj] |= known[ri]
+    groups: dict[int, list[int]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+
+    # A role per part: what one of its sections was known as; the chorus, else the part sung again
+    # with the same words; the pre-chorus, the part always sung just before the chorus.
+    role: dict[int, str] = {}
+    for g, members in groups.items():
+        given = [parts[m]["role"] for m in members]
+        role[g] = next((r for r in ("chorus", "verse", "prechorus", "bridge", "instrumental") if r in given), given[0])
+    if "chorus" not in role.values():  # the part sung again with the same words
+        sung_again = [
+            g for g, ms in groups.items()
+            if role[g] == "part" and any(same_words(a, b) for a, b in itertools.combinations(ms, 2))
+        ]  # fmt: skip
+        if sung_again:
+            role[max(sung_again, key=lambda g: (len(groups[g]), -groups[g][0]))] = "chorus"
+    choruses = {g for g in groups if role[g] == "chorus"}
+    for g, members in groups.items():
+        if role[g] == "part" and len(members) > 1 and all(m + 1 < n and find(m + 1) in choruses for m in members):
+            role[g] = "prechorus"
+
+    # One letter per part (the chorus keeps its own), then the names, numbered as the chart does.
+    letter = {}
+    for g, members in groups.items():
+        lead = next((m for m in members if parts[m]["role"] == role[g]), members[0])
+        letter[g] = parts[lead]["letter"]
+    roles = []
+    for i, sec in enumerate(parts):
+        ends = sec["role"] in ("intro", "outro") and i in (0, n - 1)
+        silent = not sec["keys"] and sec["role"] != "part"  # no words to say otherwise: a solo stays a solo
+        roles.append(sec["role"] if ends or silent else role[find(i)])
+    total: dict[str, int] = {}
+    for r in roles:
+        total[r] = total.get(r, 0) + 1
+    seen: dict[str, int] = {}
+    out = []
+    for i, sec in enumerate(parts):
+        r = roles[i]
+        if r == "part":
+            name = f"Part {letter[find(i)]}"
+        else:
+            seen[r] = seen.get(r, 0) + 1
+            numbered = total[r] > 1 and r not in ("intro", "outro")
+            name = f"{ROLE_NAMES[r]} {seen[r]}" if numbered else ROLE_NAMES[r]
+        out.append({"name": name, "role": r, "letter": letter[find(i)], "start": sec["start"], "end": sec["end"]})
+    before = [{k: sec[k] for k in ("name", "role", "letter", "start", "end")} for sec in secs]
+    return None if out == before else out
 
 
 # Files.

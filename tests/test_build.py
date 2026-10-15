@@ -292,7 +292,43 @@ def test_words_placed_on_a_page_survive_a_rebuild(tmp_path: Path, pop_song: tupl
     kept = json.loads((again / lyrics.LYRICS).read_text())
     assert kept["lines"] == words["lines"]
     assert kept["chords"]  # placed again on the new analysis
+    (cho,) = (again / "exports").glob("*.cho")
+    assert "{start_of_verse" in cho.read_text()  # the songbook file has the words too
     assert (again / lyrics.LYRICS_JS).read_text().startswith("window.WOODSHED_LYRICS = {")
+
+
+def test_parts_named_by_the_words_follow_the_new_analysis(tmp_path: Path, pop_song: tuple[Path, Song]) -> None:
+    # The names the words gave belong to the old chart: a rebuild names the new chart's parts again.
+    from woodshed import lyrics
+
+    wav, result = pop_song
+    first = build.build(result, wav, tmp_path / "out")
+    stale = [{"name": "Chorus 1", "role": "chorus", "letter": "Z", "start": 0, "end": 99}]
+    lyrics.write(first, {"version": 1, "language": "auto", "text": "la", "chords": [], "sections": stale,
+                         "lines": [{"text": "la", "tag": None, "block": 0, "backing": [], "sung": True,
+                                    "check": None, "words": [{"text": "la", "start": 1.0, "end": 1.4}]}]})  # fmt: skip
+    again = build.build(result, wav, tmp_path / "out")
+    kept = json.loads((again / lyrics.LYRICS).read_text())
+    assert kept.get("sections") != stale
+
+
+def test_a_songbook_file_that_cannot_be_written_keeps_the_words(
+    tmp_path: Path, pop_song: tuple[Path, Song], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from woodshed import exports, lyrics
+
+    wav, result = pop_song
+    first = build.build(result, wav, tmp_path / "out")
+    lyrics.write(first, {"version": 1, "language": "auto", "text": "la", "chords": [],
+                         "lines": [{"text": "la", "tag": None, "block": 0, "backing": [], "sung": True,
+                                    "check": None, "words": [{"text": "la", "start": 1.0, "end": 1.4}]}]})  # fmt: skip
+
+    def broken(*args: object) -> None:
+        raise KeyError("end")
+
+    monkeypatch.setattr(exports, "write_chordpro", broken)
+    again = build.build(result, wav, tmp_path / "out")
+    assert json.loads((again / lyrics.LYRICS).read_text())["lines"][0]["text"] == "la"
 
 
 def test_a_page_rebuilt_from_another_recording_keeps_the_text_not_the_times(

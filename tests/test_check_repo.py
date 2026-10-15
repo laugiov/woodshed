@@ -201,3 +201,14 @@ def test_the_demo_song_is_allowed_with_its_licence_and_pinned(tmp_path: Path) ->
 def test_audio_outside_the_demo_folder_is_still_rejected(tmp_path: Path, name: str) -> None:
     write(tmp_path, name)
     assert any("audio or video" in p for p in problems(tmp_path))
+
+
+def test_the_musicxml_doctype_is_an_identifier_not_a_fetch(tmp_path: Path) -> None:
+    dtd = '"http://www.musicxml.org/dtds/partwise.dtd"'
+    write(tmp_path, "src/woodshed/page/assets/js/core/x.js", f"const doctype = {dtd};\n".encode())
+    assert problems(tmp_path) == []
+    near = ["other", "dtds/partwise.dtd.evil.com/x", "dtds/partwise.dtd?x=1", "dtds/partwise.dtd/../x"]
+    for i, url in enumerate(near):
+        code = f'fetch("http://www.musicxml.org/{url}")\n'
+        write(tmp_path, f"src/woodshed/page/assets/js/core/y{i}.js", code.encode())
+    assert sum("network" in p for p in problems(tmp_path)) == 4

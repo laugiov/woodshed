@@ -538,6 +538,38 @@ def test_a_new_analysis_revision_rebuilds_old_pages(
     assert "up to date" not in capsys.readouterr().err
 
 
+def test_a_change_to_the_page_code_rebuilds_old_pages(
+    tmp_path: Path, cache: Path, opened: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Updating woodshed from git keeps the version number: the page's own code decides too.
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    capsys.readouterr()
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    assert "up to date" in capsys.readouterr().err
+    monkeypatch.setattr("woodshed.run.page_revision", lambda: "another page")
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    assert "up to date" not in capsys.readouterr().err
+
+
+def test_the_page_revision_follows_the_page_files(tmp_path: Path) -> None:
+    from woodshed.build import page_revision
+
+    folder = tmp_path / "page"
+    (folder / "assets").mkdir(parents=True)
+    (folder / "body.html").write_text("<p>one</p>")
+    (folder / "assets" / "app.css").write_text("p {}")
+    first = page_revision.__wrapped__(folder)
+    assert page_revision.__wrapped__(folder) == first
+    (folder / "assets" / "app.css").write_text("p { color: red }")
+    changed = page_revision.__wrapped__(folder)
+    assert changed != first
+    (folder / ".DS_Store").write_bytes(b"finder")  # files a system or an editor leaves around
+    (folder / "assets" / "app.css~").write_text("backup")
+    assert page_revision.__wrapped__(folder) == changed
+    assert len(page_revision()) == 16  # the installed page
+
+
 def test_the_summary_counts_only_close_calls(tmp_path: Path, cache: Path) -> None:
     from woodshed import analysis
     from woodshed.run import summary

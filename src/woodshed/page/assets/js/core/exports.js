@@ -19,32 +19,132 @@
     return out;
   }
 
-  function chordpro(song) {
+  // ChordPro, as woodshed.exports.chordpro: each part under its name; a sung part as its words with
+  // each chord on its word, a part without words as a grid. Chords to check are listed, not marked.
+  const ENVIRONMENT = { chorus: "chorus", bridge: "bridge" };
+  // Words as ChordPro reads them (as woodshed.exports.lyric_text and lyric_row): a brace would open a
+  // directive, a row starting with # would be a comment.
+  const lyricText = (text) => text.replace(CONTROL, "").replace(/\{/g, "(").replace(/\}/g, ")");
+  const lyricRow = (row) => (row.startsWith("#") ? " " + row : row);
+
+  function chordpro(song, words) {
     const d = data(song);
     const name = (c) => (c.pc < 0 ? "N.C." : song.chordName(c, 0));
+    const cells = (u) => {
+      const out = [];
+      for (const c of d.bars[u].chords) {
+        out.push(name(c));
+        for (let i = 1; i < c.beats; i++) out.push(".");
+      }
+      return out.join(" ");
+    };
+    const quote = (text) => directiveText(text).replace(/"/g, "'");
+    const grid = (label, rows) => [
+      '{start_of_grid label="' + quote(label) + '"}',
+      ...rows.map(([bars, times]) => {
+        const text = bars.map(cells).join(" | ");
+        return times > 1 ? "|: " + text + " :|" + (times > 2 ? " x" + times : "") : "| " + text + " |";
+      }),
+      "{end_of_grid}",
+    ];
     const lines = [
       "{title: " + directiveText(d.title) + "}",
       "{key: " + song.keyName(0) + "}",
       "{tempo: " + Math.round(d.bpm) + "}",
       "{time: " + d.beats_per_bar + "/4}",
-      "{comment: chords found by woodshed from " + directiveText(d.file) + "; check the ones marked ?}",
-      "",
+      "{comment: chords found by woodshed from " + directiveText(d.file) + "}",
     ];
-    for (const group of d.groups) {
-      lines.push('{start_of_grid label="' + directiveText(group.label).replace(/"/g, "'") + '"}');
-      const bars = group.occurrences[0].map((u) => {
-        const cells = [];
-        for (const c of d.bars[u].chords) {
-          cells.push(name(c) + (c.doubt && (c.doubt.kind || "chord") === "chord" ? "?" : "")); // no kind: data before kinds
-          for (let i = 1; i < c.beats; i++) cells.push(".");
-        }
-        return cells.join(" ");
-      });
-      const times = group.occurrences.length;
-      lines.push(times > 1 ? "|: " + bars.join(" | ") + " :|" + (times > 2 ? " x" + times : "") : "| " + bars.join(" | ") + " |");
-      lines.push("{end_of_grid}");
+    const check = [];
+    d.bars.forEach((bar, u) => {
+      if (bar.chords.some((c) => c.doubt && (c.doubt.kind || "chord") === "chord")) check.push(u + 1); // no kind: older data
+    });
+    if (check.length) lines.push("{comment: check by ear: " + (check.length === 1 ? "bar " : "bars ") + check.join(", ") + "}");
+    const sections = (words && words.sections) || d.sections || [];
+    if (!sections.length) {
+      for (const group of d.groups) lines.push("", ...grid(group.label, [[group.occurrences[0], group.occurrences.length]]));
+      return lines.join("\n") + "\n";
     }
+    const sung = sungRows(song, words, sections, name);
+    sections.forEach((sec, k) => {
+      lines.push("");
+      if (sung.has(k)) {
+        const env = ENVIRONMENT[sec.role] || "verse";
+        lines.push("{start_of_" + env + ': label="' + quote(sec.name) + '"}', ...sung.get(k), "{end_of_" + env + "}");
+      } else {
+        const rows = [];
+        for (let u = sec.start; u < sec.end; u += 4) {
+          const row = [];
+          for (let v = u; v < Math.min(u + 4, sec.end); v++) row.push(v);
+          const last = rows[rows.length - 1];
+          if (last && last[0].map(cells).join("|") === row.map(cells).join("|")) last[1] += 1;
+          else rows.push([row, 1]);
+        }
+        lines.push(...grid(sec.name, rows));
+      }
+    });
     return lines.join("\n") + "\n";
+  }
+
+  // The rows of each sung part: its lines with the chords on their words, the chords between lines
+  // on rows of their own, the chords of the bar leading into a line on its first word.
+  function sungRows(song, words, sections, name) {
+    const out = new Map();
+    if (!words || !words.lines.length) return out;
+    const per = song.per;
+    const barTime = (60 / song.song.bpm) * per;
+    const sectionOfBar = (u) => {
+      let k = 0;
+      sections.forEach((sec, i) => {
+        if (sec.start <= u) k = i;
+      });
+      return k;
+    };
+    const chord = (p) => "[" + name(p.chord) + "]";
+    const placed = words.place(words.changes());
+    const bySection = new Map();
+    words.lines.forEach((ln, li) => {
+      const k = sectionOfBar(song.barAt(ln.start + barTime / 2));
+      if (!bySection.has(k)) bySection.set(k, []);
+      bySection.get(k).push(li);
+    });
+    const gaps = new Map();
+    const onWord = new Map();
+    for (const p of placed) {
+      if (p.li === null) {
+        const k = sectionOfBar(p.bar);
+        if (!gaps.has(k)) gaps.set(k, []);
+        gaps.get(k).push(p);
+      } else {
+        const key = p.li + ":" + p.wi;
+        if (!onWord.has(key)) onWord.set(key, []);
+        onWord.get(key).push(p);
+      }
+    }
+    for (const [k, ids] of bySection) {
+      const rows = [];
+      let waiting = (gaps.get(k) || []).slice();
+      for (const li of ids) {
+        const ln = words.lines[li];
+        const lead = waiting.filter((p) => ln.start - barTime <= p.t && p.t < ln.start);
+        const before = waiting.filter((p) => p.t < ln.start - barTime);
+        if (before.length) rows.push(before.map(chord).join(" "));
+        let inside = waiting.filter((p) => ln.start <= p.t && p.t < ln.end);
+        waiting = waiting.filter((p) => p.t >= ln.end);
+        const tokens = ln.words.map((w, wi) => {
+          const timed = typeof w.start === "number" && typeof w.end === "number"; // as lyrics.js reads a word
+          const ahead = inside.filter((p) => timed && p.t <= w.start);
+          inside = inside.filter((p) => !(timed && p.t <= w.start));
+          const chords = [...(wi === 0 ? lead : []), ...ahead, ...(onWord.get(li + ":" + wi) || [])];
+          return chords.map(chord).join("") + lyricText(w.text);
+        });
+        tokens.push(...inside.map(chord));
+        const backing = (ln.backing || []).map((b) => " (" + lyricText(b) + ")").join("");
+        rows.push(lyricRow(tokens.join(" ") + backing));
+      }
+      if (waiting.length) rows.push(waiting.map(chord).join(" "));
+      out.set(k, rows);
+    }
+    return out;
   }
 
   function lab(song) {
@@ -74,6 +174,179 @@
 
   const json = (song) => JSON.stringify(data(song), null, 1) + "\n";
 
+  // MIDI, as woodshed.exports.midi: chords, bass line and drums on the beat grid (type 1, 480 PPQ),
+  // made here so a correction is in the file.
+  const PPQ = 480;
+  const SLOTS = 4; // sixteenths per beat in the parts
+  // Python's round(): half to even (60,000,000 / BPM can fall on a half).
+  const pyRound = (x) => (Math.abs(x % 1) === 0.5 ? 2 * Math.round(x / 2) : Math.round(x));
+  const utf8 = (text) => Array.from(new TextEncoder().encode(text));
+  function vlq(n) {
+    const out = [n & 0x7f];
+    n = Math.floor(n / 128);
+    while (n) {
+      out.push((n & 0x7f) | 0x80);
+      n = Math.floor(n / 128);
+    }
+    return out.reverse();
+  }
+  const u32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const u16 = (n) => [(n >>> 8) & 255, n & 255];
+  function track(events, name) {
+    const title = utf8(name);
+    const out = [0x00, 0xff, 0x03, ...vlq(title.length), ...title];
+    let now = 0;
+    const sorted = events.slice().sort((a, b) => a[0] - b[0] || ((a[1][0] & 0xf0) !== 0x80) - ((b[1][0] & 0xf0) !== 0x80));
+    for (const [tick, msg] of sorted) {
+      out.push(...vlq(tick - now), ...msg);
+      now = tick;
+    }
+    out.push(0x00, 0xff, 0x2f, 0x00);
+    return [0x4d, 0x54, 0x72, 0x6b, ...u32(out.length), ...out]; // MTrk
+  }
+  function note(events, channel, pitch, start, length, velocity) {
+    events.push([start, [0x90 | channel, pitch, velocity]]);
+    events.push([start + Math.max(1, length), [0x80 | channel, pitch, 0]]);
+  }
+  function spans(d) {
+    const out = [];
+    d.bars.forEach((bar, u) => {
+      let b = u * d.beats_per_bar;
+      for (const c of bar.chords) {
+        out.push([b, c.beats, c]);
+        b += c.beats;
+      }
+    });
+    return out;
+  }
+  function midi(song) {
+    const d = data(song);
+    const per = d.beats_per_bar;
+    const tempo = u32(pyRound(60000000 / d.bpm)).slice(1);
+    const meta = [[0, [0xff, 0x51, 0x03, ...tempo]], [0, [0xff, 0x58, 0x04, per, 2, 24, 8]]];
+    const chords = [];
+    for (const [b, n, c] of spans(d)) {
+      if (c.pc < 0) continue;
+      const third = c.quality.startsWith("m") ? 3 : 4;
+      const intervals = [0, third, 7, ...(c.quality.endsWith("7") ? [10] : [])];
+      for (const i of intervals) note(chords, 0, 53 + ((((c.pc - 5) % 12) + 12) % 12) + i, b * PPQ, n * PPQ - 10, 80);
+    }
+    const bass = [];
+    const drums = [];
+    const sixteenth = PPQ / SLOTS;
+    if (d.parts) {
+      d.parts.bass.forEach((line, u) => {
+        const onsets = [];
+        line.forEach((e, i) => e && onsets.push([i, e]));
+        onsets.forEach(([i, e], k) => {
+          const end = k + 1 < onsets.length ? onsets[k + 1][0] : line.length;
+          note(bass, 1, e[0], u * per * PPQ + i * sixteenth, (end - i) * sixteenth - 10, 90);
+        });
+      });
+      const groove = d.parts.groove;
+      if (groove) {
+        for (let u = 0; u < d.bars.length; u++) {
+          for (let i = 0; i < per * SLOTS; i++) {
+            const at = u * per * PPQ + i * sixteenth;
+            for (const [row, pitch] of [["kick", 36], ["snare", 38], ["hat", 42]]) {
+              if (groove[row][i] > 0.5) note(drums, 9, pitch, at, sixteenth / 2, row !== "hat" ? 100 : 70);
+            }
+          }
+        }
+      }
+    } else {
+      for (const [b, n, c] of spans(d)) if (c.pc >= 0) note(bass, 1, 36 + c.pc, b * PPQ, n * PPQ - 10, 90);
+    }
+    const tracks = [
+      track(meta, Array.from(d.title).slice(0, 120).join("")),
+      track([[0, [0xc0, 0]], ...chords], "Chords"),
+      track([[0, [0xc1, 33]], ...bass], "Bass"),
+    ];
+    if (drums.length) tracks.push(track(drums, "Drums"));
+    return new Uint8Array([0x4d, 0x54, 0x68, 0x64, ...u32(6), ...u16(1), ...u16(tracks.length), ...u16(PPQ), ...tracks.flat()]);
+  }
+
+  // MusicXML, as woodshed.exports.musicxml: chord symbols over the bars, and the bass line.
+  const KIND = { "": "major", m: "minor", 7: "dominant", m7: "minor-seventh" };
+  const STEPS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const xmlText = (text) => text.replace(CONTROL, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function musicxml(song) {
+    const d = data(song);
+    const per = d.beats_per_bar;
+    const slots = per * SLOTS;
+    const spelled = (pc) => {
+      const root = song.chordName({ pc, quality: "" }, 0);
+      return [root[0], { "": 0, "#": 1, b: -1 }[root.slice(1)]];
+    };
+    const key = d.key;
+    const major = key.mode === "maj" ? key.pc : (key.pc + 3) % 12;
+    const SHARPS = { 0: 0, 7: 1, 2: 2, 9: 3, 4: 4, 11: 5, 6: 6 };
+    const FLATS = { 5: -1, 10: -2, 3: -3, 8: -4, 1: -5 };
+    const fifths = major in FLATS ? FLATS[major] : SHARPS[major];
+    const TABLE = [[16, "whole", false], [12, "half", true], [8, "half", false], [6, "quarter", true],
+      [4, "quarter", false], [3, "eighth", true], [2, "eighth", false], [1, "16th", false]];
+    const durations = (n) => {
+      const out = [];
+      while (n > 0) {
+        const t = TABLE.find((x) => x[0] <= n);
+        out.push(t);
+        n -= t[0];
+      }
+      return out;
+    };
+    const pitchXml = (m) => {
+      const [step, alter] = spelled(((m % 12) + 12) % 12);
+      const octave = Math.floor((m - STEPS[step] - alter) / 12) - 1;
+      return "<pitch><step>" + step + "</step>" + (alter ? "<alter>" + alter + "</alter>" : "") + "<octave>" + octave + "</octave></pitch>";
+    };
+    const notes = (events) =>
+      events.map(([length, m]) => {
+        const pieces = durations(length);
+        return pieces.map(([size, kind, dot], i) => {
+          const tie = m !== null && pieces.length > 1;
+          const ties = tie ? (i > 0 ? '<tie type="stop"/>' : "") + (i < pieces.length - 1 ? '<tie type="start"/>' : "") : "";
+          const kinds = tie ? [...(i > 0 ? ["stop"] : []), ...(i < pieces.length - 1 ? ["start"] : [])] : [];
+          const tied = kinds.length ? "<notations>" + kinds.map((k) => '<tied type="' + k + '"/>').join("") + "</notations>" : "";
+          const body = m === null ? "<rest/>" : pitchXml(m);
+          const timing = "<duration>" + size + "</duration>" + ties + "<voice>1</voice><type>" + kind + "</type>" + (dot ? "<dot/>" : "");
+          return "<note>" + body + timing + tied + "</note>";
+        }).join("");
+      }).join("");
+    const attributes = "<attributes><divisions>" + SLOTS + "</divisions><key><fifths>" + fifths + "</fifths><mode>" +
+      (key.mode === "maj" ? "major" : "minor") + "</mode></key><time><beats>" + per + "</beats><beat-type>4</beat-type></time>";
+    const measures = d.bars.map((bar, u) => {
+      const xml = ['<measure number="' + (u + 1) + '">'];
+      if (u === 0) xml.push(attributes + "<clef><sign>F</sign><line>4</line></clef></attributes>");
+      let offset = 0;
+      for (const c of bar.chords) {
+        if (c.pc >= 0) {
+          const [step, alter] = spelled(c.pc);
+          xml.push("<harmony><root><root-step>" + step + "</root-step>" + (alter ? "<root-alter>" + alter + "</root-alter>" : "") + "</root><kind>" + KIND[c.quality] + "</kind>");
+          xml.push(offset ? "<offset>" + offset * SLOTS + "</offset></harmony>" : "</harmony>");
+        }
+        offset += c.beats;
+      }
+      const events = [];
+      if (d.parts) {
+        const line = d.parts.bass[u];
+        const onsets = [];
+        line.forEach((e, i) => e && onsets.push(i));
+        if (!onsets.length || onsets[0] > 0) events.push([onsets.length ? onsets[0] : slots, null]);
+        onsets.forEach((i, k) => events.push([(k + 1 < onsets.length ? onsets[k + 1] : slots) - i, line[i][0]]));
+      } else events.push([slots, null]);
+      xml.push(notes(events), "</measure>");
+      return xml.join("");
+    });
+    return (
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n' +
+      '<score-partwise version="4.0"><work><work-title>' + xmlText(d.title) + "</work-title></work>" +
+      "<identification><encoding><software>woodshed</software></encoding></identification>" +
+      '<part-list><score-part id="P1"><part-name>' + (d.parts ? "Bass" : "Chords") + "</part-name></score-part></part-list>" +
+      '<part id="P1">' + measures.join("") + "</part></score-partwise>\n"
+    );
+  }
+
   // Save as a file: a Blob download works from a page opened on disk.
   function save(name, text, type) {
     const url = URL.createObjectURL(new Blob([text], { type }));
@@ -86,5 +359,5 @@
     }, 0);
   }
 
-  W.exports = { data, chordpro, lab, json, save };
+  W.exports = { data, chordpro, lab, json, midi, musicxml, save };
 })();

@@ -63,8 +63,12 @@ PATTERN_EXAMPLES = {"scripts/check_repo.py", "tests/test_check_repo.py"}
 # The practice page works offline: its own code never loads anything from the network.
 PAGE_DIR = "src/woodshed/page"
 PAGE_CODE = {".js", ".html", ".css"}
-URL = re.compile(r"(?:https?|wss?|ftp)://(?!www\.w3\.org/)|(?<![:\w])//[a-z0-9.-]+\.[a-z]{2,}/", re.IGNORECASE)
-# XML namespaces (SVG, XHTML) are identifiers, never fetched.
+URL = re.compile(
+    r"(?:https?|wss?|ftp)://(?!www\.w3\.org/|www\.musicxml\.org/dtds/partwise\.dtd[\"'])"
+    r"|(?<![:\w])//[a-z0-9.-]+\.[a-z]{2,}/",
+    re.IGNORECASE,
+)
+# XML namespaces (SVG, XHTML) and the MusicXML DOCTYPE are identifiers, never fetched.
 # Vendored files are pinned by hash: an update is a reviewed change, and nothing (audio hidden in
 # base64, for one) can slip into these folders unnoticed.
 VENDOR_MANIFEST = "scripts/vendored.sha256"

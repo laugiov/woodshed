@@ -156,7 +156,33 @@
       frame = requestAnimationFrame(tick);
     }
 
+    // The chart's corrections, kept by the library for the band: read when the page opens, when it
+    // comes back to the screen, and when the stream says another device corrected this song.
+    let fixesRev = -1;
+    async function loadFixes() {
+      const r = await api("/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey));
+      if (!r.ok || typeof r.data.rev !== "number") return;
+      fixesRev = Math.max(fixesRev, r.data.rev);
+      const mine = app.fixes();
+      const theirs = r.data.fixes || {};
+      const merged = { ...mine, ...theirs }; // the band's choice wins; this device's own are added
+      app.useFixes(merged);
+      if (Object.keys(mine).some((k) => !(k in theirs))) share(app.fixes()); // made before, on this device
+    }
+    function share(fixes) {
+      api("/api/corrections", { page: folder, key: app.fixesKey, fixes }).then((r) => {
+        if (r.ok && typeof r.data.rev === "number") fixesRev = Math.max(fixesRev, r.data.rev);
+        else app.toast("Saved on this device only: the app did not answer, the band does not see it yet.");
+      });
+      return true;
+    }
+    app.shareFixes = share;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") loadFixes();
+    });
+
     function heard(state) {
+      if (state.fixes && typeof state.fixes[folder] === "number" && state.fixes[folder] > fixesRev) loadFixes();
       const sample = state.now - Date.now() / 1000;
       if (offsets.length && Math.abs(sample - offset()) > 2) offsets.length = 0; // this device's clock jumped
       offsets.push(sample);
@@ -302,7 +328,7 @@
       const link = $("nextSong");
       link.hidden = !next;
       if (next) clear(link, "Next: ", h("b", null, titleOf(next)), " →");
-      $("stNextSong").textContent = next ? "Next song: " + titleOf(next) + " (N, or → at the end)" : "";
+      clear($("stNextSong"), next ? h("button", { type: "button", class: "btn st-next-btn", title: "N, or → at the end of the song", onclick: () => app.nextSong() }, "Next song: ", h("b", null, titleOf(next)), " ⏭\ufe0e") : null);
     }
 
     store.on((s, changed) => {
@@ -318,6 +344,7 @@
 
     async function start() {
       if (!(await fetchToken())) return; // an old app, or none
+      await loadFixes();
       const [set, songs] = await Promise.all([api("/api/setlist"), api("/api/songs")]);
       if (set.ok && Array.isArray(set.data.songs)) setlist = set.data.songs;
       if (songs.ok && Array.isArray(songs.data.songs)) for (const x of songs.data.songs) titles[x.folder] = x.title;

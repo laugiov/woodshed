@@ -80,8 +80,11 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     assert match is not None
     data = json.loads(match.group(2))
     change(data["song"])
+    named = data["song"].pop("_lyrics_sections", None)
     if data["song"].pop("_lyrics", False):
         lyrics = lyrics_for(data["song"])
+        if named is not None:
+            lyrics["sections"] = named
         (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(lyrics) + ";\n")
         (folder / "lyrics.json").write_text(json.dumps(lyrics))
     page.write_text(text[: match.start(2)] + build.script_json(data) + text[match.end(2) :], encoding="utf-8")
@@ -137,6 +140,18 @@ def _with_lyrics(song: dict[str, Any]) -> None:
     song["_lyrics"] = True  # marker: the folder gets lyrics.js below
 
 
+def _lyrics_named(song: dict[str, Any]) -> None:
+    """Two lines of the chart the analysis could only letter (Part A, Part B), named by the words."""
+    _two_sections(song)
+    song["sections"][0].update(name="Part A", role="part")
+    song["sections"][1].update(name="Part B", role="part")
+    song["_lyrics"] = True
+    song["_lyrics_sections"] = [  # the parts as the words name them (lyrics.sections_by_words)
+        {"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 4},
+        {"name": "Chorus 1", "role": "chorus", "letter": "B", "start": 4, "end": len(song["bars"])},
+    ]
+
+
 def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _no_sections(song)
     _with_lyrics(song)
@@ -144,7 +159,7 @@ def _lyrics_no_sections(song: dict[str, Any]) -> None:
 
 VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
-    "lyrics-nosections": _lyrics_no_sections,
+    "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,
 }  # fmt: skip
 
 

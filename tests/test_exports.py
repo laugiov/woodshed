@@ -38,27 +38,71 @@ def names(data: dict[str, Any]) -> list[list[str]]:
 def test_chordpro_has_the_song_facts_and_one_grid_per_section(pop: dict[str, Any]) -> None:
     text = exports.chordpro(pop)
     assert "{title: Pop & Co}" in text and "{key: C}" in text and "{time: 4/4}" in text
-    assert text.count('{start_of_grid label="') == len(pop["groups"]) == text.count("{end_of_grid}")
+    sections = pop["sections"]
+    assert sections and text.count('{start_of_grid label="') == len(sections) == text.count("{end_of_grid}")
+    assert f'{{start_of_grid label="{sections[0]["name"]}"}}' in text  # named as on the page
     grid = [re.sub(r"^\|:? | :?\|( x\d+)?$", "", line) for line in text.splitlines() if line.startswith("|")]
     bars = [bar.split() for line in grid for bar in line.split(" | ")]
     assert all(len(cells) == 4 for cells in bars)  # one cell per beat
-    first_line = pop["groups"][0]["occurrences"][0]
-    assert [cells[0] for cells in bars[:4]] == [names(pop)[u][0] for u in first_line]
+    assert [cells[0] for cells in bars[:4]] == [names(pop)[u][0] for u in range(4)]
 
 
-def test_only_close_calls_get_a_question_mark(pop: dict[str, Any]) -> None:
+def test_chords_to_check_are_listed_not_marked(pop: dict[str, Any]) -> None:
+    # A "?" after a chord name reads as part of the chord in songbook apps: the bars are listed instead.
     bars = [dict(b) for b in pop["bars"]]
-    first = dict(bars[0]["chords"][0])
+    first = dict(bars[1]["chords"][0])
     alts = [{"pc": first["pc"], "quality": first["quality"], "share": 95}]
-    for kind, marked in (("timing", False), ("chord", True)):
-        bars[0] = {**bars[0], "chords": [{**first, "doubt": {"id": 0, "why": "", "kind": kind, "alternatives": alts}}]}
-        grid = exports.chordpro({**pop, "bars": bars}).split("{start_of_grid")[1]
-        assert ("?" in grid.split("\n")[1]) is marked
+    for kind, listed in (("timing", False), ("chord", True)):
+        bars[1] = {**bars[1], "chords": [{**first, "doubt": {"id": 0, "why": "", "kind": kind, "alternatives": alts}}]}
+        text = exports.chordpro({**pop, "bars": bars})
+        assert "?" not in text.split("\n\n", 1)[1]
+        assert ("{comment: check by ear: bar 2}" in text) is listed
 
 
 def test_chordpro_marks_repeats(pop: dict[str, Any]) -> None:
-    repeated = [g for g in pop["groups"] if len(g["occurrences"]) > 1]
-    assert repeated and exports.chordpro(pop).count("|: ") == len(repeated)
+    text = exports.chordpro(pop)
+    rows = [line for line in text.splitlines() if line.startswith("|")]
+    assert any(row.startswith("|: ") and row.endswith(":|") for row in rows)  # the same four bars again
+
+
+def words_for(data: dict[str, Any]) -> dict[str, Any]:
+    """Two sung lines on pop (bars 1-4 and 5-6): a word on each bar start and one in between."""
+    starts = [b["start"] for b in data["bars"]]
+
+    def line(bars: range, texts: list[str], **extra: Any) -> dict[str, Any]:
+        words = []
+        for k, u in enumerate(bars):
+            half = (starts[u + 1] - starts[u]) / 2
+            words.append({"text": texts[2 * k], "start": starts[u], "end": starts[u] + half * 0.8})
+            words.append({"text": texts[2 * k + 1], "start": starts[u] + half, "end": starts[u] + half * 1.8})
+        base: dict[str, Any] = {"tag": None, "block": 0, "backing": [], "sung": True, "check": None}
+        return {**base, "text": " ".join(texts), "words": words, **extra}
+
+    return {
+        "version": 1, "language": "en", "text": "", "chords": [],
+        "lines": [
+            line(range(0, 4), ["Morning", "comes", "in", "on", "the", "harbour", "road,", "yes"]),
+            line(range(4, 6), ["the", "radio", "hums", "what"], backing=["hums"]),
+            {"text": "not here", "tag": None, "block": 1, "backing": [], "sung": False, "check": "not heard",
+             "words": [{"text": "not", "start": None, "end": None}, {"text": "here", "start": None, "end": None}]},
+        ],
+        "sections": [
+            {"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 4},
+            {"name": "Chorus 1", "role": "chorus", "letter": "B", "start": 4, "end": 6},
+            {"name": "Outro", "role": "outro", "letter": "C", "start": 6, "end": len(data["bars"])},
+        ],
+    }  # fmt: skip
+
+
+def test_chordpro_with_the_words_puts_each_chord_on_its_word(pop: dict[str, Any]) -> None:
+    text = exports.chordpro(pop, words_for(pop))
+    n = names(pop)
+    verse = text.split('{start_of_verse: label="Verse 1"}\n')[1].split("\n{end_of_verse}")[0]
+    assert verse.startswith(f"[{n[0][0]}]Morning comes [{n[1][0]}]in on")  # a chord on each bar's first word
+    chorus = text.split('{start_of_chorus: label="Chorus 1"}\n')[1].split("\n{end_of_chorus}")[0]
+    assert chorus.startswith(f"[{n[4][0]}]the radio") and chorus.endswith("(hums)")  # backing vocals apart
+    assert "not here" not in text  # a line not sung in this recording
+    assert '{start_of_grid label="Outro"}' in text  # a part without words stays a grid
 
 
 def test_lab_covers_the_file_and_matches_the_chart(pop: dict[str, Any]) -> None:
@@ -199,3 +243,18 @@ def test_musicxml_ties_have_notations_for_score_editors(pop: dict[str, Any]) -> 
     notes = root.findall("./part/measure/note")
     tied = [n for n in notes if n.find("tie") is not None]
     assert tied and all(n.find("notations/tied") is not None for n in tied)
+
+
+def test_damaged_part_names_fall_back_to_the_chart(pop: dict[str, Any]) -> None:
+    words = words_for(pop)
+    words["sections"] = [{"name": "X", "role": "verse", "letter": "A", "start": 3, "end": 2}]  # backwards
+    text = exports.chordpro(pop, words)
+    assert 'label="X"' not in text and f'label="{pop["sections"][0]["name"]}"' in text
+
+
+def test_part_names_saved_with_whole_floats_are_read_as_the_page_reads_them(pop: dict[str, Any]) -> None:
+    from woodshed import lyrics
+
+    named = lyrics.fitting_sections([{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0.0, "end": 4.0}], 8)
+    assert named == [{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 4}]
+    assert lyrics.fitting_sections([{"name": "V", "role": "verse", "letter": "A", "start": 0.5, "end": 4}], 8) is None

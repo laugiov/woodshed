@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import hashlib
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -32,6 +36,25 @@ SCRIPT_ESCAPES = {"<": "\\u003c", ">": "\\u003e", "&": "\\u0026", "\u2028": "\\u
 LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 MAX_NAME_BYTES = 200  # file names are limited to 255 bytes; room is left for the suffix and temp names
 WINDOWS_DEVICES = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$", re.IGNORECASE)
+
+
+def _shipped(rel: Path) -> bool:
+    """A file of the page, not one a system or an editor leaves around (.DS_Store, backups, caches)."""
+    return not any(part.startswith(".") or part == "__pycache__" for part in rel.parts) and not rel.name.endswith("~")
+
+
+@functools.cache
+def page_revision(folder: Path | None = None) -> str:
+    """A fingerprint of the page's own code (template, scripts, styles, fonts, samples): a page built
+    with other code is rebuilt, even when woodshed's version number is the same (an update from git)."""
+    if folder is None:
+        with resources.as_file(resources.files("woodshed").joinpath("page")) as page:
+            return page_revision(Path(page))
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob("*") if p.is_file() and _shipped(p.relative_to(folder))):
+        digest.update(path.relative_to(folder).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
 
 
 def _clean_text(text: str) -> str:
@@ -87,18 +110,31 @@ def _keep_lyrics(old: Path, new: Path, song_data: dict[str, Any], source: Path) 
             (new / "lyrics.previous.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
             (new / lyrics.LYRICS_JS).write_text(empty, encoding="utf-8")
             return
+
+        def timed(w: dict[str, Any]) -> bool:  # as the page reads a word: a start and an end
+            return isinstance(w.get("start"), (int, float)) and isinstance(w.get("end"), (int, float))
+
         words = {
-            li: [(w["start"], w["end"]) for w in line["words"]]
+            li: [(w["start"], w["end"]) if timed(w) else (math.nan, math.nan) for w in line["words"]]
             for li, line in enumerate(data["lines"])
-            if line["sung"] and all(w["start"] is not None for w in line["words"])
+            if line["sung"] and any(timed(w) for w in line["words"])
         }
         data["chords"] = lyrics.place_chords(
             lyrics.chord_changes(song_data), words, float(song_data["bpm"]), int(song_data["beats_per_bar"])
         )
+        named = lyrics.sections_by_words(song_data, data)  # the new chart's parts, named by the words
+        if named is None:
+            data.pop("sections", None)
+        else:
+            data["sections"] = named
         lyrics.write(new, data)
     except (OSError, ValueError, KeyError, TypeError, AttributeError):  # none, damaged, edited by hand
         (new / lyrics.LYRICS).unlink(missing_ok=True)
         (new / lyrics.LYRICS_JS).write_text(empty, encoding="utf-8")
+        return
+    # The songbook file with the words; the words are kept whatever happens to it.
+    with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError):
+        exports.write_chordpro(song_data, new / "exports", data)
 
 
 def _readable(folder: Path) -> None:

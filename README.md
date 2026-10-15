@@ -110,7 +110,8 @@ and keep the one your ear agrees with. Your corrections stay with the page and g
 
 `woodshed app` opens your library in the browser. Drop audio or video files on it and each one
 becomes a practice page: first with the full mix after a few seconds, then with every instrument's
-track. Export any song to **ChordPro** (OnSong, SongbookPro), **MIDI**, **MusicXML** (MuseScore), a
+track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
+**MusicXML** (MuseScore), a
 chord timeline (`.lab`) or **JSON**, or print a one-page chart for the music stand.
 
 ---

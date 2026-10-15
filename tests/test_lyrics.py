@@ -288,13 +288,38 @@ def test_the_lyrics_command_writes_the_page_lyrics(
     page.mkdir()
     monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
     monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False: v)
-    monkeypatch.setattr(lyrics, "page_song", lambda p: song(11, [(7, "")]))
+    chart = song(11, [(7, "")])
+    chart.update(title="Song", file="Song.wav", key={"pc": 7, "mode": "maj"}, groups=[],
+                 sections=[part("Verse 1", "verse", "A", 0, 11)])  # fmt: skip
+    monkeypatch.setattr(lyrics, "page_song", lambda p: chart)
     words = tmp_path / "words.txt"
     words.write_text("\n".join(order), encoding="utf-8")
+    (page / "exports").mkdir()
+    (page / "exports" / "Song.cho").write_text("{title: Song}\n")  # as built, before the words
     assert cli.main(["lyrics", str(page), str(words)]) == 0
     assert "4 of 4 lines placed" in capsys.readouterr().out
     data = json.loads((page / lyrics.LYRICS).read_text())
     assert data["lines"][0]["words"][0]["text"] == "morning" and data["chords"]
+    assert "morning" in (page / "exports" / "Song.cho").read_text()  # the songbook file has the words
+
+
+def test_the_lyrics_command_says_how_the_words_named_the_parts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    order = [*VERSE_1, *CHORUS]
+    v = full_song([(t, 1 + 5 * k) for k, t in enumerate(order)], 22, set(CHORUS))
+    page = tmp_path / "Song.woodshed"
+    page.mkdir()
+    monkeypatch.setattr(lyrics, "stems_folder", lambda p: tmp_path)
+    monkeypatch.setattr(lyrics, "listen", lambda path, cache, offline=False: v)
+    monkeypatch.setattr(lyrics, "page_song", lambda p: song(11, [(7, "")]))
+    named = [part("Verse 1", "verse", "A", 0, 6), part("Chorus 1", "chorus", "B", 6, 11)]
+    monkeypatch.setattr(lyrics, "sections_by_words", lambda chart, data: named)
+    words = tmp_path / "words.txt"
+    words.write_text("\n".join(order), encoding="utf-8")
+    assert cli.main(["lyrics", str(page), str(words)]) == 0
+    assert "parts named by the words: Verse 1, Chorus 1" in capsys.readouterr().out
+    assert json.loads((page / lyrics.LYRICS).read_text())["sections"] == named
 
 
 def test_a_damaged_model_cache_is_heard_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,3 +355,113 @@ def test_the_command_reads_text_files_from_windows(
     assert cli.main(["lyrics", str(page), str(words)]) == 0
     data = json.loads((page / lyrics.LYRICS).read_text())
     assert data["lines"][0]["tag"] == "Verse" and data["lines"][-1]["text"] == "d\u00e9j\u00e0"
+
+
+# Naming the parts by their words.
+
+
+def sung(text: str, bar: int, block: int, bar_time: float = 2.0) -> dict[str, Any]:
+    """A sung line starting on a bar (120 BPM, four beats a bar: two seconds a bar), a word a beat."""
+    words = text.split()
+    return {"text": text, "tag": None, "block": block, "backing": [], "sung": True, "check": None,
+            "words": [{"text": w, "start": bar * bar_time + k * 0.5, "end": bar * bar_time + k * 0.5 + 0.4}
+                      for k, w in enumerate(words)]}  # fmt: skip
+
+
+def part(name: str, role: str, letter: str, start: int, end: int) -> dict[str, Any]:
+    return {"name": name, "role": role, "letter": letter, "start": start, "end": end}
+
+
+def test_the_same_words_are_the_same_part_and_what_leads_to_the_chorus_is_the_prechorus() -> None:
+    chart = song(28, [(0, ""), (5, ""), (7, ""), (9, "m")])
+    chart["sections"] = [
+        part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 6), part("Part C", "part", "C", 6, 10),
+        part("Verse 2", "verse", "A", 10, 14), part("Part B", "part", "B", 14, 16),
+        part("Chorus 1", "chorus", "D", 16, 20), part("Outro", "outro", "E", 20, 28),
+    ]  # fmt: skip
+    data = {"lines": [
+        sung(VERSE_1[0], 0, 0), sung(VERSE_1[1], 2, 0),
+        sung("but you are always there", 4, 1),
+        sung(CHORUS[0], 6, 1), sung(CHORUS[1], 8, 1),
+        sung(VERSE_2[0], 10, 2), sung(VERSE_2[1], 12, 2),
+        sung("but you are always there", 14, 3),
+        sung(CHORUS[0], 16, 3), sung(CHORUS[1], 18, 3),
+    ]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None
+    assert [(s["name"], s["role"], s["start"], s["end"]) for s in named] == [
+        ("Verse 1", "verse", 0, 4), ("Pre-chorus 1", "prechorus", 4, 6), ("Chorus 1", "chorus", 6, 10),
+        ("Verse 2", "verse", 10, 14), ("Pre-chorus 2", "prechorus", 14, 16), ("Chorus 2", "chorus", 16, 20),
+        ("Outro", "outro", 20, 28),
+    ]  # fmt: skip
+    assert named[2]["letter"] == named[5]["letter"]  # one part, one letter
+
+
+def test_the_end_of_a_stanza_stays_with_its_verse() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 6),
+                         part("Verse 2", "verse", "A", 6, 10), part("Part B", "part", "B", 10, 12)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(VERSE_1[1], 2, 0), sung(VERSE_3[0], 4, 0),
+                      sung(VERSE_2[0], 6, 1), sung(VERSE_2[1], 8, 1), sung(VERSE_3[1], 10, 1)]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None
+    assert [(s["name"], s["start"], s["end"]) for s in named] == [("Verse 1", 0, 6), ("Verse 2", 6, 12)]
+
+
+def test_words_that_agree_with_the_chart_change_nothing() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Chorus 1", "chorus", "B", 4, 8),
+                         part("Verse 2", "verse", "A", 8, 12), part("Chorus 2", "chorus", "B", 12, 16)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(CHORUS[0], 4, 1), sung(VERSE_2[0], 8, 2), sung(CHORUS[0], 12, 3)]}
+    assert lyrics.sections_by_words(chart, data) is None
+
+
+def test_parts_without_words_keep_their_names() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    chart["sections"] = [part("Intro", "intro", "A", 0, 4), part("Part B", "part", "B", 4, 8),
+                         part("Part C", "part", "C", 8, 12), part("Part B", "part", "B", 12, 16)]  # fmt: skip
+    data = {"lines": [sung(CHORUS[0], 4, 0), sung(CHORUS[0], 12, 1)]}
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None  # the part sung twice with the same words, nothing else: the chorus
+    assert [s["name"] for s in named] == ["Intro", "Chorus 1", "Part C", "Chorus 2"]
+
+
+def test_a_part_sung_twice_with_other_words_is_not_a_chorus() -> None:
+    chart = song(12, [(0, ""), (7, "")])
+    chart["sections"] = [part("Part A", "part", "A", 0, 4), part("Part B", "part", "B", 4, 8),
+                         part("Part A", "part", "A", 8, 12)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(VERSE_2[0], 8, 1)]}
+    assert lyrics.sections_by_words(chart, data) is None
+
+
+def test_a_hook_line_in_a_verse_does_not_make_it_the_chorus() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Chorus 1", "chorus", "B", 4, 8),
+                         part("Verse 2", "verse", "C", 8, 12), part("Chorus 2", "chorus", "B", 12, 16)]  # fmt: skip
+    hook = CHORUS[0]
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(VERSE_1[1], 1, 0), sung(hook, 2, 0),
+                      sung(hook, 4, 1), sung(CHORUS[1], 6, 1),
+                      sung(VERSE_2[0], 8, 2), sung(VERSE_2[1], 10, 2),
+                      sung(hook, 12, 3), sung(CHORUS[1], 14, 3)]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data) or chart["sections"]
+    assert [s["name"] for s in named] == ["Verse 1", "Chorus 1", "Verse 2", "Chorus 2"]
+
+
+def test_a_solo_on_the_verse_chords_stays_the_solo() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    solo = part("Instrumental", "instrumental", "A", 8, 12)  # the verse's chords, no words
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 8),
+                         solo, part("Part B", "part", "B", 12, 16)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(CHORUS[0], 4, 1), sung(CHORUS[0], 12, 2)]}
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None
+    assert [s["name"] for s in named] == ["Verse", "Chorus 1", "Instrumental", "Chorus 2"]
+
+
+def test_words_pasted_without_blank_lines_join_no_part() -> None:
+    chart = song(12, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 8),
+                         part("Verse 2", "verse", "A", 8, 12)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(CHORUS[0], 4, 0), sung(VERSE_2[0], 8, 0)]}  # one block: no stanzas
+    named = lyrics.sections_by_words(chart, data) or chart["sections"]
+    assert [s["name"] for s in named] == ["Verse 1", "Part B", "Verse 2"]

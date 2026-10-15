@@ -493,7 +493,7 @@ def test_text_exports_from_the_page_equal_the_python_ones(open_page: Any, name: 
     data = o.js("Woodshed.current.song")
     assert download(o, "export-chordpro") == exports.chordpro(data)
     assert download(o, "export-lab") == exports.lab(data)
-    assert ("?" in download(o, "export-chordpro").split("{start_of_grid")[1]) is close_calls
+    assert ("{comment: check by ear:" in download(o, "export-chordpro")) is close_calls
 
 
 def test_exports_from_the_page_carry_the_corrections(open_page: Any) -> None:
@@ -505,19 +505,41 @@ def test_exports_from_the_page_carry_the_corrections(open_page: Any) -> None:
     o.page.get_by_test_id("doubt").first.click()
     o.page.get_by_test_id("pick").first.click()  # G becomes Gm
     chordpro = download(o, "export-chordpro")
-    assert "Gm" in chordpro and "?" not in chordpro.split("{end_of_grid}")[0].split("\n", 6)[-1]
+    assert "Gm" in chordpro and "?" not in chordpro  # settled: no longer listed to check
     data = json.loads(download(o, "export-json"))
     jsonschema.validate(data, song.schema())
     assert data["bars"][0]["chords"][1] == {"pc": 7, "quality": "m", "beats": 1, "doubt": None}
 
 
-def test_midi_and_musicxml_come_from_the_page_folder(open_page: Any) -> None:
-    o = open_page("pop")
+def download_bytes(o: Any, testid: str) -> bytes:
     o.page.get_by_test_id("export").click()
-    for testid, ext in (("export-midi", ".mid"), ("export-musicxml", ".musicxml")):
-        href = o.page.get_by_test_id(testid).get_attribute("href")
-        assert href is not None and href.startswith("exports/") and href.endswith(ext)
-        assert (o.folder / href).is_file()
+    with o.page.expect_download() as info:
+        o.page.get_by_test_id(testid).click()
+    path = info.value.path()
+    assert path is not None
+    return Path(path).read_bytes()
+
+
+@pytest.mark.parametrize(("name", "stems"), [("pop", True), ("waltz", False), ("funk", True)])
+def test_midi_and_musicxml_from_the_page_equal_the_python_ones(open_page: Any, name: str, stems: bool) -> None:
+    from woodshed import exports
+
+    o = open_page(name, stems=stems)
+    data = o.js("Woodshed.current.song")
+    assert download_bytes(o, "export-midi") == exports.midi(data)
+    assert download(o, "export-musicxml") == exports.musicxml(data)
+
+
+def test_midi_and_musicxml_carry_the_corrections(open_page: Any) -> None:
+    from woodshed import exports
+
+    o = open_page("pickup")
+    o.page.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("pick").first.click()  # G becomes Gm
+    corrected = json.loads(download(o, "export-json"))
+    assert download_bytes(o, "export-midi") == exports.midi(corrected)
+    assert download(o, "export-musicxml") == exports.musicxml(corrected)
+    assert "<kind>minor</kind>" in download(o, "export-musicxml")
 
 
 def test_print_opens_the_print_dialog(open_page: Any) -> None:
@@ -532,10 +554,14 @@ def test_exports_match_python_for_a_half_bpm_and_a_hostile_title(open_page: Any)
     from woodshed import exports
 
     o = open_page("pop")
-    o.js("Woodshed.current.song.bpm = 118.5; Woodshed.current.song.title = 'Live }{x}\\n at <Club>'")
+    o.js("Woodshed.current.song.bpm = 118.5; Woodshed.current.song.title = 'Live }{x}\\n at <Club> & \\u{1d11e}'")
     data = o.js("Woodshed.current.song")
     assert download(o, "export-chordpro") == exports.chordpro(data)
     assert download(o, "export-lab") == exports.lab(data)
+    assert download_bytes(o, "export-midi") == exports.midi(data)
+    assert download(o, "export-musicxml") == exports.musicxml(data)
+    o.js("Woodshed.current.song.bpm = 96")  # 60,000,000 / 96 = 625,000 exactly; and halves round to even
+    assert download_bytes(o, "export-midi") == exports.midi(o.js("Woodshed.current.song"))
 
 
 def test_the_form_follows_the_song_and_a_part_loops_from_its_name(open_page: Any) -> None:

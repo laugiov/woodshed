@@ -46,6 +46,11 @@ LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
 SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
+CORRECTIONS_MAX = 2000  # chords picked by ear on one page: more than any song has doubts
+CORRECTIONS_BYTES = 64 * 1024
+QUALITIES = ("", "m", "7", "m7")
+CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
+CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
 TYPES = {
     ".flac": "audio/flac",
     ".woff2": "font/woff2",
@@ -106,6 +111,7 @@ class Library:
             leftover.unlink(missing_ok=True)
         self.queue: queue.Queue[tuple[Job, Path, Options, bool]] = queue.Queue()
         self.lock = threading.Lock()
+        self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -151,6 +157,76 @@ class Library:
             finally:
                 tmp.unlink(missing_ok=True)
         return list(names)
+
+    # Corrections: the chords picked by ear, kept by the library so every device of the band reads
+    # the same chart. Out of the page folders (a rebuild replaces them), per analysis of the song: a
+    # page left open on an older analysis never hides the corrections of the current one.
+
+    def _page(self, folder: Any) -> str:
+        if not isinstance(folder, str) or folder not in {p["folder"] for p in self.pages()}:
+            raise ValueError("page: a page folder of the library")
+        return folder
+
+    def _corrections_file(self, folder: str) -> Path:
+        return self.root / CORRECTIONS_DIR / f"{folder}.json"
+
+    def _stored(self, folder: str) -> dict[str, Any]:
+        """What the library holds for a page; an entry damaged by hand is skipped, the others kept."""
+        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}}
+        try:
+            data = json.loads(self._corrections_file(folder).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return out
+        if not isinstance(data, dict):
+            return out
+        rev = data.get("rev")
+        out["rev"] = rev if type(rev) is int and rev >= 0 else 0
+        entries = data.get("by_key")
+        for key, entry in entries.items() if isinstance(entries, dict) else []:
+            try:
+                out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
+                out["at"][key] = float(entry.get("at", 0))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+        return out
+
+    def corrections(self, folder: Any, key: Any) -> dict[str, Any]:
+        folder = self._page(folder)
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
+            raise ValueError("key: the analysis the corrections belong to")
+        stored = self._stored(folder)
+        rev = max(stored["rev"], self.revisions.get(folder, 0))
+        return {"key": key, "fixes": stored["by_key"].get(key, {}), "rev": rev}
+
+    def set_corrections(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise ValueError("corrections: a JSON object")
+        folder = self._page(data.get("page"))
+        checked = _checked_corrections(data)
+        key = checked["key"]
+        with self.lock:
+            stored = self._stored(folder)
+            # Two devices correcting at once: both chords are kept; a later choice for a doubt wins.
+            merged = {**stored["by_key"].get(key, {}), **checked["fixes"]}
+            if len(merged) > CORRECTIONS_MAX:
+                raise ValueError("fixes: chords by doubt id")
+            stored["by_key"][key] = merged
+            stored["at"][key] = time.time()
+            for old in sorted(stored["at"], key=stored["at"].get)[: max(0, len(stored["at"]) - CORRECTIONS_KEYS)]:
+                stored["by_key"].pop(old, None)  # the analyses of long ago
+                stored["at"].pop(old, None)
+            rev = max(stored["rev"], self.revisions.get(folder, 0)) + 1  # kept in the file: grows across restarts
+            body = {"rev": rev, "by_key": {k: {"fixes": v, "at": stored["at"][k]} for k, v in stored["by_key"].items()}}
+            target = self._corrections_file(folder)
+            target.parent.mkdir(exist_ok=True)
+            tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}")
+            try:
+                tmp.write_text(json.dumps(body, indent=1) + "\n", encoding="utf-8")
+                tmp.replace(target)
+            finally:
+                tmp.unlink(missing_ok=True)
+            self.revisions[folder] = rev
+            return {"key": key, "fixes": merged, "rev": rev}
 
     def state(self) -> dict[str, Any]:
         with self.lock:
@@ -317,6 +393,22 @@ LIVE_FOLLOWERS = 32  # open streams at most: a band, not an audience
 LIVE_PING = 15.0  # seconds between keep-alive comments on a quiet stream
 
 
+def _checked_corrections(data: Any) -> dict[str, Any]:
+    """{"key", "fixes"} as a page writes them: chords (pitch class, quality) by doubt id."""
+    key, fixes = data.get("key"), data.get("fixes")
+    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
+        raise ValueError("key: the analysis the corrections belong to")
+    if not isinstance(fixes, dict) or len(fixes) > CORRECTIONS_MAX:
+        raise ValueError("fixes: chords by doubt id")
+    for doubt, fix in fixes.items():
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", doubt) or not isinstance(fix, list) or len(fix) != 2:
+            raise ValueError("fixes: [pitch class, quality] by doubt id")
+        pc, quality = fix
+        if type(pc) is not int or not 0 <= pc <= 11 or quality not in QUALITIES:
+            raise ValueError("fixes: [pitch class, quality] by doubt id")
+    return {"key": key, "fixes": {k: list(v) for k, v in fixes.items()}}
+
+
 class Live:
     """Where the band is: the leader's song and position, kept in memory and sent to followers.
 
@@ -330,6 +422,13 @@ class Live:
         self.version = 0
         self.followers = 0
         self.closed = False
+        self.fixes: dict[str, int] = {}  # page folder -> revision of its corrections, told to followers
+
+    def corrected(self, folder: str, rev: int) -> None:
+        """The chart of a page was corrected: the followers hear it and read it again."""
+        with self.cond:
+            self.fixes[folder] = max(self.fixes.get(folder, 0), rev)  # answers can cross: never back
+            self._changed()
 
     def update(self, data: Any, library_root: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
@@ -384,7 +483,7 @@ class Live:
             self.cond.wait_for(lambda: self.version != seen or self.closed, timeout)
             if self.closed or self.version == seen:
                 return seen, None
-            return self.version, dict(self.state)
+            return self.version, {**self.state, "fixes": dict(self.fixes)} if self.fixes else dict(self.state)
 
     def close(self) -> None:
         with self.cond:
@@ -502,6 +601,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.OK, {"token": self.server.token})
         elif path == "/api/setlist":
             self._json(HTTPStatus.OK, {"songs": self.server.library.setlist()})
+        elif path == "/api/corrections":
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                page, key = query.get("page", [""])[0], query.get("key", [""])[0]
+                self._json(HTTPStatus.OK, self.server.library.corrections(page, key))
+            except ValueError as exc:
+                self._error(HTTPStatus.BAD_REQUEST, str(exc))
         elif path == "/api/live":
             given = parse_qs(urlsplit(self.path).query).get("t", [""])[0].encode("utf-8", "surrogateescape")
             site = self.headers.get("Sec-Fetch-Site", "same-origin")
@@ -525,7 +631,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
-        if url.path in ("/api/live", "/api/setlist"):
+        if url.path in ("/api/live", "/api/setlist", "/api/corrections"):
             self._small_json_post(url.path)
             return
         if url.path != "/api/songs":
@@ -577,7 +683,7 @@ class Handler(BaseHTTPRequestHandler):
     def _small_json_post(self, path: str) -> None:
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
-        limit = LIVE_MAX if path == "/api/live" else SETLIST_BYTES
+        limit = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES}.get(path, SETLIST_BYTES)
         if "chunked" in self.headers.get("Transfer-Encoding", "").lower() or not 0 < length <= limit:
             self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "a small JSON body with a Content-Length")
             return
@@ -589,6 +695,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/live":
                 self._json(HTTPStatus.OK, self.server.live.update(data, self.server.library.root))
+            elif path == "/api/corrections":
+                saved = self.server.library.set_corrections(data)
+                self.server.live.corrected(data["page"], saved["rev"])
+                self._json(HTTPStatus.OK, saved)
             else:
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
         except PermissionError as exc:
@@ -616,7 +726,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             seen = -1
             with live.cond:
-                current: tuple[int, dict[str, Any]] | None = (live.version, dict(live.state))
+                first = {**live.state, "fixes": dict(live.fixes)} if live.fixes else dict(live.state)
+                current: tuple[int, dict[str, Any]] | None = (live.version, first)
             while not live.closed:
                 if current is not None:
                     seen, shown = current

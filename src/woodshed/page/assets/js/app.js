@@ -116,7 +116,7 @@
     app.sheetMode = (s) => (!app.words ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
 
     // The song's sections, as the analysis named them.
-    app.sections = () => meta.sections;
+    app.sections = () => (app.words && app.words.sections) || meta.sections; // named by the words, when placed
     app.sectionOf = (u) => {
       const list = app.sections();
       return list.length ? list[song.sectionIndex(u, list)] : null;
@@ -136,6 +136,24 @@
     };
     const curBar = () => Math.floor(store.get().beat / song.per);
 
+    // Where the parts start: the sections, or without them the lines of the chart.
+    function partStarts() {
+      const list = app.sections();
+      const starts = list.length ? list.map((sec) => sec.start) : song.song.groups.flatMap((g) => g.occurrences.map((o) => o[0]));
+      return [...new Set(starts)].sort((a, b) => a - b);
+    }
+    // Back to the start of the part, or to the part before when already at its start.
+    // A press in the first beat of a part means the part before (as on a music player).
+    app.prevPart = () => {
+      const beat = store.get().beat;
+      const starts = [...new Set([0, ...partStarts()])].filter((b) => b * song.per <= beat);
+      const k = starts.length - 1;
+      app.seekBar(beat - starts[k] * song.per >= 1 || k === 0 ? starts[k] : starts[k - 1]);
+    };
+    app.nextPart = () => {
+      const next = partStarts().find((b) => b > curBar());
+      if (next !== undefined) app.seekBar(next);
+    };
     app.seekBar = function seekBar(u) {
       if (following()) return leaderMoves();
       transport.seek(barStart(Math.max(0, Math.min(song.bars.length - 1, u))));
@@ -274,6 +292,18 @@
         /* private mode or storage off: the correction still applies to this visit */
       }
     }
+    // Only fixes of this analysis's doubts, as this version writes them: anything else is ignored,
+    // the page must open whatever is stored (in this browser, or by the band in the library).
+    function validFixes(stored) {
+      const out = {};
+      if (!stored || typeof stored !== "object" || Array.isArray(stored)) return out;
+      const ids = new Set(song.doubts().map((d) => String(d.chord.doubt.id)));
+      for (const [id, fix] of Object.entries(stored)) {
+        const valid = ids.has(id) && Array.isArray(fix) && Number.isInteger(fix[0]) && fix[0] >= 0 && fix[0] <= 11 && QUALITIES.has(fix[1]);
+        if (valid) out[id] = [fix[0], fix[1]];
+      }
+      return out;
+    }
     function restoreCorrections() {
       let stored = {};
       try {
@@ -281,15 +311,21 @@
       } catch (err) {
         stored = {};
       }
-      // Anything this version did not write is ignored: the page must open whatever is stored.
-      if (!stored || typeof stored !== "object" || Array.isArray(stored)) stored = {};
-      const ids = new Set(song.doubts().map((d) => String(d.chord.doubt.id)));
-      for (const [id, fix] of Object.entries(stored)) {
-        const valid = ids.has(id) && Array.isArray(fix) && Number.isInteger(fix[0]) && fix[0] >= 0 && fix[0] <= 11 && QUALITIES.has(fix[1]);
-        if (valid) fixes[id] = [fix[0], fix[1]];
-      }
+      fixes = validFixes(stored);
       applyFixes();
     }
+    // The band's corrections (views/band.js, when the page is served by woodshed app): the analysis
+    // they belong to, the ones this device has, and taking the band's.
+    app.fixesKey = storageKey.split(":").pop();
+    app.fixes = () => ({ ...fixes });
+    app.useFixes = (stored) => {
+      const next = validFixes(stored);
+      if (JSON.stringify(next) === JSON.stringify(fixes)) return; // nothing new: no redraw
+      fixes = next;
+      applyFixes();
+      saveCorrections();
+      store.set({ corrections: store.get().corrections + 1 });
+    };
     app.correct = function correct(u, k, alt) {
       const c = song.bars[u].chords[k];
       fixes[c.doubt.id] = [alt.pc, alt.quality];
@@ -297,7 +333,9 @@
       saveCorrections();
       popups.closeAll();
       store.set({ corrections: store.get().corrections + 1 });
-      app.toast("Saved: " + W.prettyText(app.nameFor(alt, 0, store.get())) + ". This browser remembers it for this song.");
+      const shared = app.shareFixes ? app.shareFixes(fixes) : false;
+      const where = shared ? "The band sees it on every device." : "This browser remembers it for this song.";
+      app.toast("Saved: " + W.prettyText(app.nameFor(alt, 0, store.get())) + ". " + where);
     };
 
     restoreCorrections();
@@ -561,7 +599,9 @@
         if (k === " ") e.preventDefault();
         return;
       }
-      if (k === " " && (tag !== "BUTTON" || e.target.id === "playBtn")) {
+      // Space plays or pauses, also when a stage button has the focus after a tap: a page-turner
+      // pedal sends Space, and must not press "Next part" again.
+      if (k === " " && (tag !== "BUTTON" || e.target.id === "playBtn" || e.target.closest("#stage"))) {
         e.preventDefault();
         app.togglePlay();
       } else if (k === "ArrowRight" || k === "PageDown") {
@@ -635,14 +675,13 @@
     $("trDown").addEventListener("click", () => app.transposeTo(store.get().transpose - 1));
     $("capoUp").addEventListener("click", () => store.set({ capo: Math.min(7, store.get().capo + 1) }));
     $("capoDown").addEventListener("click", () => store.set({ capo: Math.max(0, store.get().capo - 1) }));
-    // Export: text formats made here with your corrections; MIDI and MusicXML as analysed.
+    // Export: every format made here, with your corrections.
     const stem = (meta.file.replace(/\.[^.]*$/, "") || "song").replace(/[<>:"/\\|?*]/g, "_");
-    const fileOf = (ext) => (song.view.exports || []).find((f) => f.endsWith("." + ext));
     const item = (label, detail, attrs) => h("button", { type: "button", class: "item", ...attrs }, h("span", null, label), h("small", null, detail));
     W.clear(
       $("exportItems"),
-      item("ChordPro", "With your corrections. Opens in OnSong, SongbookPro and other songbook apps", {
-        "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song), "text/plain"),
+      item("ChordPro", "With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps", {
+        "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words), "text/plain"),
       }),
       item("Chord timeline (.lab)", "With your corrections. Start, end and chord, for analysis tools", {
         "data-testid": "export-lab", onclick: () => W.exports.save(stem + ".lab", W.exports.lab(song), "text/plain"),
@@ -650,8 +689,12 @@
       item("JSON", "With your corrections. The whole analysis, for developers", {
         "data-testid": "export-json", onclick: () => W.exports.save(stem + ".json", W.exports.json(song), "application/json"),
       }),
-      fileOf("mid") ? h("a", { class: "item", href: encodeURI(fileOf("mid")), download: stem + ".mid", "data-testid": "export-midi" }, h("span", null, "MIDI"), h("small", null, "Chords, bass and drums, as analysed (without your corrections)")) : null,
-      fileOf("musicxml") ? h("a", { class: "item", href: encodeURI(fileOf("musicxml")), download: stem + ".musicxml", "data-testid": "export-musicxml" }, h("span", null, "MusicXML"), h("small", null, "Chord symbols and bass line for MuseScore, as analysed (without your corrections)")) : null,
+      item("MIDI", "With your corrections. Chords, bass and drums, for a sequencer or a DAW", {
+        "data-testid": "export-midi", onclick: () => W.exports.save(stem + ".mid", W.exports.midi(song), "audio/midi"),
+      }),
+      item("MusicXML", "With your corrections. Chord symbols and bass line, for MuseScore", {
+        "data-testid": "export-musicxml", onclick: () => W.exports.save(stem + ".musicxml", W.exports.musicxml(song), "application/vnd.recordare.musicxml+xml"),
+      }),
       item("Print the chart", "One page for the music stand", { "data-testid": "export-print", onclick: () => window.print() }),
     );
 
@@ -683,6 +726,24 @@
     }
     $("stageBtn").addEventListener("click", () => setStage(true));
     $("stageExit").addEventListener("click", () => setStage(false));
+    // The stage's own controls: a tablet on the stand has no keyboard. A tapped button lets go of
+    // the focus, and Space released on a stage button does nothing more: a pedal (it sends Space)
+    // must not press the button again (Firefox clicks a button when Space is released).
+    const tapped = (act) => (e) => {
+      if (e.detail > 0) e.currentTarget.blur();
+      act();
+    };
+    $("stPrev").addEventListener("click", tapped(() => app.prevPart()));
+    $("stPlay").addEventListener("click", tapped(() => app.togglePlay()));
+    $("stNextPart").addEventListener("click", tapped(() => app.nextPart()));
+    document.addEventListener("keyup", (e) => {
+      if (e.key === " " && e.target.closest && e.target.closest("#stage button")) e.preventDefault();
+    });
+    store.on((s, changed) => {
+      if (!changed.has("playing") && !changed.has("stage")) return;
+      $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones
+      $("stPlay").setAttribute("aria-label", s.playing ? "Pause" : "Play");
+    });
     document.addEventListener("fullscreenchange", () => {
       if (!document.fullscreenElement && store.get().stage) setStage(false);
     });

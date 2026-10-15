@@ -21,7 +21,7 @@ from woodshed import __version__, audio, songbook, stems, theory
 from woodshed.analysis import REVISION as ANALYSIS_REVISION
 from woodshed.analysis import analyze
 from woodshed.build import build as build_page
-from woodshed.build import folder_name
+from woodshed.build import folder_name, page_revision
 from woodshed.errors import WoodshedError
 from woodshed.model import Song
 
@@ -106,6 +106,7 @@ def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
     return {
         "version": __version__,
         "analysis": ANALYSIS_REVISION,
+        "page": page_revision(),
         "source": stems.fingerprint(src),
         "stems": use_stems,
         "title": opts.title,

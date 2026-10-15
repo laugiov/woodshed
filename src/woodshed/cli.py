@@ -235,11 +235,18 @@ def run_lyrics(argv: Sequence[str]) -> int:
                 file=sys.stderr,
             )
         voice = lyrics.listen(cache / "vocals.flac", cache, args.offline)
-        data = lyrics.place(text, voice, lyrics.page_song(page))
+        chart = lyrics.page_song(page)
+        data = lyrics.place(text, voice, chart)
         lyrics.write(page, data)
+        if (page / "exports").is_dir():  # the songbook file of the page, with the words now
+            from woodshed import exports
+
+            exports.write_chordpro(chart, page / "exports", data)
         lines = data["lines"]
         sung = sum(ln["sung"] for ln in lines)
         print(f"{sung} of {len(lines)} lines placed on the voice; lyrics in {page / lyrics.LYRICS}")
+        if data.get("sections"):
+            print("  parts named by the words: " + ", ".join(sec["name"] for sec in data["sections"]))
         for k, ln in enumerate(lines):
             if ln["check"]:
                 print(f"  line {k + 1}: {ln['check']}: {ln['text'][:50]}")

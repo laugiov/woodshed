@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 import threading
 import time
@@ -127,6 +128,66 @@ def test_stage_mode_carries_over_to_the_next_song(browser: Browser, server: app.
     until(page, "window.Woodshed && window.Woodshed.ready === true")
     expect(page.get_by_test_id("stage")).to_be_visible()
     assert problems == []
+
+
+def test_the_next_song_is_a_button_on_the_stage(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, server.url + "pop.woodshed/index.html", problems)
+    page.get_by_test_id("stage-open").click()
+    button = page.get_by_test_id("stage-next-song").get_by_role("button")
+    expect(button).to_contain_text("waltz")
+    button.click()  # a touch screen has no N key
+    page.wait_for_url("**/waltz.woodshed/index.html**")
+    assert problems == []
+
+
+def test_a_pedal_on_the_stage_plays_whatever_button_has_the_focus(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, server.url + "pop.woodshed/index.html", problems)
+    page.get_by_test_id("stage-open").click()
+    page.get_by_test_id("stage-next-song").get_by_role("button").focus()  # as after a tap
+    page.keyboard.press(" ")  # a page-turner pedal sends Space
+    until(page, "Woodshed.debug().playing === true")
+    assert "pop.woodshed" in page.url  # still this song
+    assert problems == []
+
+
+CHART = "Woodshed.current.bars[0].chords.map((c) => c.pc + c.quality).join()"
+
+
+@pytest.fixture
+def pickup_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[app.AppServer]:
+    """A library of one song with a chord to check by ear."""
+    monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
+    root = tmp_path / "library"
+    wav = synth.write("pickup", tmp_path / "src").wav
+    first_pass(wav, Options(use_stems=False, open_page=False), Reporter(io.StringIO()), root)
+    srv = app.AppServer(app.Library(root, Options(use_stems=False, open_page=False)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_one_device_corrects_the_chart_of_every_device(browser: Browser, pickup_server: app.AppServer) -> None:
+    problems: list[str] = []
+    server = pickup_server
+    url = server.url + "pickup.woodshed/index.html"
+    try:
+        guitar = device(browser, url, problems)
+        bass = device(browser, url, problems)  # already open: hears it at once
+        before = bass.evaluate(CHART)
+        guitar.get_by_test_id("doubt").first.click()
+        guitar.get_by_test_id("pick").first.click()
+        after = guitar.evaluate(CHART)
+        assert after != before
+        expect(guitar.get_by_test_id("toast")).to_contain_text("every device")
+        until(bass, f"{CHART} === {json.dumps(after)}")
+        keys = device(browser, url, problems)  # opened later: reads it from the library
+        assert keys.evaluate(CHART) == after
+        assert problems == []
+    finally:
+        (server.library.root / "pickup.woodshed" / "corrections.json").unlink(missing_ok=True)
 
 
 def test_from_disk_there_is_no_band(open_page: Any) -> None:
