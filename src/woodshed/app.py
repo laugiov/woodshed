@@ -977,11 +977,19 @@ def serve(
         # the home page and its token. For the band's phones on the rehearsal Wi-Fi, or a container
         # published on 127.0.0.1 (with uploads allowed from the network: the bridge is not loopback).
         uploads = "anyone can add songs" if uploads_from_network else "songs are added from this computer only"
-        print(
-            f"woodshed app: listening on {host}: every device on this network can open the library, play it and "
-            f"lead the band ({uploads})",
-            flush=True,
-        )
+        if in_container():
+            # The bridge address says nothing about who can reach the app: the published port does.
+            print(
+                f"woodshed app: listening inside the container; the port published in compose.yaml decides who "
+                f"can reach it ({uploads})",
+                flush=True,
+            )
+        else:
+            print(
+                f"woodshed app: listening on {host}: every device on this network can open the library, play it "
+                f"and lead the band ({uploads})",
+                flush=True,
+            )
 
     def stop(signum: int, frame: Any) -> None:
         raise KeyboardInterrupt  # docker stop sends SIGTERM: stop as on Ctrl-C
