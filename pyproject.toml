@@ -11,7 +11,11 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Laurent Giovannoni" }]
-keywords = ["music", "chords", "practice", "guitar", "bass", "drums", "chord-recognition"]
+keywords = [
+    "music", "musicians", "chords", "chord-recognition", "chord-chart", "guitar", "bass", "drums", "lyrics",
+    "practice", "play-along", "band", "rehearsal", "source-separation", "demucs", "music-information-retrieval",
+    "beat-tracking", "chordpro", "offline",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
