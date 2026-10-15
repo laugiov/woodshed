@@ -54,7 +54,9 @@ def test_silence_has_no_beats() -> None:
 
 
 def test_beat_this_missing_gives_a_clear_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Both the package and its module: another test may have imported beat_this.inference already.
     monkeypatch.setitem(sys.modules, "beat_this", None)
+    monkeypatch.setitem(sys.modules, "beat_this.inference", None)
     assert not beats.beat_this_available()
     with pytest.raises(MissingExtra, match=r"woodshed\[stems\]"):
         beats.track_beat_this(Path("song.wav"))

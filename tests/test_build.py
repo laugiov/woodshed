@@ -272,3 +272,55 @@ def test_a_failed_build_keeps_the_previous_page(
         build.build(result, wav, out)
     assert (first / "index.html").read_text(encoding="utf-8") == before
     assert [p.name for p in out.iterdir()] == [first.name]  # no temporary folder left
+
+
+def test_a_page_without_words_still_loads_its_lyrics_script(page: Path) -> None:
+    assert (page / "lyrics.js").read_text() == "window.WOODSHED_LYRICS = null;\n"
+
+
+def test_words_placed_on_a_page_survive_a_rebuild(tmp_path: Path, pop_song: tuple[Path, Song]) -> None:
+    from woodshed import lyrics
+
+    wav, result = pop_song
+    first = build.build(result, wav, tmp_path / "out")
+    words = {"version": 1, "language": "auto", "text": "la la", "chords": [],
+             "lines": [{"text": "la la", "tag": None, "block": 0, "backing": [], "sung": True, "check": None,
+                        "words": [{"text": "la", "start": 1.0, "end": 1.4},
+                                  {"text": "la", "start": 3.0, "end": 3.4}]}]}  # fmt: skip
+    lyrics.write(first, words)
+    again = build.build(result, wav, tmp_path / "out")
+    kept = json.loads((again / lyrics.LYRICS).read_text())
+    assert kept["lines"] == words["lines"]
+    assert kept["chords"]  # placed again on the new analysis
+    assert (again / lyrics.LYRICS_JS).read_text().startswith("window.WOODSHED_LYRICS = {")
+
+
+def test_a_page_rebuilt_from_another_recording_keeps_the_text_not_the_times(
+    tmp_path: Path, pop_song: tuple[Path, Song]
+) -> None:
+    from woodshed import lyrics
+
+    wav, result = pop_song
+    first = build.build(result, wav, tmp_path / "out")
+    (first / "woodshed.json").write_text(json.dumps({"settings": {"source": "another-recording"}}))
+    lyrics.write(first, {"version": 1, "text": "la la", "lines": [], "chords": []})
+    again = build.build(result, wav, tmp_path / "out")
+    assert not (again / lyrics.LYRICS).exists()
+    assert json.loads((again / "lyrics.previous.json").read_text())["text"] == "la la"
+    assert (again / lyrics.LYRICS_JS).read_text() == "window.WOODSHED_LYRICS = null;\n"
+    third = build.build(result, wav, tmp_path / "out")  # set aside, and kept so
+    assert json.loads((third / "lyrics.previous.json").read_text())["text"] == "la la"
+
+
+NAN_LYRICS = '{"version": 1, "lines": [{"sung": true, "words": [{"start": NaN, "end": 1}]}]}'
+
+
+@pytest.mark.parametrize("content", ["{not json", NAN_LYRICS, '{"version": 7}', "[]", "null", '"x"'])
+def test_damaged_lyrics_never_break_a_rebuild(tmp_path: Path, pop_song: tuple[Path, Song], content: str) -> None:
+    from woodshed import lyrics
+
+    wav, result = pop_song
+    first = build.build(result, wav, tmp_path / "out")
+    (first / lyrics.LYRICS).write_text(content)
+    again = build.build(result, wav, tmp_path / "out")
+    assert (again / lyrics.LYRICS_JS).read_text() == "window.WOODSHED_LYRICS = null;\n"

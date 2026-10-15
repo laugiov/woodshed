@@ -64,6 +64,43 @@ def page_html(song: Song, data: dict[str, Any]) -> str:
     return PLACEHOLDER.sub(lambda m: values[m.group(1)], template)
 
 
+def _keep_lyrics(old: Path, new: Path, song_data: dict[str, Any], source: Path) -> None:
+    """The words placed on a page survive a rebuild: the words keep their times, the chords of the
+    new analysis are placed on them again. A page rebuilt from another recording (a remaster, a
+    live take of the same title) keeps the text only, as lyrics.previous.json: its times belong to
+    the other recording. Without words, an empty lyrics.js (the page loads it)."""
+    from woodshed import lyrics, stems
+
+    empty = "window.WOODSHED_LYRICS = null;\n"
+    try:
+        previous = old / "lyrics.previous.json"
+        if not (old / lyrics.LYRICS).exists() and previous.exists():  # words set aside stay set aside
+            shutil.copyfile(previous, new / previous.name)
+        data = json.loads((old / lyrics.LYRICS).read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("version") != 1:
+            raise ValueError("lyrics from another version")
+        try:  # the manifest says which recording the old page was built from
+            before = json.loads((old / "woodshed.json").read_text(encoding="utf-8"))["settings"]["source"]
+        except (OSError, ValueError, KeyError, TypeError):
+            before = None  # a page built without the command: taken as the same recording
+        if before is not None and before != stems.fingerprint(source):
+            (new / "lyrics.previous.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            (new / lyrics.LYRICS_JS).write_text(empty, encoding="utf-8")
+            return
+        words = {
+            li: [(w["start"], w["end"]) for w in line["words"]]
+            for li, line in enumerate(data["lines"])
+            if line["sung"] and all(w["start"] is not None for w in line["words"])
+        }
+        data["chords"] = lyrics.place_chords(
+            lyrics.chord_changes(song_data), words, float(song_data["bpm"]), int(song_data["beats_per_bar"])
+        )
+        lyrics.write(new, data)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):  # none, damaged, edited by hand
+        (new / lyrics.LYRICS).unlink(missing_ok=True)
+        (new / lyrics.LYRICS_JS).write_text(empty, encoding="utf-8")
+
+
 def _readable(folder: Path) -> None:
     """mkdtemp makes a private folder (0700): give the page the usual permissions, so it can be
     served (Docker, a web server) or opened by another user."""
@@ -97,6 +134,7 @@ def build(
         written = [f"exports/{p.name}" for p in exports.write_all(song_data, tmp / "exports")]
         data = {"song": song_data, "view": view(song, tracks, pending_seconds, written)}
         (tmp / "index.html").write_text(page_html(song, data), encoding="utf-8")
+        _keep_lyrics(target, tmp, song_data, Path(source))
         _readable(tmp)
         try:
             if target.exists():

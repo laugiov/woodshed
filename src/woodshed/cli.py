@@ -20,7 +20,7 @@ from woodshed import __version__
 from woodshed.errors import WoodshedError
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTERRUPTED = 0, 1, 2, 130
-COMMANDS = ("chart", "cache", "app")
+COMMANDS = ("chart", "cache", "app", "lyrics")
 
 
 def _meter(parser: argparse.ArgumentParser) -> None:
@@ -35,7 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="woodshed",
         description="Turn a song file into a local practice room: chart, parts and play-along, offline.",
         epilog="Other commands: 'woodshed app' opens your library in the browser; 'woodshed chart SONG' prints"
-        " the text chart; 'woodshed cache' manages the cache.",
+        " the text chart; 'woodshed lyrics PAGE WORDS.txt' puts the words on a page; 'woodshed cache' manages"
+        " the cache.",
     )
     parser.add_argument("--version", action="version", version=f"woodshed {__version__}")
     parser.add_argument(
@@ -73,6 +74,20 @@ def cache_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="woodshed cache", description="Show or clear the stems and models cache.")
     parser.add_argument("--clear", action="store_true", help="delete the separated stems")
     parser.add_argument("--models", action="store_true", help="with --clear, also delete the downloaded models")
+    return parser
+
+
+def lyrics_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="woodshed lyrics",
+        description="Place the words of a song on its page: each chord above the syllable where it changes.",
+        epilog="The words are placed by MMS, a speech model by Meta (CC-BY-NC 4.0: for non-commercial use),"
+        " run on this computer and downloaded once (1.2 GB). You are responsible for the texts you paste.",
+    )
+    parser.add_argument("page", type=Path, help="the song's page folder (NAME.woodshed)")
+    parser.add_argument("text", type=Path, help="a text file with the words, as pasted from anywhere")
+    parser.add_argument("--offline", action="store_true", help="never download the speech model")
+    parser.add_argument("--debug", action="store_true", help="show the full error trace")
     return parser
 
 
@@ -201,6 +216,38 @@ def run_chart(argv: Sequence[str]) -> int:
     return _guarded(args.debug, work)
 
 
+def run_lyrics(argv: Sequence[str]) -> int:
+    args = lyrics_parser().parse_args(argv)
+    from woodshed import lyrics
+
+    def work() -> int:
+        page = args.page.expanduser()
+        raw = args.text.expanduser().read_bytes()
+        try:
+            # Notepad's "Unicode" is UTF-16; its UTF-8 starts with a mark.
+            text = raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("cp1252", errors="replace")  # older Windows text files
+        cache = lyrics.stems_folder(page)
+        if not (cache / lyrics.CACHE).exists():
+            print(
+                "listening to the voice: about a minute (MMS speech model by Meta, CC-BY-NC 4.0, on this computer)",
+                file=sys.stderr,
+            )
+        voice = lyrics.listen(cache / "vocals.flac", cache, args.offline)
+        data = lyrics.place(text, voice, lyrics.page_song(page))
+        lyrics.write(page, data)
+        lines = data["lines"]
+        sung = sum(ln["sung"] for ln in lines)
+        print(f"{sung} of {len(lines)} lines placed on the voice; lyrics in {page / lyrics.LYRICS}")
+        for k, ln in enumerate(lines):
+            if ln["check"]:
+                print(f"  line {k + 1}: {ln['check']}: {ln['text'][:50]}")
+        return EXIT_OK
+
+    return _guarded(args.debug, work)
+
+
 def _size(folder: Path) -> str:
     total = sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.exists() else 0
     return f"{total / 1e6:.1f} MB"
@@ -228,5 +275,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     # "chart" and "cache" are commands, unless a file of that name is meant.
     if args and args[0] in COMMANDS and not Path(args[0]).exists():
-        return {"chart": run_chart, "cache": run_cache, "app": run_app}[args[0]](args[1:])
+        return {"chart": run_chart, "cache": run_cache, "app": run_app, "lyrics": run_lyrics}[args[0]](args[1:])
     return run_pages(args)
