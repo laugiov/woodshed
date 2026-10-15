@@ -113,7 +113,7 @@ def drum_groove(drums: Audio, grid: Grid) -> Groove | None:
     body = raw_mid > SNARE_BODY * raw_high
     snare = body & (((mid > 0.3) & (high > 0.7) & (low < 0.5)) | ((mid > 0.6) & (high > 0.5) & (mid > 0.8 * low)))
     hat = high > 0.2
-    # Bars where the drums actually play: drums often come in late (Let It Be).
+    # Bars where the drums actually play: drums often come in late (a piano ballad).
     loudness = np.array([_rms(drums, *grid.span(b)) for b in range(len(grid.bars))])
     active = loudness > 0.3 * np.percentile(loudness, 90)
     if active.sum() < 4:
@@ -224,7 +224,7 @@ def vocal_range(vocals: Audio, min_share: float = 0.15) -> VocalRange | None:
 
     Measured note by note (median pitch of each sustained note), so attacks and slides do not
     widen the range. Only confident, audible notes count: the vocal stem carries faint bleed from
-    the other instruments (on Let It Be, the piano intro reads as notes a fifth below the voice,
+    the other instruments (on a piano ballad, the piano intro reads as notes a fifth below the voice,
     at a voicing probability of 0.01 and 30 dB below the singing).
     """
     # Up to F6 (1400 Hz): with a lower ceiling, high soprano notes are read an octave down.

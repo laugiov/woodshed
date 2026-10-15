@@ -127,9 +127,9 @@ def test_lyric_lines_that_look_like_part_names_stay_lyrics(row: str) -> None:
 
 
 def test_a_part_sung_twice_and_chords_inside_the_words() -> None:
-    text = "[Chorus] (x2)\n[Am]Let it [C]be, let it be\nG7sus4  F#m7b5  Bb/D\nwhisper words\n"
+    text = "[Chorus] (x2)\n[Am]Rain on the [C]roof, rain on the roof\nG7sus4  F#m7b5  Bb/D\nslow and low\n"
     lines = lyrics.parse(text)
-    assert [ln.text for ln in lines] == ["Let it be, let it be", "whisper words"] * 2
+    assert [ln.text for ln in lines] == ["Rain on the roof, rain on the roof", "slow and low"] * 2
     assert lines[0].tag == "Chorus" and lines[2].block != lines[0].block
 
 

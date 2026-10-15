@@ -11,7 +11,7 @@ Floats = npt.NDArray[np.float64]
 FAST_TEMPO = 125.0  # above this, a tracker that doubled the tempo is plausible
 SINGLE_PARITY = 0.8  # share of chord changes on one beat parity that reveals counted eighth notes
 # Kept beats against the beats in between, by onset strength. A tracker that counted eighth notes
-# puts every other beat on a weak "and": measured 1.2 (Let It Be) to 2.1 on doubled grids, and
+# puts every other beat on a weak "and": measured 1.2 (a piano ballad) to 2.1 on doubled grids, and
 # 0.46 to 0.79 on true grids, including a 130 BPM song with a chord every two beats.
 MIN_ACCENT_RATIO = 1.1
 

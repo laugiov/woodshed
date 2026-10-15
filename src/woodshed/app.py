@@ -34,10 +34,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import audio
+from woodshed import audio, lyrics
 from woodshed.build import folder_name
+from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
-from woodshed.run import MANIFEST, Options, Reporter, first_pass, media_files, second_pass
+from woodshed.run import EXTRA_HINT, MANIFEST, Options, Reporter, first_pass, media_files, second_pass
 
 MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
@@ -49,6 +50,7 @@ SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
 CORRECTIONS_MAX = 2000  # chords picked by ear on one page: more than any song has doubts
 CORRECTIONS_BYTES = 64 * 1024
+WORDS_BYTES = 32 * 1024  # the pasted words of one song: a long song is 3 KB
 DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a huge one is not
 QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
@@ -71,12 +73,14 @@ TYPES = {
 class Job:
     id: str
     name: str
-    status: str = "queued"  # queued, analysing, separating, done, failed
+    status: str = "queued"  # queued, analysing, separating, placing (the words), done, failed
     step: str = ""
     percent: int = 0
     message: str = ""
     page: str | None = None  # the page folder, as soon as a first page exists
     started: float = field(default_factory=time.time)
+    kind: str = "song"  # song (an analysis) or words (lyrics placed on a page)
+    ended: float | None = None  # done or failed: shown a while after this, not after it started
 
 
 class JobReporter(Reporter):
@@ -111,7 +115,8 @@ class Library:
         self.stopping = threading.Event()  # set by interrupted(): the worker takes no new job, records no failure
         for leftover in self.songs.glob(".*.part"):  # uploads cut short by a stop or a crash
             leftover.unlink(missing_ok=True)
-        self.queue: queue.Queue[tuple[Job, Path, Options, bool]] = queue.Queue()
+        # Analyses and words share one queue: one heavy job at a time. Words carry their text.
+        self.queue: queue.Queue[tuple[Job, Path, Options, bool, str | None]] = queue.Queue()
         self.lock = threading.Lock()
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
@@ -128,6 +133,7 @@ class Library:
                 continue
             info["complete"] = data.get("complete") is True
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
+            info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             out.append(info)
         return sorted(out, key=lambda s: str(s.get("title", "")).lower())
 
@@ -237,7 +243,8 @@ class Library:
             for key in [
                 k
                 for k, j in self.jobs.items()
-                if now - j.started > (3600 if j.status == "failed" else 60) and j.status in ("done", "failed")
+                if j.status in ("done", "failed")
+                and now - (j.ended or j.started) > (3600 if j.status == "failed" else 60)
             ]:
                 del self.jobs[key]
             jobs = [asdict(j) for j in self.jobs.values()]
@@ -334,12 +341,33 @@ class Library:
         job = Job(secrets.token_hex(6), path.name)
         with self.lock:
             self.jobs[job.id] = job
-        self.queue.put((job, path, opts, uploaded))
+        self.queue.put((job, path, opts, uploaded, None))
+        return job
+
+    def add_words(self, data: Any) -> Job:
+        """Words pasted on a song page, placed in the background: {"page": folder, "text": words}."""
+        if not isinstance(data, dict):
+            raise ValueError("an object with page and text")
+        folder = self._page(data.get("page"))
+        text = data.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text: the words of the song")
+        if len(text.encode("utf-8")) > WORDS_BYTES:
+            raise ValueError("text: the words of one song, 32 KB at most")
+        with self.lock:
+            if any(j.page == folder and j.status not in ("done", "failed") for j in self.jobs.values()):
+                raise PermissionError("this song is already being worked on: try again when it is done")
+            job = Job(secrets.token_hex(6), folder, page=folder, kind="words")
+            self.jobs[job.id] = job
+        self.queue.put((job, self.root / folder, self.opts, False, text))
         return job
 
     def _work(self) -> None:
         while True:
-            job, path, opts, uploaded = self.queue.get()
+            job, path, opts, uploaded, words = self.queue.get()
+            if words is not None:
+                self._place_words(job, path, words, opts)
+                continue
             report = JobReporter(job)
             note = self.attempt(path)
             with self.lock:
@@ -373,9 +401,36 @@ class Library:
                         self._keep_failure(note, job)
                 traceback.print_exc()
             finally:
+                job.ended = time.time()
                 with self.lock:
                     self.running = None
                 self.queue.task_done()
+
+    def _place_words(self, job: Job, page: Path, text: str, opts: Options) -> None:
+        try:
+            if self.stopping.is_set():
+                return
+            job.status = "placing"
+            data = lyrics.add_to_page(page, text, opts.offline, say=lambda line: setattr(job, "message", line))
+            sung = sum(ln["sung"] for ln in data["lines"])
+            job.status, job.message = "done", f"{sung} of {len(data['lines'])} lines placed on the voice"
+        except (WoodshedError, OSError) as exc:
+            # Read by every phone of the band: the song's folder, never where the library is.
+            job.status, job.message = (
+                "failed",
+                str(exc)
+                .replace(str(page), page.name)
+                .replace(str(cache_dir()), "the cache")
+                .replace(str(self.root), "the library"),
+            )
+        except ImportError:
+            job.status, job.message = "failed", "the words need the stems extra: " + EXTRA_HINT.split(": ", 1)[1]
+        except Exception as exc:  # a bug must not stop the queue
+            job.status, job.message = "failed", f"unexpected error: {type(exc).__name__}"
+            traceback.print_exc()
+        finally:
+            job.ended = time.time()
+            self.queue.task_done()
 
     @staticmethod
     def _keep_failure(note: Path, job: Job) -> None:
@@ -655,6 +710,12 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ("/api/live", "/api/setlist", "/api/corrections"):
             self._small_json_post(url.path)
             return
+        if url.path == "/api/lyrics":
+            if not self._may_upload():  # a minute of the speech model: like adding a song
+                self._error(HTTPStatus.FORBIDDEN, "words are added from the computer that runs the app")
+                return
+            self._small_json_post(url.path)
+            return
         if url.path != "/api/songs":
             self._error(HTTPStatus.NOT_FOUND, "no such endpoint")
             return
@@ -704,7 +765,9 @@ class Handler(BaseHTTPRequestHandler):
     def _small_json_post(self, path: str) -> None:
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
-        limit = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES}.get(path, SETLIST_BYTES)
+        limit = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}.get(
+            path, SETLIST_BYTES
+        )
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
         if chunked or not 0 < length <= limit:
             if not chunked and limit < length <= DRAIN_MAX:
@@ -731,6 +794,8 @@ class Handler(BaseHTTPRequestHandler):
                 saved = self.server.library.set_corrections(data)
                 self.server.live.corrected(data["page"], saved["rev"])
                 self._json(HTTPStatus.OK, saved)
+            elif path == "/api/lyrics":
+                self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.add_words(data)))
             else:
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
         except PermissionError as exc:

@@ -35,7 +35,7 @@ SILENCE_DB = -20.0
 NORMAL_LOUD_DBFS = -20.0
 MAX_SHIFT_DB = 45.0  # quiet recordings are followed down to loud parts at -65 dBFS
 # Median fit of the best triad to the treble chroma, below which the chords are unreliable.
-# Measured: music 0.60 to 0.74 (synthetic songs, Let It Be, a funk cover), drums alone 0.58,
+# Measured: music 0.60 to 0.74 (synthetic songs, a piano ballad, a funk cover), drums alone 0.58,
 # white and pink noise 0.53 to 0.54, a solo voice 0.49. A warning only: the margin is thin.
 MIN_CLARITY = 0.56
 KK_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])

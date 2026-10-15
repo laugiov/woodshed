@@ -89,7 +89,7 @@ def test_no_singing_gives_no_vocal_range() -> None:
 
 def test_groove_ignores_bars_where_the_drums_are_silent() -> None:
     drums = stems_at_rate("pop")["drums"].copy()
-    drums[: drums.size // 2] = 0.0  # drums come in halfway, as on Let It Be
+    drums[: drums.size // 2] = 0.0  # drums come in halfway, as on many ballads
     groove = parts.drum_groove(drums, grid("pop"))
     assert groove is not None and groove.bars <= 5
     assert groove.kick[0] > 0.9 and groove.snare[4] > 0.9
@@ -149,7 +149,7 @@ def test_funk_hats_survive_the_band_floor() -> None:
 
 def test_faint_bleed_in_the_vocal_stem_does_not_widen_the_range() -> None:
     vocals = stems_at_rate("ballad")["vocals"]
-    # A piano intro leaking into the vocal stem 30 dB below the singing, as on Let It Be: twelve
+    # A piano intro leaking into the vocal stem 30 dB below the singing, as on a piano ballad: twelve
     # G2 notes before the voice comes in.
     note = int(0.4 * synth.SR)
     t = np.arange(note) / synth.SR

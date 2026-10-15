@@ -37,7 +37,7 @@ BREAK = "F C | G F C | Fm | G C"
 
 
 def test_a_verse_and_chorus_song_is_named_like_the_band_would() -> None:
-    # Let It Be as woodshed charts it, line by line: no part is louder than another.
+    # A piano ballad as woodshed charts it, line by line: no part is louder than another.
     chart = [VERSE, "C G | Am F | C G | C", "C G | Am F | C G | F", CHORUS, VERSE, VERSE, "Am G | F C | C G | F C",
              "Am G | F C | C G | F", BREAK, "C G | Am F | C G | F", VERSE, "Am G | F C | C G | F C",
              "C G | Am F | C G | F N"]  # fmt: skip
@@ -55,7 +55,7 @@ def test_a_verse_and_chorus_song_is_named_like_the_band_would() -> None:
 
 
 def test_with_the_voice_the_intro_and_the_solo_are_found_and_the_form_stays() -> None:
-    # Let It Be again, with the share of sung beats measured on its vocal track: the piano intro
+    # The same ballad, with the share of sung beats measured on its vocal track: the piano intro
     # and the guitar solo are not sung. A chorus shares half its bars with the second verse line:
     # it must not take the verse's letter.
     chart = [VERSE, "C G | Am F | C G | C", "C G | Am F | C G | F", CHORUS, VERSE, VERSE, "Am G | F C | C G | F C",

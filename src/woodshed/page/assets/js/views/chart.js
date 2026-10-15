@@ -260,10 +260,15 @@
             h("button", { type: "button", class: mode === "lyrics" ? "on" : "", "aria-pressed": String(mode === "lyrics"), "data-testid": "sheet-lyrics", onclick: () => store.set({ sheet: "lyrics" }) }, "Lyrics"),
           )
         : null;
+      // The words are placed on the singer's track: offered once the page has it.
+      const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals")
+        ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? "Edit the words" : "Add the words")
+        : null;
       if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
         clear(
           el,
           sheetCtl,
+          wordsBtn,
           h(
             "div",
             { class: "seg-ctl", role: "group", "aria-label": "Chart shows" },
@@ -271,7 +276,7 @@
             h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, "Shapes, capo " + s.capo),
           ),
         );
-      } else clear(el, sheetCtl, h("span", { class: "hint" }, "Real chords, concert pitch"));
+      } else clear(el, sheetCtl, wordsBtn, h("span", { class: "hint" }, "Real chords, concert pitch"));
     }
 
     function barEl(u, s) {

@@ -210,8 +210,12 @@ woodshed app --host 0.0.0.0 --allow-network
 ```
 
 With Docker, publish the port to the network instead: in `compose.yaml`, `"8000:8000"` in place of
-`"127.0.0.1:8000:8000"`. To place the words of a song from Docker:
-`docker compose exec woodshed woodshed lyrics "/library/Song.woodshed" /library/words.txt`.
+`"127.0.0.1:8000:8000"`.
+
+**The words.** In the library, a song with its parts offers **add the words**; on its page, **Add the
+words** next to the chart. Paste them (part names like `[Chorus]` help), press **Place the words**:
+a minute later the page shows the chords above the words. From the command line, or for a page
+opened from disk: `woodshed lyrics "Song.woodshed" words.txt`.
 
 Useful options: `--bpm 65` settles a half-time or double-time doubt, `--beats-per-bar 3` for a
 waltz, `--sevenths` adds 7th chords, `--offline` never downloads models. `woodshed --help` lists
@@ -224,8 +228,8 @@ them all.
 ```mermaid
 flowchart LR
     A[Recording] --> B[Demucs<br/>instrument tracks]
-    B --> C[beat_this<br/>beats and bars]
-    B --> D[Chord engine<br/>keys and guitar tracks]
+    A --> C[beat_this<br/>beats and bars]
+    A --> D[Chord engine<br/>full mix]
     C --> D
     D --> E[Sections<br/>verse, chorus, bridge]
     B --> F[Parts<br/>bass tab, drum groove,<br/>keys voicings, vocal range]
@@ -239,14 +243,17 @@ flowchart LR
 - **Separation**: [Demucs](https://github.com/facebookresearch/demucs) (htdemucs) splits the mix
   into vocals, drums, bass and the rest, losslessly cached.
 - **Beats and bars**: [beat_this](https://github.com/CPJKU/beat_this) finds beats and downbeats.
-- **Chords**: woodshed's own engine reads the harmony from the isolated tracks, bar by bar, and
-  says where it is unsure rather than guessing.
+- **Chords**: woodshed's own engine (signal processing, no trained model) reads the harmony from the
+  full mix, bar by bar, and says where it is unsure rather than guessing.
 - **Structure**: lines that come back are grouped into sections and named by their role.
 - **Lyrics**: Meta's [MMS](https://pytorch.org/audio/stable/pipelines.html#torchaudio.pipelines.MMS_FA)
   aligns the words you paste on the vocal track.
 - **The page** is plain HTML, CSS and JavaScript in one folder. It loads nothing from the internet:
   the repository's CI rejects any page code that points outside. Opened from disk, it makes no
   request at all; the band features talk only to your own library server.
+
+No language model and no cloud service: everything above runs on your computer. The full tour, module
+by module: **[Under the hood](docs/architecture.md)**.
 
 ## Privacy
 

@@ -175,7 +175,7 @@ def _split_ends(blocks: list[list[int]], lines: Sequence[Line]) -> tuple[list[li
 
 def _letters(blocks: Sequence[list[int]], fam: Sequence[int], lines: Sequence[Line]) -> list[int]:
     """Blocks of the same music share a letter: the same main family of lines (not "alike line by
-    line": a chorus can share half its bars with a line of the verse, as in Let It Be), and, for
+    line": a chorus can share half its bars with a line of the verse, as in many ballads), and, for
     a family heard both soft and loud (one chord loop for the whole song), the same loudness."""
     main = [Counter(fam[a:b]).most_common(1)[0][0] for a, b in blocks]
     loud = [float(np.mean([lines[i].energy_db for i in range(a, b)])) for a, b in blocks]

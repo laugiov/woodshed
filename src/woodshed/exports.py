@@ -1,4 +1,4 @@
-"""Exports of a song, from its JSON (schema v1): ChordPro, MIREX .lab, MIDI and MusicXML.
+"""Exports of a song, from its JSON (song.schema.json): ChordPro, MIREX .lab, MIDI and MusicXML.
 
 They read the published song format, not the analysis objects, so a page's own data (with the
 listener's corrections) can be exported the same way.

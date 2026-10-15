@@ -516,6 +516,8 @@
     };
 
     app.setStage = (on, full) => setStage(on, full);
+    const words = W.views.words(app);
+    app.openWords = () => words.open();
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
     const dock = views[3];
@@ -581,6 +583,7 @@
     });
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
+      if (e.target.closest && e.target.closest("dialog[open]")) return; // a dialog's keys are its own (Escape closes it)
       if (e.key === "Escape") {
         popups.closeAll(true);
         if (store.get().stage) setStage(false);

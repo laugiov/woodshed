@@ -17,8 +17,8 @@ isolated vocal track:
 5. `place_chords`: each chord change of the chart on the syllable sung then, or on the next one
    when it comes just before it (a push), else in a gap.
 
-Measured on the owner's songs (Let It Be, an English excerpt; Confidences pour confidences, a
-French excerpt): with the text really sung, every chord lands where the published chord sheet
+Measured on the owner's songs (a piano ballad, an English excerpt; a French pop song, a French
+excerpt): with the text really sung, every chord lands where the published chord sheet
 puts it.
 """
 
@@ -33,7 +33,7 @@ import re
 import unicodedata
 import uuid
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,7 +61,7 @@ CHORD = (  # a chord name, as chord sites write them: G, F#m7b5, Bb/D, Csus4, E7
     r"(?:(?:sus|add|maj|b|#|♭|♯|\+|-)\d+)*(?:/[A-G](?:#|b|♯|♭)?)?"
 )
 CHORD_TOKEN = re.compile(rf"^{CHORD}$")
-INLINE_CHORD = re.compile(rf"\[{CHORD}\]")  # ChordPro: [Am]Let it [C]be
+INLINE_CHORD = re.compile(rf"\[{CHORD}\]")  # ChordPro: [Am]Rain on the [C]roof
 REPEAT = re.compile(r"(?:\s+|\s*[(\[])\s*x\s*(\d)\s*[)\]]?\s*$", re.IGNORECASE)  # " x2", "(x2)", not "box 5"
 COUNT = re.compile(r"\s*[(\[]?\s*x\s*(\d)\s*[)\]]?\s*", re.IGNORECASE)  # after a part's name: "x2", "(x2)"
 TAG = re.compile(r"^\s*\[([^\]]+)\]\s*(.*)$")
@@ -150,7 +150,7 @@ def parse(text: str) -> list[Line]:
 
     Parts start at a blank line or a part's name ("[Chorus]", "Refrain x2", "Couplet 2 :"); a name
     with no words under it repeats the last part of that name; "x2" repeats a part or a line.
-    Rows of chords and chords in brackets inside the words ([Am]Let it be) are dropped; words in
+    Rows of chords and chords in brackets inside the words ([Am]Rain on the roof) are dropped; words in
     brackets are backing vocals, kept apart."""
     lines: list[Line] = []
     blocks: list[tuple[str | None, list[Line]]] = []
@@ -866,8 +866,36 @@ def write(folder: Path, data: dict[str, Any]) -> None:
     from woodshed.build import script_json
 
     text = json.dumps(data, ensure_ascii=False, indent=1)
-    (folder / LYRICS).write_text(text + "\n", encoding="utf-8")
-    (folder / LYRICS_JS).write_text("window.WOODSHED_LYRICS = " + script_json(data) + ";\n", encoding="utf-8")
+    # Whole files or nothing: a phone may read them while they are written.
+    for name, content in ((LYRICS, text + "\n"), (LYRICS_JS, "window.WOODSHED_LYRICS = " + script_json(data) + ";\n")):
+        part = folder / f".{name}.{uuid.uuid4().hex}.part"
+        try:
+            part.write_text(content, encoding="utf-8")
+            part.replace(folder / name)
+        finally:
+            part.unlink(missing_ok=True)
+
+
+LISTENING = "listening to the voice: about a minute (MMS speech model by Meta, CC BY-NC 4.0, on this computer)"
+
+
+def add_to_page(page: Path, text: str, offline: bool = False, say: Callable[[str], None] = print) -> dict[str, Any]:
+    """Place the words on a page: lyrics.json and lyrics.js, and the songbook file with the words.
+
+    Shared by `woodshed lyrics` and the library app. The page needs its instrument tracks in the cache.
+    """
+    cache = stems_folder(page)
+    if not (cache / CACHE).exists():
+        say(LISTENING)
+    voice = listen(cache / "vocals.flac", cache, offline)
+    chart = page_song(page)
+    data = place(text, voice, chart)
+    write(page, data)
+    if (page / "exports").is_dir():  # the songbook file of the page, with the words now
+        from woodshed import exports
+
+        exports.write_chordpro(chart, page / "exports", data)
+    return data
 
 
 def page_song(folder: Path) -> dict[str, Any]:

@@ -4,7 +4,7 @@
   const W = window.Woodshed;
   const { h, $, clear, chordNode, fmt } = W;
   const token = document.querySelector('meta[name="woodshed-token"]').content;
-  const STATUS = { queued: "Waiting", analysing: "Analysing", separating: "Separating the instruments", done: "Ready", failed: "Failed" };
+  const STATUS = { queued: "Waiting", analysing: "Analysing", separating: "Separating the instruments", placing: "Placing the words", done: "Ready", failed: "Failed" };
   let toastTimer = 0;
 
   function toast(message) {
@@ -77,9 +77,13 @@
     let status;
     if (job && job.status !== "done") {
       status = job.status === "failed"
-        ? h("span", { class: "warn" }, "Failed: " + job.message)
+        ? h("span", { class: "warn" }, (job.kind === "words" ? "Words not placed: " : "Failed: ") + job.message)
         : h("span", null, STATUS[job.status] + (job.status === "separating" ? " " + job.percent + " %" : job.step ? " (" + job.step + ")" : ""));
     } else status = song && song.complete ? h("span", { class: "okfact" }, song.stems ? "Ready, with parts" : "Ready") : h("span", null, "Mix only");
+    // The words go on the singer's track: offered once the song has its parts.
+    const addWords = song && song.complete && song.stems && !song.words && !(job && !["done", "failed"].includes(job.status))
+      ? [" · ", h("a", { href: link(song.folder) + "#words", "data-testid": "add-words" }, "add the words")]
+      : null;
     const title = song ? h("a", { href: link(song.folder), "data-testid": "song-link" }, song.title) : h("span", null, job.name);
     return h(
       "tr",
@@ -90,7 +94,7 @@
       h("td", { class: "wide" }, song ? song.meter : ""),
       h("td", { class: "num wide" }, song ? fmt(song.duration) : ""),
       h("td", { class: "wide" }, song ? (song.doubts ? h("span", { class: "warn" }, String(song.doubts)) : "none") : ""),
-      h("td", { "data-testid": "song-status" }, status),
+      h("td", { "data-testid": "song-status" }, status, addWords),
       h(
         "td",
         null,
@@ -112,8 +116,9 @@
     } catch (err) {
       return;
     }
+    const same = shown && JSON.stringify(shown) === JSON.stringify(data);
     shown = data;
-    render(data);
+    if (!same) render(data); // redrawn only when something changed: a link under the pointer or the focus stays
   }
 
   function render(data) {
@@ -181,7 +186,7 @@
     .then((d) => {
       setlist = Array.isArray(d.songs) ? d.songs : [];
       renderSet();
-      refresh();
+      if (shown) render(shown); // the rows drawn before the set list came say "In the set" now
     })
     .catch(() => {});
   refresh();

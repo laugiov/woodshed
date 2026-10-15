@@ -48,7 +48,7 @@ def embedded(page: Path) -> dict[str, object]:
 @pytest.mark.parametrize(
     ("title", "name"),
     [
-        ("Let It Be", "Let It Be.woodshed"),
+        ("Morning Song", "Morning Song.woodshed"),
         ('a/b\\c:d*e?"f<g>h|i', "a_b_c_d_e__f_g_h_i.woodshed"),
         (" . ", "song.woodshed"),
         ("..", "song.woodshed"),

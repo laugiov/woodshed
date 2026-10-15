@@ -4,7 +4,7 @@
 .missing-files { display: none !important; }
 @media print {
   .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot,
-  .form, .sec-loop, .band-banner, .next-song, .prefs { display: none !important; }
+  .form, .sec-loop, .band-banner, .next-song, .prefs, .words-dialog { display: none !important; }
   .sec-name, .sec-head[data-role="chorus"] .sec-name { color: #000 !important; }
   body { background: #fff; color: #000; }
   .main { display: block; }
@@ -321,6 +321,18 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .nowsub { font-size: 14px; color: var(--muted); margin-top: 8px; }
 .nowsub b { color: var(--accent); font-family: var(--font-chord); font-size: 19px; }
 .chart-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+#viewCtl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+/* The words, pasted on the page (views/words.js). */
+.words-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--ink); padding: 18px; }
+.words-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.words-dialog h2 { margin: 0 0 8px; font-family: var(--font-chord); font-size: 24px; }
+.words-dialog textarea { width: 100%; font: 15px/1.5 var(--font-body); background: var(--sheet); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+.words-dialog .status { min-height: 1.4em; margin: 8px 0; }
+.words-dialog .status.warn { color: var(--warn); }
+.words-dialog .cmd { font-family: var(--font-mono); font-size: 13px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .desk-col { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); }
 @media (max-width: 900px) { .desk-col { position: static; } }
 .desk-head { align-items: flex-start; }

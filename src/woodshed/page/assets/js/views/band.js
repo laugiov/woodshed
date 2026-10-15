@@ -45,6 +45,18 @@
     let token = null;
     let mode = "alone"; // alone, lead, follow
     let stream = null;
+    let leaving = false;
+    // Leaving the page (a reload, a link) closes the stream first: no "connection interrupted" error.
+    // Back to it from the browser's cache, it opens again.
+    window.addEventListener("pagehide", () => {
+      leaving = true;
+      if (stream) stream.close();
+      stream = null;
+    });
+    window.addEventListener("pageshow", (e) => {
+      leaving = false;
+      if (e.persisted && !stream && token) fetchToken().then(listen);
+    });
     let retry = 1000;
     let last = null; // the last live state heard
     const offsets = []; // server clock minus this device's clock, in seconds, last samples
@@ -212,7 +224,7 @@
     }
 
     function listen() {
-      if (stream || !token) return;
+      if (stream || !token || leaving) return;
       stream = new EventSource("/api/live?t=" + encodeURIComponent(token));
       stream.onopen = () => (retry = 1000);
       stream.onmessage = (e) => {

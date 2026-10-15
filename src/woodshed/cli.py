@@ -236,20 +236,7 @@ def run_lyrics(argv: Sequence[str]) -> int:
             text = raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig")
         except UnicodeDecodeError:
             text = raw.decode("cp1252", errors="replace")  # older Windows text files
-        cache = lyrics.stems_folder(page)
-        if not (cache / lyrics.CACHE).exists():
-            print(
-                "listening to the voice: about a minute (MMS speech model by Meta, CC-BY-NC 4.0, on this computer)",
-                file=sys.stderr,
-            )
-        voice = lyrics.listen(cache / "vocals.flac", cache, args.offline)
-        chart = lyrics.page_song(page)
-        data = lyrics.place(text, voice, chart)
-        lyrics.write(page, data)
-        if (page / "exports").is_dir():  # the songbook file of the page, with the words now
-            from woodshed import exports
-
-            exports.write_chordpro(chart, page / "exports", data)
+        data = lyrics.add_to_page(page, text, args.offline, say=lambda line: print(line, file=sys.stderr))
         lines = data["lines"]
         sung = sum(ln["sung"] for ln in lines)
         print(f"{sung} of {len(lines)} lines placed on the voice; lyrics in {page / lyrics.LYRICS}")

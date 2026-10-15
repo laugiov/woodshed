@@ -26,7 +26,7 @@ from woodshed.errors import WoodshedError
 from woodshed.model import Song
 
 BPM_TOLERANCE = 0.15  # a --bpm hint further than this from the result gets a note
-SEPARATION_SPEED = 1.5  # seconds of CPU separation per second of audio, measured (Let It Be, laptop)
+SEPARATION_SPEED = 1.5  # seconds of CPU separation per second of audio, measured (a 4-minute song, laptop)
 EXTRA_HINT = 'instrument tracks and parts need the stems extra: pipx install "woodshed[stems]"'
 
 
@@ -231,7 +231,7 @@ def first_pass(
     """Build the best page possible now: the full page if the stems are cached or not wanted,
     else the mix-only page with a 'reload later' banner. A page already up to date is kept."""
     src = _source(path)
-    # Named as the user named it: a link "Let It Be.wav" to "take3.wav" gives "Let It Be".
+    # Named as the user named it: a link "Morning Song.wav" to "take3.wav" gives "Morning Song".
     shown = Path(path).expanduser()
     opts = replace(opts, title=opts.title or title or shown.stem)
     assert opts.title is not None
