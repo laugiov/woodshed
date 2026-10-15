@@ -207,7 +207,7 @@ Then `src/woodshed/structure.py` scores it:
 - If the top candidate has under 70% (`CLOSE_CALL`), the doubt is `kind: "chord"`. It is counted and shown in orange.
 - Otherwise it is `kind: "timing"`: the chord is clear but its placement is odd. Not counted.
 
-The page shows the candidates with their shares. You can play each one over the recording and pick. Corrections stay with the page (section 9) and go into the exports.
+The chart's chord comes from the whole song (the bars around it, the key, the same part played again); the shares come from the bar heard alone. When they disagree, the page says so ("the chart keeps A: the bars around it point to it; heard alone, this bar sounds more like C♯m"), and the analysis's chord is always in the list, so a correction can be changed or taken back. The page shows the candidates with their shares. You can play each one over the recording and pick. Corrections stay with the page (section 9) and go into the exports.
 
 ---
 
@@ -290,7 +290,7 @@ flowchart LR
 **Parse.** `parse` reads the pasted text:
 
 - Parts start at a blank line or a part name (`[Chorus]`, `Refrain x2`, `Couplet 2 :`, English or French words).
-- `x2` repeats a part or a line.
+- `x2` repeats a part or a line. A part's name alone (`[Chorus]`) repeats the last part of that name; a chorus named nowhere before is the stanza written out most often (at least twice, then `[Chorus]` on lyrics sites), and when two stanzas come back as often nothing is guessed. A name with no words to repeat (`[Solo]`, `[Bridge]`) names the music between the lines around it, and a sung part's name with nothing to repeat is reported to the user.
 - Rows of chords and `[Am]` chords inside words are dropped. The chart has the chords.
 - Words in brackets are backing vocals, kept apart.
 - The model hears only `a` to `z` and the apostrophe. Accents are stripped. Other letters raise an error ("write numbers out as words" in the README).

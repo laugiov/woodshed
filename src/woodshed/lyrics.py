@@ -135,6 +135,7 @@ SAME_PART = {
     "couplet": "verse",
     "pont": "bridge",
     "prerefrain": "prechorus",
+    "hook": "chorus",  # Genius and others
 }
 
 
@@ -145,18 +146,60 @@ def _base(tag: str | None) -> str:
     return SAME_PART.get(name, name)
 
 
+SUNG_PARTS = {"chorus", "verse", "prechorus"}  # a name alone for these repeats words; others mark music
+CHORUS_NOTE = "A part's name with no words under it was left out: paste its words in full."
+
+
+@dataclass
+class Text:
+    """The pasted text, read: the sung lines, the names of parts with no words (a solo, an intro),
+    each with the number of lines sung before it, and what could not be read."""
+
+    lines: list[Line]
+    markers: list[tuple[int, str]]
+    notes: list[str]
+
+
 def parse(text: str) -> list[Line]:
+    """The pasted text as sung lines (see read)."""
+    return read(text).lines
+
+
+def read(text: str) -> Text:
     """The pasted text as sung lines.
 
     Parts start at a blank line or a part's name ("[Chorus]", "Refrain x2", "Couplet 2 :"); a name
-    with no words under it repeats the last part of that name; "x2" repeats a part or a line.
-    Rows of chords and chords in brackets inside the words ([Am]Rain on the roof) are dropped; words in
-    brackets are backing vocals, kept apart."""
+    with no words under it repeats the last part of that name, and a chorus named nowhere before is
+    the stanza written out most often (at least twice, then "[Chorus]" on lyrics sites); the name of a
+    part with no words to repeat ("[Solo]") marks the music between the lines around it. "x2"
+    repeats a part or a line. Rows of chords and chords in brackets inside the words ([Am]Rain on
+    the roof) are dropped; words in brackets are backing vocals, kept apart."""
     lines: list[Line] = []
     blocks: list[tuple[str | None, list[Line]]] = []
+    markers: list[tuple[int, str]] = []
+    notes: list[str] = []
     current: list[Line] = []
     tag: str | None = None
     times = 1
+
+    def sung_most() -> list[Line] | None:
+        """The stanza whose lines come back most often in the others, the last of them; None when
+        another stanza comes back as often (a verse sung twice is no chorus): better said than guessed."""
+        texts = [{letters_of(ln.text) for ln in b} for _, b in blocks]
+        best, count, rival = -1, 0, False
+        for k, mine in enumerate(texts):
+            if blocks[k][0] is not None and _base(blocks[k][0]) != "chorus":
+                continue  # a part named otherwise is not the chorus
+            again = sum(1 for j, other in enumerate(texts) if j != k and len(mine & other) * 2 >= len(mine))
+            if not again:
+                continue
+            if best >= 0 and again == count and not (mine & texts[best]):
+                rival = True
+            if again > count:
+                rival = False
+            if again >= count:
+                best, count = k, again
+        return None if best < 0 or rival else blocks[best][1]
 
     def close() -> None:
         nonlocal current, tag, times
@@ -166,9 +209,15 @@ def parse(text: str) -> list[Line]:
                 blocks.append((tag, [Line(ln.text, list(ln.words), 0, ln.tag, list(ln.backing)) for ln in current]))
         elif tag is not None:  # a part's name alone: that part again
             same = [b for t, b in blocks if _base(t) == _base(tag)]
-            if same:
+            again = same[-1] if same else sung_most() if _base(tag) == "chorus" else None
+            if again is not None:
                 for _ in range(times):
-                    blocks.append((tag, [Line(ln.text, list(ln.words), 0, tag, list(ln.backing)) for ln in same[-1]]))
+                    blocks.append((tag, [Line(ln.text, list(ln.words), 0, tag, list(ln.backing)) for ln in again]))
+            elif _base(tag) in SUNG_PARTS:
+                if CHORUS_NOTE not in notes:
+                    notes.append(CHORUS_NOTE)
+            else:  # music with no words: it names the part between the lines around it
+                markers.append((sum(len(b) for _, b in blocks), tag))
         current, tag, times = [], None, 1
 
     for raw in text.replace("\ufeff", "").splitlines():
@@ -205,7 +254,7 @@ def parse(text: str) -> list[Line]:
         for ln in block:
             ln.block = k
             lines.append(ln)
-    return lines
+    return Text(lines, markers, notes)
 
 
 # The voice: letter log-probabilities every 20 ms, and where it sings.
@@ -643,7 +692,8 @@ def _squeezed(line: Line, words: Sequence[tuple[float, float]], usual: float | N
 
 def place(text: str, voice: Voice, song: dict[str, Any], language: str = "auto") -> dict[str, Any]:
     """The lyrics file of a page: lines with their words in time, chords on the words."""
-    lines = parse(text)
+    pasted = read(text)
+    lines = pasted.lines
     if not lines:
         raise LyricsError("no words in the text")
     unknown = {c for ln in lines for c in ln.letters if c not in voice.labels}
@@ -701,6 +751,10 @@ def place(text: str, voice: Voice, song: dict[str, Any], language: str = "auto")
         )
     chords = place_chords(chord_changes(song), words, float(song["bpm"]), int(song["beats_per_bar"]))
     out = {"version": 1, "language": language, "text": text, "lines": out_lines, "chords": chords}
+    if pasted.markers:  # "[Solo]": the name of the music before the line it gives
+        out["markers"] = [{"before": i, "tag": tag} for i, tag in pasted.markers]
+    if pasted.notes:
+        out["notes"] = pasted.notes
     named = sections_by_words(song, out)
     if named is not None:
         out["sections"] = named
@@ -764,15 +818,19 @@ def sections_by_words(song: dict[str, Any], data: dict[str, Any]) -> list[dict[s
     first_bars = [sec["start"] for sec in secs]
     keys: list[list[str]] = [[] for _ in secs]
     blocks: list[set[Any]] = [set() for _ in secs]
-    for line in data.get("lines") or []:
+    stanza_lines: list[dict[Any, int]] = [{} for _ in secs]  # part -> stanza -> lines of it sung there
+    sung_at: dict[int, int] = {}  # line -> the bar it is sung in
+    for li, line in enumerate(data.get("lines") or []):
         times = [w["start"] for w in line.get("words") or [] if isinstance(w.get("start"), (int, float))]
         key = letters_of(str(line.get("text", "")))
         if not line.get("sung") or not times or not key:
             continue
         u = max(0, bisect.bisect_right(starts, min(times) + half_bar) - 1)  # the bar it is sung in
+        sung_at[li] = u
         k = max(0, bisect.bisect_right(first_bars, u) - 1)
         keys[k].append(key)
         blocks[k].add(line.get("block"))
+        stanza_lines[k][line.get("block")] = stanza_lines[k].get(line.get("block"), 0) + 1
 
     # The end of a stanza, in a part the chart could not name, stays with the verse it ends (when
     # the words were pasted in stanzas: without blank lines, one stanza says nothing).
@@ -784,8 +842,10 @@ def sections_by_words(song: dict[str, Any], data: dict[str, Any]) -> list[dict[s
         if prev and joins and keys[k] and blocks[k] <= prev["blocks"]:
             prev["end"] = sec["end"]
             prev["keys"] += keys[k]
+            for b, c in stanza_lines[k].items():
+                prev["stanza"][b] = prev["stanza"].get(b, 0) + c
             continue
-        parts.append({**sec, "keys": list(keys[k]), "blocks": set(blocks[k])})
+        parts.append({**sec, "keys": list(keys[k]), "blocks": set(blocks[k]), "stanza": dict(stanza_lines[k])})
 
     # One part per music (the chart's letter) and per words (the lines they share).
     n = len(parts)
@@ -848,22 +908,74 @@ def sections_by_words(song: dict[str, Any], data: dict[str, Any]) -> list[dict[s
         ends = sec["role"] in ("intro", "outro") and i in (0, n - 1)
         silent = not sec["keys"] and sec["role"] != "part"  # no words to say otherwise: a solo stays a solo
         roles.append(sec["role"] if ends or silent else role[find(i)])
+    named = _named_by_tags(parts, data, sung_at)
+    # A stanza the chart cut in two (its first line sung over the chart's line before it) is one part:
+    # neighbours of one group and one role that share a stanza of the text are one unit.
+    units: list[list[int]] = []
+    for i in range(n):
+        last = units[-1][-1] if units else -1
+        joined = (
+            last >= 0 and find(i) == find(last) and roles[i] == roles[last] and i not in named and last not in named
+        )
+        shared = parts[i]["blocks"] & parts[last]["blocks"]
+        # A stanza's head sung over the part before it (fewer of its lines there than here), or its
+        # tail over the part after it (that part sings nothing else): one stanza, one part.
+        head = bool(shared) and all(parts[last]["stanza"][b] < parts[i]["stanza"][b] for b in shared)
+        tail = bool(shared) and parts[i]["blocks"] <= shared
+        if joined and roles[i] not in ("part", "instrumental") and (head or tail):
+            units[-1].append(i)
+            continue
+        units.append([i])
     total: dict[str, int] = {}
-    for r in roles:
-        total[r] = total.get(r, 0) + 1
+    for unit in units:
+        if unit[0] not in named:
+            total[roles[unit[0]]] = total.get(roles[unit[0]], 0) + 1
     seen: dict[str, int] = {}
     out = []
-    for i, sec in enumerate(parts):
-        r = roles[i]
-        if r == "part":
+    for unit in units:
+        i, r = unit[0], roles[unit[0]]
+        span = {"start": parts[i]["start"], "end": parts[unit[-1]]["end"]}
+        if i in named:
+            r, name = named[i]
+        elif r == "part":
             name = f"Part {letter[find(i)]}"
         else:
             seen[r] = seen.get(r, 0) + 1
             numbered = total[r] > 1 and r not in ("intro", "outro")
             name = f"{ROLE_NAMES[r]} {seen[r]}" if numbered else ROLE_NAMES[r]
-        out.append({"name": name, "role": r, "letter": letter[find(i)], "start": sec["start"], "end": sec["end"]})
+        out.append({"name": name, "role": r, "letter": letter[find(i)], **span})
     before = [{k: sec[k] for k in ("name", "role", "letter", "start", "end")} for sec in secs]
     return None if out == before else out
+
+
+TAG_ROLES = {"intro": "intro", "outro": "outro", "bridge": "bridge", "instrumental": "instrumental"}
+
+
+def _named_by_tags(
+    parts: list[dict[str, Any]], data: dict[str, Any], sung_at: dict[int, int]
+) -> dict[int, tuple[str, str]]:
+    """Parts with no words that the pasted text names ("[Solo]" between two stanzas): part -> (role,
+    name). The name is the user's ("Solo", "Guitar solo"); a role's own name stays the chart's
+    ("[Bridge]" gives Bridge), so the page can say it in its language."""
+    out: dict[int, tuple[str, str]] = {}
+    for marker in data.get("markers") or []:
+        if not isinstance(marker, dict):
+            continue
+        before, tag = marker.get("before"), str(marker.get("tag") or "").strip()
+        if not tag or not isinstance(before, int) or isinstance(before, bool):
+            continue  # edited by hand: the words stay, the name is not given
+        after = [u for li, u in sung_at.items() if li >= before]
+        sung_before = [u for li, u in sung_at.items() if li < before]
+        low = max(sung_before) + 1 if sung_before else 0
+        high = min(after) if after else parts[-1]["end"]
+        quiet = [i for i, p in enumerate(parts) if not p["keys"] and low <= p["start"] and p["end"] <= high + 1]
+        if not quiet:
+            continue
+        role = TAG_ROLES.get(_base(tag), "instrumental")
+        name = ROLE_NAMES[role] if _base(tag) in TAG_ROLES else tag[:1].upper() + tag[1:]
+        for i in quiet:
+            out.setdefault(i, (role, name))
+    return out
 
 
 # Files.

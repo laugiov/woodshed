@@ -136,7 +136,7 @@ def test_every_text_the_page_shows_from_python_has_its_french() -> None:
     texts = [name for _, name in theory.PROGRESSIONS] + [t.label for t in tracks.track_list(True)]
     texts += [s for pair in found("structure.py", r'why = \(\s*"([^"]+)"[^"]*"([^"]+)"') for s in pair]
     texts += found("lyrics.py", r'left\[[^\]]+\] = "([^"]+)"') + found("lyrics.py", r'check = "([^"]+)"')
-    texts += found("lyrics.py", r'say\("([^"]+)"\)') + found("lyrics.py", r'^LISTENING = "([^"]+)"')
+    texts += found("lyrics.py", r'say\("([^"]+)"\)') + found("lyrics.py", r'^(?:LISTENING|CHORUS_NOTE) = "([^"]+)"')
     texts += found("analysis.py", r'report\("([a-z]+)"') + found("app.py", r'_error\(HTTPStatus\.\w+, "([^"]+)"\)')
     assert len(texts) > 40  # the patterns still find what they look for
     fr = french()

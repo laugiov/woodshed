@@ -35,7 +35,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from woodshed import audio, lyrics
-from woodshed.build import folder_name
+from woodshed.build import DATA_BLOCK, folder_name
 from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
 from woodshed.run import (
@@ -90,6 +90,7 @@ class Job:
     started: float = field(default_factory=time.time)
     kind: str = "song"  # song (an analysis) or words (lyrics placed on a page)
     ended: float | None = None  # done or failed: shown a while after this, not after it started
+    notes: list[str] = field(default_factory=list)  # what the user should know about the result
 
 
 class JobReporter(Reporter):
@@ -128,6 +129,7 @@ class Library:
         self.queue: queue.Queue[tuple[Job, Path, Options, bool, str | None]] = queue.Queue()
         self.lock = threading.Lock()
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
+        self.doubt_ids: dict[str, tuple[int, tuple[str, set[str]] | None]] = {}  # folder -> (stamp, (key, ids))
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -143,6 +145,9 @@ class Library:
             info["complete"] = data.get("complete") is True
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
+            left = self._left_to_check(manifest.parent)
+            if left is not None:  # the band's corrections done: what is still to check by ear
+                info["doubts"] = left
             out.append(info)
         return sorted(out, key=lambda s: str(s.get("title", "")).lower())
 
@@ -158,6 +163,44 @@ class Library:
             except (WoodshedError, OSError) as exc:  # one page held open or not writable: the others still are
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
         return updated
+
+    def _chords_to_check(self, page: Path) -> tuple[str, set[str]] | None:
+        """A page's analysis key (as the page computes it) and the ids of its chords to check by
+        ear, read once per build of the page."""
+        index = page / "index.html"
+        try:
+            stamp = index.stat().st_mtime_ns
+        except OSError:
+            return None
+        cached = self.doubt_ids.get(page.name)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        found_ids: tuple[str, set[str]] | None
+        try:
+            found = DATA_BLOCK.search(index.read_text(encoding="utf-8"))
+            if found is None:
+                raise ValueError("not a woodshed page")
+            song = json.loads(found.group(1))["song"]
+            ids = {
+                str(c["doubt"]["id"])
+                for b in song["bars"]
+                for c in b["chords"]
+                if c.get("doubt") and c["doubt"].get("kind") == "chord"
+            }
+            found_ids = (analysis_key(song), ids)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            found_ids = None
+        self.doubt_ids[page.name] = (stamp, found_ids)
+        return found_ids
+
+    def _left_to_check(self, page: Path) -> int | None:
+        """Chords to check minus those the band corrected, in this analysis of the page (an older
+        analysis's corrections number their doubts their own way)."""
+        found = self._chords_to_check(page)
+        if found is None:
+            return None
+        key, ids = found
+        return len(ids - set(self._stored(page.name)["by_key"].get(key, {})))
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
@@ -441,6 +484,7 @@ class Library:
                 progress=lambda f: setattr(job, "percent", int(f * 100)),
             )
             sung = sum(ln["sung"] for ln in data["lines"])
+            job.notes = [str(n) for n in data.get("notes") or []]
             job.status, job.message = "done", f"{sung} of {len(data['lines'])} lines placed on the voice"
         except (WoodshedError, OSError) as exc:
             # Read by every phone of the band: the song's folder, never where the library is.
@@ -476,6 +520,30 @@ class Library:
 LIVE_MAX = 4096  # bytes of one live update
 LIVE_FOLLOWERS = 32  # open streams at most: a band, not an audience
 LIVE_PING = 15.0  # seconds between keep-alive comments on a quiet stream
+
+
+def _as_js(value: Any) -> Any:
+    """Numbers as JSON.stringify writes them: a whole float without its ".0"."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_as_js(v) for v in value]
+    return value
+
+
+def analysis_key(song: dict[str, Any]) -> str:
+    """The key the page keeps its corrections under (fnv1a in app.js): what a correction depends on,
+    the chords, their doubts and the beats."""
+    chords = [
+        [[c["pc"], c["quality"], c["beats"], c["doubt"]["id"] if c.get("doubt") else None] for c in b["chords"]]
+        for b in song["bars"]
+    ]
+    text = json.dumps(_as_js([chords, song["beats"]]), separators=(",", ":"), ensure_ascii=False)
+    h = 0x811C9DC5
+    units = text.encode("utf-16-le")
+    for i in range(0, len(units), 2):  # charCodeAt: UTF-16 code units
+        h = ((h ^ int.from_bytes(units[i : i + 2], "little")) * 0x01000193) & 0xFFFFFFFF
+    return format(h, "x")
 
 
 def _checked_corrections(data: Any) -> dict[str, Any]:

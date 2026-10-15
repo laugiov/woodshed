@@ -445,3 +445,27 @@ def test_without_a_route_out_the_name_of_the_computer_gives_its_address(monkeypa
     monkeypatch.setattr("woodshed.app.socket.socket", FakeRoute)
     monkeypatch.setattr("woodshed.app.socket.gethostbyname_ex", lambda name: (name, [], ["127.0.0.1", "10.0.0.7"]))
     assert app.lan_addresses() == ["10.0.0.7"]
+
+
+def test_the_library_counts_what_is_left_to_check_after_the_band_corrected(server: app.AppServer) -> None:
+    from woodshed import build
+
+    def chord(doubt_id: int, kind: str) -> dict[str, Any]:
+        doubt = {"id": doubt_id, "why": "", "alternatives": [], "kind": kind}
+        return {"pc": 0, "quality": "", "beats": 4, "doubt": doubt}
+
+    song = {"bars": [{"chords": [chord(0, "chord")]}, {"chords": [chord(1, "chord"), chord(2, "timing")]}], "beats": []}
+    page = server.library.root / "One.woodshed"
+    data = build.script_json({"song": song, "view": {}})
+    (page / "index.html").write_text(f'<script type="application/json" id="woodshed-data">{data}</script>')
+
+    def count() -> int:
+        left: int = {s["folder"]: s["doubts"] for s in server.library.pages()}["One.woodshed"]
+        return left
+
+    assert count() == 2  # a timing doubt is not a chord to check
+    assert post(server, "/api/corrections", fixes(key="0ld", fixes={"0": [7, ""]}))[0] == 200
+    assert count() == 2  # corrections of another analysis of the page: their ids are not these
+    key = app.analysis_key(song)
+    assert post(server, "/api/corrections", fixes(key=key, fixes={"1": [7, ""]}))[0] == 200
+    assert count() == 1  # as the page says after the band's correction

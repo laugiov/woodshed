@@ -228,30 +228,59 @@
       if (f) f.focus();
     }
 
+    // The chord the chart shows comes from the whole song (what comes before and after, the key, the
+    // same part played again); the shares come from this bar heard alone. When they disagree, say so,
+    // and keep the analysis's chord in the list: a correction can always go back to it.
     function openDoubt(button) {
       const [u, k] = button.getAttribute("data-ref").split("_").map(Number);
       const chord = song.bars[u].chords[k];
       const s = app.store.get();
+      const same = (a, b) => !!a && !!b && a.pc === b.pc && a.quality === b.quality;
+      const analysed = app.analysedChord(chord.doubt.id) || chord;
+      const alts = chord.doubt.alternatives.slice();
+      if (!alts.some((a) => same(a, analysed))) alts.push({ pc: analysed.pc, quality: analysed.quality, share: null });
+      const node = (c) => W.chordNode(app.nameFor(c, 0, s));
+      const named = (c) => W.prettyText(app.nameFor(c, 0, s));
+      let note;
+      if (chord.fixed && same(chord, analysed)) note = W.nodes(W.t("You confirmed {chord}, the analysis's chord."), { chord: node(chord) });
+      else if (chord.fixed) note = W.nodes(W.t("Your correction: {chord}. The analysis had {analysed}."), { chord: node(chord), analysed: node(analysed) });
+      else if (same(alts[0], analysed)) note = W.t(chord.doubt.why); // one of the analysis's texts, in core/i18n-fr.js
+      else {
+        note = W.nodes(W.t("The chart keeps {chord}: the bars around it point to it. Heard alone, this bar sounds more like {top}."), {
+          chord: node(analysed),
+          top: node(alts[0]),
+        });
+      }
       const pop = $("pop");
       clear(
         pop,
-        h("h3", null, W.t("Which one do you hear?")),
-        h("p", null, W.t(chord.doubt.why)), // one of the analysis's texts, in core/i18n-fr.js
-        chord.doubt.alternatives.map((alt, i) =>
-          h(
+        h("h3", null, W.t("Bar {n}: which one do you hear?", { n: u + 1 })),
+        h("p", { "data-testid": "doubt-note" }, note),
+        alts.map((alt, i) => {
+          const tag = chord.fixed && same(alt, chord) ? W.t("yours") : same(alt, analysed) ? W.t("analysis") : null;
+          const inUse = chord.fixed && same(alt, chord);
+          const keep = !chord.fixed && same(alt, analysed); // the chart's chord, confirmed by ear
+          return h(
             "div",
-            { class: "alt", "data-testid": "alternative" },
-            h("span", { class: "an" }, W.chordNode(app.nameFor(alt, 0, s))),
-            h("span", { class: "meter" }, h("i", { style: { width: alt.share + "%" } })),
-            h("span", { class: "pc" }, W.t("{n}%", { n: alt.share })),
+            { class: "alt" + (inUse ? " in-use" : ""), "data-testid": "alternative" },
+            h("span", { class: "an" }, node(alt), tag ? h("span", { class: "tag" }, tag) : null),
+            h("span", { class: "meter" }, alt.share === null ? null : h("i", { style: { width: alt.share + "%" } })),
+            h("span", { class: "pc" }, alt.share === null ? "–" : W.t("{n}%", { n: alt.share })),
             h(
               "span",
               { class: "acts" },
-              h("button", { type: "button", "aria-label": W.t("Hear it in this bar"), "data-testid": "hear-alternative", onclick: () => app.audition(u, alt) }, "▶"),
-              h("button", { type: "button", class: "pick", "data-testid": i === 0 ? "pick-first" : "pick", onclick: () => app.correct(u, k, alt) }, W.t("Use")),
+              h("button", { type: "button", "aria-label": W.t("Hear {chord} in this bar", { chord: named(alt) }), "data-testid": "hear-alternative", onclick: () => app.audition(u, alt) }, "▶"),
+              h(
+                "button",
+                {
+                  type: "button", class: "pick", disabled: inUse ? "" : null, "data-testid": i === 0 ? "pick-first" : "pick", onclick: () => app.correct(u, k, alt),
+                  "aria-label": keep ? W.t("Keep {chord}", { chord: named(alt) }) : W.t("Use {chord}", { chord: named(alt) }),
+                },
+                inUse ? W.t("In use") : keep ? W.t("Keep") : W.t("Use"),
+              ),
             ),
-          ),
-        ),
+          );
+        }),
         h("p", null, W.t("▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.")),
       );
       pop.hidden = false;

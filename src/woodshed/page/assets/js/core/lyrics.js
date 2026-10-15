@@ -65,8 +65,9 @@
     // end plus half a bar, never past the next line; a bar holds to one line. A line starting in
     // a bar the line before still holds goes on in it (cont: no bar line of its own). Bars no line
     // holds (owner -1) are left to the chart, which shows them as a grid.
-    // Chords to check that are no change (the same chord again, or off the tracked beats): no
-    // change for the placement, but the view shows them, as the header counts them.
+    // Chords to check, or checked, that are no change (the same chord again, or off the tracked
+    // beats): no change for the placement, but the view shows them: a check as the header counts it,
+    // a correction with its mark (a chord confirmed as the one before it does not vanish).
     function checksLeft(list) {
       const seen = new Set(list.map((c) => c.bar + "_" + c.index));
       const out = [];
@@ -75,7 +76,7 @@
         bar.chords.forEach((c, k) => {
           const i = meta.first_beat + u * per + pos;
           const t = i >= 0 && i < meta.beats.length ? meta.beats[i] : bar.start + pos * (60 / bpm);
-          if (c.doubt && !c.fixed && !seen.has(u + "_" + k)) out.push({ t, bar: u, index: k, chord: c });
+          if (c.doubt && !seen.has(u + "_" + k)) out.push({ t, bar: u, index: k, chord: c });
           pos += c.beats;
         });
       });

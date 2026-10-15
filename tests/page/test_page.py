@@ -689,3 +689,83 @@ def test_printing_is_black_on_white_whatever_the_theme(open_page: Any) -> None:
     assert o.js("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
     assert o.js("getComputedStyle(document.querySelector('.bar')).color") == "rgb(0, 0, 0)"
     expect(o.page.get_by_test_id("theme")).to_be_hidden()
+
+
+def test_a_doubt_says_why_the_chart_keeps_a_chord_the_bar_alone_ranks_lower(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    ref = o.page.get_by_test_id("doubt").first.get_attribute("data-ref")
+    assert ref is not None
+    u, k = (int(x) for x in ref.split("_"))
+    # As the analysis can give: the bar heard alone sounds like another chord, the song around it
+    # points to the chart's.
+    o.js(
+        "([u, k]) => { const c = Woodshed.current.bars[u].chords[k];"
+        " c.doubt.alternatives = [{pc: (c.pc + 5) % 12, quality: '', share: 61},"
+        " {pc: c.pc, quality: c.quality, share: 39}]; }",
+        [u, k],
+    )
+    o.page.get_by_test_id("doubt").first.click()
+    pop = o.page.get_by_test_id("doubt-pop")
+    expect(pop.locator("h3")).to_have_text(f"Bar {u + 1}: which one do you hear?")
+    expect(o.page.get_by_test_id("doubt-note")).to_contain_text("The chart keeps")
+    analysis = o.page.get_by_test_id("alternative").nth(1)
+    expect(analysis).to_contain_text("analysis")
+    expect(analysis.get_by_role("button", name=re.compile("^Keep"))).to_be_enabled()  # confirmed by ear
+
+
+def test_a_correction_can_be_changed_or_taken_back_to_the_analysis(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    analysed = o.js(
+        "(() => { const c = Woodshed.current.bars[0].chords.find(c => c.doubt); return [c.pc, c.quality]; })()"
+    )
+    o.page.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("alternative").nth(1).get_by_role("button", name=re.compile("^Use")).click()
+    fixed = (
+        "(() => { const c = Woodshed.current.bars[0].chords.find(c => c.fixed);"
+        " return c ? [c.pc, c.quality] : null; })()"
+    )
+    assert o.js(fixed) not in (None, analysed)
+    o.page.get_by_test_id("fixed").first.click()  # a correction is still a button
+    expect(o.page.get_by_test_id("doubt-note")).to_contain_text("Your correction")
+    o.page.get_by_test_id("alternative").filter(has_text="analysis").get_by_role(
+        "button", name=re.compile("^Use")
+    ).click()
+    assert o.js(fixed) == analysed  # back to the analysis's chord, as checked by ear
+    expect(o.page.get_by_test_id("fixed").first).to_be_visible()
+
+
+def test_a_chord_confirmed_as_the_one_before_stays_on_the_words(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-same-check")
+    words = o.page.locator(".lline")
+    expect(words.get_by_test_id("doubt").first).to_be_visible()  # to check, on the words
+    words.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("alternative").filter(has_text="analysis").get_by_role(
+        "button", name=re.compile("^Keep")
+    ).click()
+    expect(words.get_by_test_id("fixed").first).to_be_visible()  # checked: still there, with its mark
+
+
+def test_a_correction_to_the_chord_before_it_in_the_bar_can_still_be_changed(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    # The bar's doubt corrected to the chord before it in the same bar: the two merge into one.
+    target = o.js(
+        "(() => { const bars = Woodshed.current.bars;"
+        " for (let u = 0; u < bars.length; u++) for (let k = 1; k < bars[u].chords.length; k++)"
+        "   if (bars[u].chords[k].doubt) { const p = bars[u].chords[k - 1]; return [u, k, p.pc, p.quality]; }"
+        " return null; })()"
+    )
+    assert target is not None
+    u, k, pc, quality = target
+    o.js(f"Woodshed.app.correct({u}, {k}, {{pc: {pc}, quality: '{quality}'}})")
+    o.page.get_by_test_id("fixed").first.click()  # no error, the popover opens
+    expect(o.page.get_by_test_id("doubt-note")).to_be_visible()
+
+
+def test_the_library_finds_the_page_corrections_by_the_page_own_key(open_page: Any) -> None:
+    from woodshed import app as library
+    from woodshed import build
+
+    o = open_page("pickup", close_calls=True)
+    found = build.DATA_BLOCK.search((o.folder / "index.html").read_text(encoding="utf-8"))
+    assert found is not None
+    assert library.analysis_key(json.loads(found.group(1))["song"]) == o.js("Woodshed.app.fixesKey")

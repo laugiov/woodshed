@@ -280,6 +280,9 @@
         const last = out[out.length - 1];
         if (last && last.pc === c.pc && last.quality === c.quality) {
           last.beats += c.beats;
+          // A correction to the chord before it in the bar: the merged chord carries its doubt, so
+          // the correction can still be opened, changed or taken back.
+          if (c.fixed && c.doubt && !(last.doubt && !last.fixed)) last.doubt = c.doubt;
           last.fixed = last.fixed || c.fixed;
         } else out.push(c);
       }
@@ -340,6 +343,11 @@
       applyFixes();
       saveCorrections();
       store.set({ corrections: store.get().corrections + 1 });
+    };
+    // The chord the analysis gave a doubt, before any correction.
+    app.analysedChord = (id) => {
+      for (const bar of original) for (const c of bar) if (c.doubt && c.doubt.id === id) return c;
+      return null;
     };
     app.correct = function correct(u, k, alt) {
       const c = song.bars[u].chords[k];

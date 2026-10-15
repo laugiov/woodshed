@@ -27,6 +27,7 @@
       const main = chordNode(name);
       // A timing doubt (the chord is clear) stays readable as a plain chord, still open to a check.
       const timing = c.doubt && c.doubt.kind === "timing";
+      // A correction stays a button: it can be changed, or taken back to the analysis's chord.
       const inner = c.doubt && !c.fixed
         ? h(
             "button",
@@ -34,7 +35,9 @@
             main,
             timing ? null : h("sup", null, "?"),
           )
-        : [main, c.fixed ? h("span", { class: "fixed-dot", title: W.t("Your correction") }) : null];
+        : c.fixed && c.doubt
+          ? h("button", { type: "button", class: "doubt fixed", "data-ref": ref, "data-testid": "fixed", title: W.t("Your correction: change it") }, main, h("span", { class: "fixed-dot", "aria-hidden": "true" }))
+          : main;
       return h(
         "span",
         { class: "ch" + (small ? " small" : "") },
@@ -97,10 +100,19 @@
             push,
           );
         }
-        return [name, p.chord.fixed && !opts.stage ? h("span", { class: "fixed-dot", title: W.t("Your correction") }) : null, push];
+        if (p.chord.fixed && p.chord.doubt && !opts.stage) {
+          return h(
+            "button",
+            { type: "button", class: "doubt fixed", "data-ref": p.bar + "_" + p.index, "data-testid": "fixed", title: W.t("Your correction: change it"), "aria-label": W.t("Your correction, bar {n}: change it", { n: p.bar + 1 }) },
+            name,
+            h("span", { class: "fixed-dot", "aria-hidden": "true" }),
+            push,
+          );
+        }
+        return [name, push];
       };
       const word = (item) => {
-        const checks = !opts.stage && item.chords.some((p) => p.chord.doubt && !p.chord.fixed);
+        const checks = !opts.stage && item.chords.some((p) => p.chord.doubt); // to check, or a correction to change
         // The chord names are for the eye: a screen reader reads the words, and the checks.
         const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]));
         if (item.kind === "gap") return h("span", { class: "lw gap" }, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));

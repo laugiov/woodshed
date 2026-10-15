@@ -482,3 +482,61 @@ def test_placing_the_words_says_how_far_it_is(tmp_path: Path, monkeypatch: pytes
     shares: list[float] = []
     lyrics.add_to_page(page, "\n".join(VERSE_1), say=lambda line: None, progress=shares.append)
     assert shares == [0.0, 0.45, 0.9, 1.0]  # listening is most of the time
+
+
+def test_a_chorus_named_nowhere_before_is_the_stanza_sung_most_often() -> None:
+    # Lyrics sites write the chorus once in full, unnamed, then "[Chorus]" for the next times.
+    text = "\n\n".join(["\n".join(VERSE_1), "\n".join(CHORUS), "\n".join(VERSE_2), "\n".join(CHORUS), "[Chorus]"])
+    read = lyrics.read(text)
+    assert [ln.text for ln in read.lines[-len(CHORUS) :]] == CHORUS and read.notes == []
+
+
+def test_a_part_with_no_words_names_the_music_and_a_sung_one_missing_is_said() -> None:
+    read = lyrics.read("\n".join(VERSE_1) + "\n\n[Solo]\n\n" + "\n".join(VERSE_2) + "\n\n[Verse 3]\n")
+    assert read.markers == [(len(VERSE_1), "Solo")]  # before the first line of the second stanza
+    assert read.notes == [lyrics.CHORUS_NOTE]  # "[Verse 3]" with no words and none to repeat
+
+
+def test_a_solo_between_two_stanzas_takes_the_name_the_words_give_it() -> None:
+    chart = song(16, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 8),
+                         part("Verse 2", "verse", "A", 8, 12), part("Outro", "outro", "C", 12, 16)]  # fmt: skip
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(VERSE_1[1], 2, 0), sung(VERSE_2[0], 8, 1), sung(VERSE_2[1], 10, 1)],
+            "markers": [{"before": 2, "tag": "Solo"}]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None and [(s["name"], s["role"], s["start"]) for s in named][1] == ("Solo", "instrumental", 4)
+
+
+def test_a_stanza_the_chart_cut_in_two_is_one_part() -> None:
+    chart = song(20, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Part B", "part", "B", 4, 6),
+                         part("Chorus 1", "chorus", "C", 6, 10), part("Verse 2", "verse", "A", 10, 14),
+                         part("Part B", "part", "B", 14, 16), part("Chorus 2", "chorus", "C", 16, 20)]  # fmt: skip
+    # The chorus stanza starts with a line sung over the chart's Part B, every time.
+    data = {"lines": [
+        sung(VERSE_1[0], 0, 0), sung(CHORUS[0], 4, 1), sung(CHORUS[1], 6, 1), sung(CHORUS[0], 8, 1),
+        sung(VERSE_2[0], 10, 2), sung(CHORUS[0], 14, 3), sung(CHORUS[1], 16, 3), sung(CHORUS[0], 18, 3),
+    ]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data)
+    assert named is not None
+    assert [(s["name"], s["start"], s["end"]) for s in named] == [
+        ("Verse 1", 0, 4), ("Chorus 1", 4, 10), ("Verse 2", 10, 14), ("Chorus 2", 14, 20),
+    ]  # fmt: skip
+
+
+def test_a_verse_line_sung_late_over_the_next_verse_does_not_join_them() -> None:
+    chart = song(24, [(0, ""), (7, "")])
+    chart["sections"] = [part("Verse 1", "verse", "A", 0, 4), part("Verse 2", "verse", "A", 4, 8),
+                         part("Chorus 1", "chorus", "B", 8, 12), part("Verse 3", "verse", "A", 12, 16)]  # fmt: skip
+    # Verse 1's last line lands in the chart's Verse 2, which sings its own stanza too.
+    data = {"lines": [sung(VERSE_1[0], 0, 0), sung(VERSE_1[1], 4, 0), sung(VERSE_2[0], 5, 1), sung(VERSE_2[1], 6, 1),
+                      sung(CHORUS[0], 8, 2), sung(VERSE_3[0], 12, 3)]}  # fmt: skip
+    named = lyrics.sections_by_words(chart, data)
+    names = [s["name"] for s in named] if named is not None else [s["name"] for s in chart["sections"]]
+    assert names[:2] == ["Verse 1", "Verse 2"] and names[3] == "Verse 3"  # two verses, not one
+
+
+def test_a_verse_written_out_as_often_as_the_chorus_is_not_guessed_for_it() -> None:
+    v, c = "\n".join(VERSE_1), "\n".join(CHORUS)
+    read = lyrics.read("\n\n".join([v, c, v, c, "[Chorus]"]))
+    assert read.notes == [lyrics.CHORUS_NOTE]  # two stanzas come back as often: said, not guessed

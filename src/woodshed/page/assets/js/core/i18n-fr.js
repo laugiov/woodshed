@@ -208,9 +208,18 @@
     "bar {n} of {len}": "mesure {n} sur {len}",
     "{part} next bar": "{part} à la prochaine mesure",
     "{part} in {n} bars": "{part} dans {n} mesures",
-    "Which one do you hear?": "Lequel entends-tu ?",
+    "Bar {n}: which one do you hear?": "Mesure {n} : lequel entends-tu ?",
+    "The chart keeps {chord}: the bars around it point to it. Heard alone, this bar sounds more like {top}.":
+      "La grille garde {chord} : les mesures autour y mènent. Écoutée seule, cette mesure sonne plutôt comme {top}.",
+    "Your correction: {chord}. The analysis had {analysed}.": "Ta correction : {chord}. L'analyse avait {analysed}.",
+    yours: "ton choix",
+    analysis: "analyse",
+    "In use": "Retenu",
+    Keep: "Garder",
+    "Keep {chord}": "Garder {chord}",
+    "Use {chord}": "Choisir {chord}",
     "{n}%": "{n} %",
-    "Hear it in this bar": "L'entendre dans cette mesure",
+    "Hear {chord} in this bar": "Écouter {chord} dans cette mesure",
     Use: "Choisir",
     "▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.":
       "▶ joue cette mesure de l'enregistrement avec l'accord candidat par-dessus. Choisis ce qui correspond à ton oreille.",
@@ -218,7 +227,9 @@
     // The chart and the harmony (views/chart.js)
     "Placement to check by ear": "Placement à vérifier à l'oreille",
     "Check by ear": "Vérifier à l'oreille",
-    "Your correction": "Ta correction",
+    "Your correction: change it": "Ta correction : clique pour la changer",
+    "Your correction, bar {n}: change it": "Ta correction, mesure {n} : clique pour la changer",
+    "You confirmed {chord}, the analysis's chord.": "Tu as confirmé {chord}, l'accord de l'analyse.",
     "Go to {part}": "Aller à {part}",
     "1 bar": "1 mesure",
     "{n} bars": "{n} mesures",
@@ -380,6 +391,11 @@
     "{message}. They appear when you stop playing.": "{message}. Elles apparaissent quand tu arrêtes de jouer.",
     "{message}. Loading them…": "{message}. Chargement…",
     "The words are placed": "Les paroles sont placées",
+    "about {n} s left": "encore environ {n} s",
+    "about {n} min left": "encore environ {n} min",
+    "Words placed: {what}": "Paroles placées : {what}",
+    "A part's name with no words under it was left out: paste its words in full.":
+      "Un nom de partie sans paroles dessous a été laissé de côté : colle ses paroles en entier.",
     "The library was restarted before the words were placed: place them again.":
       "La bibliothèque a redémarré avant que les paroles soient placées : place-les de nouveau.",
     "The words could not be placed: {why}": "Les paroles n'ont pas pu être placées : {why}",

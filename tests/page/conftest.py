@@ -152,6 +152,20 @@ def _lyrics_named(song: dict[str, Any]) -> None:
     ]
 
 
+def _lyrics_same_chord_to_check(song: dict[str, Any]) -> None:
+    """Words on pop, and bar 2 played as bar 1 (the same chord) with a close call on it: the chord
+    to check is no chord change, so only a mark can show it on the words."""
+    _with_lyrics(song)
+    first = song["bars"][0]["chords"][0]
+    other = (first["pc"] + 7) % 12
+    alternatives = [
+        {"pc": other, "quality": "", "share": 55},
+        {"pc": first["pc"], "quality": first["quality"], "share": 45},
+    ]
+    doubt = {"id": 900, "why": "Close call between the top candidates.", "alternatives": alternatives, "kind": "chord"}
+    song["bars"][1]["chords"] = [{**first, "doubt": doubt}]
+
+
 def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _no_sections(song)
     _with_lyrics(song)
@@ -160,6 +174,7 @@ def _lyrics_no_sections(song: dict[str, Any]) -> None:
 VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
     "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,
+    "lyrics-same-check": _lyrics_same_chord_to_check,
 }  # fmt: skip
 
 

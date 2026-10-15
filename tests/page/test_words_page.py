@@ -88,6 +88,7 @@ def test_words_pasted_in_the_page_are_placed_and_shown(page: Page, library: app.
     expect(page.get_by_test_id("words-status")).to_have_text("Listening to the voice")
     expect(page.get_by_test_id("sheet-lyrics")).to_be_visible(timeout=15000)  # reloaded with the words
     expect(page.locator(".lline").first).to_contain_text("Morning")
+    expect(page.get_by_test_id("toast")).to_contain_text("Words placed")  # said after the reload
     assert library.pasted == [WORDS]  # type: ignore[attr-defined]
     page.get_by_test_id("words-open").click()
     expect(page.get_by_test_id("words-text")).to_have_value(WORDS)  # editable again, as pasted

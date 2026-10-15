@@ -63,8 +63,16 @@
       return data.token;
     }
 
-    function placed(message) {
+    // Said again after the reload that shows the words: the page that asked knows it is done.
+    const DONE = "woodshed:words-placed:" + folder; // one origin serves every song of the library
+    function placed(message, notes) {
       stopPolling();
+      const said = [message].concat((notes || []).map((n) => W.t(n))).join(". ");
+      try {
+        sessionStorage.setItem(DONE, said);
+      } catch (err) {
+        /* no storage: the words show, without the message */
+      }
       if (app.store.get().playing) {
         reloadWhenStopped = true; // the words appear when the music stops, not in the middle of it
         say(W.t("{message}. They appear when you stop playing.", { message }));
@@ -74,9 +82,21 @@
       }
     }
 
+    // How long is left, from how fast the share grew since it started moving.
+    let since = null;
+    function left(percent) {
+      if (!(percent > 0)) return "";
+      if (since === null) since = { t: Date.now(), p: percent };
+      const done = percent - since.p;
+      if (done < 5 || percent >= 95) return "";
+      const seconds = Math.round(((Date.now() - since.t) / 1000) * ((100 - percent) / done));
+      return " · " + (seconds < 90 ? W.t("about {n} s left", { n: Math.max(5, Math.round(seconds / 5) * 5) }) : W.t("about {n} min left", { n: Math.round(seconds / 60) }));
+    }
+
     // The library's answer about this song's job, until it is done.
     function follow(id) {
       stopPolling();
+      since = null;
       polling = setInterval(async () => {
         let data;
         try {
@@ -100,13 +120,13 @@
           say(W.t("The words could not be placed: {why}", { why: job.message }), true);
         } else if (job.status === "done") {
           working(true, 100);
-          placed(heard(job.message));
+          placed(heard(job.message), job.notes);
         } else if (job.status === "queued") {
           working(true);
           say(W.t("Waiting for the song being analysed…"));
         } else {
           working(true, job.percent);
-          say(sentence(heard(job.message || "listening to the voice")));
+          say(sentence(heard(job.message || "listening to the voice")) + left(job.percent));
         }
       }, 1500);
     }
@@ -238,6 +258,17 @@
       headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
       headerBtn.classList.toggle("primary", !app.words);
       headerBtn.addEventListener("click", open);
+    }
+
+    // The words placed before this load: said once, now that they show.
+    try {
+      const said = sessionStorage.getItem(DONE);
+      if (said) {
+        sessionStorage.removeItem(DONE);
+        setTimeout(() => app.toast(W.t("Words placed: {what}", { what: said })), 300);
+      }
+    } catch (err) {
+      /* no storage */
     }
 
     app.store.on((s, changed) => {
