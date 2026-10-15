@@ -57,7 +57,7 @@
     Shortcuts: "Raccourcis",
     "Hands on the instrument": "Les mains sur l'instrument",
     Space: "Espace",
-    "Play or pause": "Lecture ou pause",
+    "Play or pause, even with a button selected (Enter presses it)": "Lecture ou pause, même avec un bouton sélectionné (Entrée appuie dessus)",
     "Previous or next bar": "Mesure précédente ou suivante",
     "Tempo down or up by 5 BPM": "Tempo de 5 BPM en moins ou en plus",
     "Practice steps": "Étapes de travail",
@@ -159,7 +159,7 @@
     "With your corrections. Chord symbols and bass line, for MuseScore":
       "Avec tes corrections. Symboles d'accords et ligne de basse, pour MuseScore",
     "Print the chart": "Imprimer la grille",
-    "One page for the music stand": "Une page pour le pupitre",
+    "The chart for the music stand, without the screen's buttons": "La grille pour le pupitre, sans les boutons de l'écran",
     Hide: "Masquer",
     Pause: "Pause",
 

@@ -603,6 +603,8 @@
       const word = e.target.closest("[data-seek]");
       if (word) {
         app.seekTime(+word.getAttribute("data-seek"));
+        // A line's time says "Play from 0:52": it plays from there; a word only moves there.
+        if (word.classList.contains("t") && !store.get().playing && !following()) app.togglePlay();
         return;
       }
       const loop = e.target.closest("[data-loop]");
@@ -639,9 +641,10 @@
         if (k === " ") e.preventDefault();
         return;
       }
-      // Space plays or pauses, also when a stage button has the focus after a tap: a page-turner
-      // pedal sends Space, and must not press "Next part" again.
-      if (k === " " && (tag !== "BUTTON" || e.target.id === "playBtn" || e.target.closest("#stage"))) {
+      // Space plays or pauses, whatever button has the focus (a page-turner pedal sends Space, and a
+      // click on Trainer must not make Space toggle it); in a menu or the doubt pop it presses the
+      // button, as a keyboard user expects there.
+      if (k === " " && !e.target.closest(".menu, #pop")) {
         e.preventDefault();
         app.togglePlay();
       } else if (k === "ArrowRight" || k === "PageDown") {
@@ -737,7 +740,7 @@
         item("MusicXML", W.t("With your corrections. Chord symbols and bass line, for MuseScore"), {
           "data-testid": "export-musicxml", onclick: () => W.exports.save(stem + ".musicxml", W.exports.musicxml(song), "application/vnd.recordare.musicxml+xml"),
         }),
-        item(W.t("Print the chart"), W.t("One page for the music stand"), { "data-testid": "export-print", onclick: () => window.print() }),
+        item(W.t("Print the chart"), W.t("The chart for the music stand, without the screen's buttons"), { "data-testid": "export-print", onclick: () => window.print() }),
       );
     }
     renderExports();
@@ -783,8 +786,10 @@
     $("stPrev").addEventListener("click", tapped(() => app.prevPart()));
     $("stPlay").addEventListener("click", tapped(() => app.togglePlay()));
     $("stNextPart").addEventListener("click", tapped(() => app.nextPart()));
+    // Firefox presses a focused button when Space is released: Space played or paused already.
     document.addEventListener("keyup", (e) => {
-      if (e.key === " " && e.target.closest && e.target.closest("#stage button")) e.preventDefault();
+      const button = e.key === " " && e.target.closest && e.target.closest("button");
+      if (button && !button.closest(".menu, #pop, dialog")) e.preventDefault();
     });
     function renderStagePlay(s) {
       $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones

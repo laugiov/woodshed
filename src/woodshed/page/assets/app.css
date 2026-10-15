@@ -4,7 +4,8 @@
 .missing-files { display: none !important; }
 @media print {
   .dock, .desk-col, .path, .head-actions, .chart-bar, .hint, .toast, .pop, .menu, .stage, .pending, .foot,
-  .form, .sec-loop, .band-banner, .next-song, .prefs, .words-dialog { display: none !important; }
+  .form, .sec-loop, .band-banner, .next-song, .prefs, .words-dialog, .now, .harm, .back, .fixed-dot,
+  #wordsBtn { display: none !important; }
   .sec-name, .sec-head[data-role="chorus"] .sec-name { color: #000 !important; }
   body { background: #fff; color: #000; }
   .main { display: block; }
@@ -477,7 +478,28 @@ body.following #playBtn { opacity: 0.45; }
   .lline { grid-template-columns: 40px minmax(0, 1fr); gap: 6px; }
   .lwords { font-size: 18px; }
 }
+/* Paper: the chart (and the words) as compact as they stay readable on a music stand. */
 @media print {
+  @page { size: A4; margin: 9mm 10mm; }
+  body { font-size: 10.5px; }
+  .wrap { padding: 0; gap: 4px; max-width: none; }
+  .song h1 { font-size: 22px; }
+  .facts { font-size: 11px; margin-top: 0; }
+  .panel { padding: 0; }
+  .sec-head { margin-top: 2px; padding-top: 4px; }
+  .sec-name { font-size: 15px !important; }
+  .sheet { border: 0; padding: 0; gap: 2px; }
+  .line { grid-template-columns: 34px minmax(0, 1fr); gap: 4px; break-inside: avoid; }
+  .line-label .t, .lline .t { font-size: 8.5px; }
+  .bar { min-height: 0; padding: 1px 5px 13px; }
+  .bar .ch, .ch { font-size: 15px; }
+  .lline { grid-template-columns: 34px minmax(0, 1fr); padding: 0 2px; gap: 4px; }
+  .lwords { font-size: 12px; line-height: 1.1; }
+  .lwords .nb { margin: 9px 0 1px; }
+  .lwords .bl { height: 2em; margin: 0 5px 0 6px; }
+  .lwords .bl i { top: -10px; font-size: 7.5px; }
+  .lw .lc { font-size: 1em; min-height: 1.1em; }
+  .doubt sup { display: none; }
   .lline.cur { background: none; }
   .lline .nb.inloop { box-shadow: none; }
   .lline { break-inside: avoid; }

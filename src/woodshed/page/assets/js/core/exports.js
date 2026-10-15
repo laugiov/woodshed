@@ -40,7 +40,7 @@
     };
     const quote = (text) => directiveText(text).replace(/"/g, "'");
     const grid = (label, rows) => [
-      '{start_of_grid label="' + quote(label) + '"}',
+      '{start_of_grid: label="' + quote(label) + '"}',
       ...rows.map(([bars, times]) => {
         const text = bars.map(cells).join(" | ");
         return times > 1 ? "|: " + text + " :|" + (times > 2 ? " x" + times : "") : "| " + text + " |";
@@ -54,12 +54,27 @@
       "{time: " + d.beats_per_bar + "/4}",
       "{comment: chords found by woodshed from " + directiveText(d.file) + "}",
     ];
-    const check = [];
-    d.bars.forEach((bar, u) => {
-      if (bar.chords.some((c) => c.doubt && (c.doubt.kind || "chord") === "chord")) check.push(u + 1); // no kind: older data
-    });
-    if (check.length) lines.push("{comment: check by ear: " + (check.length === 1 ? "bar " : "bars ") + check.join(", ") + "}");
     const sections = (words && words.sections) || d.sections || [];
+    // The chords to check by ear, by part (exports.py _to_check): a file has no bar numbers.
+    const doubtful = [];
+    d.bars.forEach((bar, u) => bar.chords.forEach((c) => c.doubt && (c.doubt.kind || "chord") === "chord" && doubtful.push([u, c]))); // no kind: older data
+    if (doubtful.length) {
+      let check;
+      if (!sections.length) {
+        const bars = [...new Set(doubtful.map(([u]) => u + 1))];
+        check = (bars.length === 1 ? "bar " : "bars ") + bars.join(", ");
+      } else {
+        const parts = new Map();
+        for (const [u, c] of doubtful) {
+          const sec = sections.find((s) => s.start <= u && u < s.end);
+          const part = sec ? sec.name : "bar " + (u + 1);
+          if (!parts.has(part)) parts.set(part, []);
+          if (!parts.get(part).includes(name(c))) parts.get(part).push(name(c));
+        }
+        check = [...parts].map(([part, names]) => part + " (" + names.join(", ") + ")").join(", ");
+      }
+      lines.push("{comment: check by ear: " + directiveText(check) + "}");
+    }
     if (!sections.length) {
       for (const group of d.groups) lines.push("", ...grid(group.label, [[group.occurrences[0], group.occurrences.length]]));
       return lines.join("\n") + "\n";
@@ -135,7 +150,8 @@
           const ahead = inside.filter((p) => timed && p.t <= w.start);
           inside = inside.filter((p) => !(timed && p.t <= w.start));
           const chords = [...(wi === 0 ? lead : []), ...ahead, ...(onWord.get(li + ":" + wi) || [])];
-          return chords.map(chord).join("") + lyricText(w.text);
+          // Several chords before one word: the first ones on their own, the last on the word.
+          return chords.slice(0, -1).map((p) => chord(p) + " ").join("") + (chords.length ? chord(chords[chords.length - 1]) : "") + lyricText(w.text);
         });
         tokens.push(...inside.map(chord));
         const backing = (ln.backing || []).map((b) => " (" + lyricText(b) + ")").join("");

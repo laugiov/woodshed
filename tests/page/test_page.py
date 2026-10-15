@@ -689,6 +689,10 @@ def test_printing_is_black_on_white_whatever_the_theme(open_page: Any) -> None:
     assert o.js("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
     assert o.js("getComputedStyle(document.querySelector('.bar')).color") == "rgb(0, 0, 0)"
     expect(o.page.get_by_test_id("theme")).to_be_hidden()
+    for screen_only in (".now", ".harm", ".back", ".dock", "#wordsBtn"):  # the stand gets the chart only
+        assert o.js(
+            f"[...document.querySelectorAll('{screen_only}')].every(e => getComputedStyle(e).display === 'none')"
+        )
 
 
 def test_a_doubt_says_why_the_chart_keeps_a_chord_the_bar_alone_ranks_lower(open_page: Any) -> None:
@@ -812,3 +816,31 @@ def test_the_bass_tab_draws_doubtful_notes_faint_and_says_when_a_bar_has_no_bass
     o.js("Woodshed.app.seekBar(1)")
     expect(o.page.get_by_test_id("bass-silent")).to_have_text("No bass heard in this bar.")
     expect(tab.locator(".lo")).to_have_count(0)
+
+
+def test_space_plays_whatever_button_was_clicked_last(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("trainer").click()  # a click leaves the focus on Trainer
+    trainer = o.js("Woodshed.app.store.get().trainer")
+    o.page.keyboard.press(" ")
+    until(o, "Woodshed.debug().playing === true")
+    assert o.js("Woodshed.app.store.get().trainer") == trainer  # Space played, it did not press Trainer again
+
+
+def test_the_time_of_a_sung_line_plays_from_there(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    line = o.page.locator(".lline button.t").nth(1)
+    line.click()
+    until(o, "Woodshed.debug().playing === true")
+    start = float(line.get_attribute("data-seek") or 0)
+    assert o.js("Woodshed.debug().time") >= start - 0.05
+
+
+def test_space_still_presses_a_button_in_a_menu(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("tracks").click()
+    track = o.page.get_by_test_id("track-minus-drums")
+    track.focus()
+    o.page.keyboard.press(" ")  # a keyboard user picks a track in the menu
+    until(o, "Woodshed.app.store.get().track === 'minus-drums'")
+    assert o.js("Woodshed.debug().playing") is False

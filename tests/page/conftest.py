@@ -81,8 +81,14 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     data = json.loads(match.group(2))
     change(data["song"])
     named = data["song"].pop("_lyrics_sections", None)
+    late = data["song"].pop("_lyrics_late", False)
     if data["song"].pop("_lyrics", False):
         lyrics = lyrics_for(data["song"])
+        if late:  # a line whose only word comes late in bar 2, after both of its chord changes
+            start, end = data["song"]["bars"][1]["start"], data["song"]["bars"][1]["end"]
+            first = {**lyrics["lines"][0], "words": lyrics["lines"][0]["words"][:1]}
+            word = {"text": "late", "start": start + 0.75 * (end - start), "end": start + 0.9 * (end - start)}
+            lyrics["lines"] = [first, {**lyrics["lines"][0], "text": "late", "words": [word]}]
         if named is not None:
             lyrics["sections"] = named
         (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(lyrics) + ";\n")
@@ -173,6 +179,17 @@ def _groove_loose(song: dict[str, Any]) -> None:
         groove[drum] = [round(min(p, 0.45), 3) for p in groove[drum]]
 
 
+def _lyrics_stacked(song: dict[str, Any]) -> None:
+    """Words on pop with bar 2 split in two chords that both lead into a late word, and a chord to
+    check: the ChordPro writes chords apart and names the part to check."""
+    _with_lyrics(song)
+    second = song["bars"][1]["chords"][0]
+    third = song["bars"][2]["chords"][0]
+    doubt = {"id": 901, "why": "Close call between the top candidates.", "kind": "chord", "alternatives": []}
+    song["bars"][1]["chords"] = [{**second, "beats": 2}, {**third, "beats": 2, "doubt": doubt}]
+    song["_lyrics_late"] = True
+
+
 def _groove_edge(song: dict[str, Any]) -> None:
     """A kick on the & of 1 in 55 % of the bars: drawn by the notation (over half the bars), below the
     strong hits a relative rule would keep."""
@@ -199,6 +216,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "groove-loose": _groove_loose,
     "bass-doubts": _bass_doubts,
     "groove-edge": _groove_edge,
+    "lyrics-stacked": _lyrics_stacked,
 }  # fmt: skip
 
 

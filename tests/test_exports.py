@@ -39,8 +39,8 @@ def test_chordpro_has_the_song_facts_and_one_grid_per_section(pop: dict[str, Any
     text = exports.chordpro(pop)
     assert "{title: Pop & Co}" in text and "{key: C}" in text and "{time: 4/4}" in text
     sections = pop["sections"]
-    assert sections and text.count('{start_of_grid label="') == len(sections) == text.count("{end_of_grid}")
-    assert f'{{start_of_grid label="{sections[0]["name"]}"}}' in text  # named as on the page
+    assert sections and text.count('{start_of_grid: label="') == len(sections) == text.count("{end_of_grid}")
+    assert f'{{start_of_grid: label="{sections[0]["name"]}"}}' in text  # named as on the page
     grid = [re.sub(r"^\|:? | :?\|( x\d+)?$", "", line) for line in text.splitlines() if line.startswith("|")]
     bars = [bar.split() for line in grid for bar in line.split(" | ")]
     assert all(len(cells) == 4 for cells in bars)  # one cell per beat
@@ -56,7 +56,7 @@ def test_chords_to_check_are_listed_not_marked(pop: dict[str, Any]) -> None:
         bars[1] = {**bars[1], "chords": [{**first, "doubt": {"id": 0, "why": "", "kind": kind, "alternatives": alts}}]}
         text = exports.chordpro({**pop, "bars": bars})
         assert "?" not in text.split("\n\n", 1)[1]
-        assert ("{comment: check by ear: bar 2}" in text) is listed
+        assert ("{comment: check by ear: Part A (G)}" in text) is listed  # by part and chord: no bar numbers
 
 
 def test_chordpro_marks_repeats(pop: dict[str, Any]) -> None:
@@ -102,7 +102,7 @@ def test_chordpro_with_the_words_puts_each_chord_on_its_word(pop: dict[str, Any]
     chorus = text.split('{start_of_chorus: label="Chorus 1"}\n')[1].split("\n{end_of_chorus}")[0]
     assert chorus.startswith(f"[{n[4][0]}]the radio") and chorus.endswith("(hums)")  # backing vocals apart
     assert "not here" not in text  # a line not sung in this recording
-    assert '{start_of_grid label="Outro"}' in text  # a part without words stays a grid
+    assert '{start_of_grid: label="Outro"}' in text  # a part without words stays a grid
 
 
 def test_lab_covers_the_file_and_matches_the_chart(pop: dict[str, Any]) -> None:
@@ -258,3 +258,20 @@ def test_part_names_saved_with_whole_floats_are_read_as_the_page_reads_them(pop:
     named = lyrics.fitting_sections([{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0.0, "end": 4.0}], 8)
     assert named == [{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 4}]
     assert lyrics.fitting_sections([{"name": "V", "role": "verse", "letter": "A", "start": 0.5, "end": 4}], 8) is None
+
+
+def test_several_chords_before_one_word_are_written_apart_not_stacked(pop: dict[str, Any]) -> None:
+    bars = [dict(b) for b in pop["bars"]]
+    g, am = dict(bars[1]["chords"][0]), dict(bars[2]["chords"][0])
+    bars[1] = {**bars[1], "chords": [{**g, "beats": 2}, {**am, "beats": 2}]}  # two changes in bar 2
+    song = {**pop, "bars": bars}
+    words = words_for(song)
+    start, bar = bars[1]["start"], bars[2]["start"] - bars[1]["start"]
+    # One line whose first word comes late in bar 2, after both changes: both lead into it.
+    late = {"text": "late", "start": start + 0.75 * bar, "end": start + 0.9 * bar}
+    words["lines"] = [{**words["lines"][0], "words": [words["lines"][0]["words"][0]]},
+                      {**words["lines"][0], "text": "late", "words": [late]}]  # fmt: skip
+    text = exports.chordpro(song, words)
+    n = names(song)
+    assert f"[{n[1][0]}] [{n[1][1]}]late" in text  # the first on its own, the last on the word
+    assert not re.search(r"\]\[", text)  # never two chords stuck on one syllable
