@@ -435,8 +435,10 @@
       store.set({ corrections: store.get().corrections + 1 });
       const shared = app.shareFixes ? app.shareFixes({ [id]: null }) : false;
       if (!app.shareFixes) app.removalsHeard([id]); // opened from disk: this browser was all there was
-      const back = document.querySelector('.doubt[data-ref]:not(.fixed)'); // the keyboard to a chord to check
-      if (back && document.activeElement === document.body) back.focus();
+      // The keyboard back on the chord taken back (the pop that held it is gone).
+      const u = original.findIndex((bar) => bar.some((c) => c.doubt && String(c.doubt.id) === String(id)));
+      const back = document.querySelector('.doubt[data-ref^="' + u + '_"]:not(.fixed)');
+      if (back && (document.activeElement === document.body || !document.activeElement)) back.focus({ preventScroll: true });
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
       app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get())) : "", where }));
     };
@@ -824,7 +826,7 @@
     function renderExports() {
       W.clear(
         $("exportItems"),
-        item("ChordPro", W.t("With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps"), {
+        item("ChordPro", W.t("With your corrections, in the key shown, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps"), {
           "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words, store.get().transpose), "text/plain"),
         }),
         item(W.t("Chord timeline (.lab)"), W.t("With your corrections. Start, end and chord, for analysis tools"), {

@@ -413,12 +413,15 @@
             return shape ? h("span", { class: "dshape " + cls }, app.guitarDiagram(shape), h("b", null, chordNode(app.nameFor(x, shift, s)))) : null;
           }).filter(Boolean)
         : [];
-      clear(box, cards);
-      box.hidden = !cards.length;
+      // The shapes are named as fingered: with a capo, the strip says it, as the guitar panel does.
+      clear(box, shift && cards.length ? h("span", { class: "dcapo" }, W.t("Capo {n}", { n: shift })) : null, cards);
+      box.hidden = !shows;
+      box.classList.toggle("empty", !cards.length); // no chord now nor next: the strip keeps its height
     }
 
+    const DOCK_KEYS = ["beat", "inst", "stage", "pos", "capo", "transpose", "corrections"];
     store.on((s, changed) => {
-      renderDockShapes(s);
+      if (DOCK_KEYS.some((k) => changed.has(k))) renderDockShapes(s);
       const u = curBar(s);
       const c = song.chordAtBeat(s.beat);
       const chordKey = c.pc + c.quality;

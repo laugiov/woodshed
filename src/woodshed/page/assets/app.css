@@ -303,6 +303,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .dock-shapes { display: none; }
 @media (max-width: 900px) {
   .dock-shapes:not([hidden]) { display: flex; gap: 14px; align-items: flex-end; justify-content: center; max-width: 1220px; margin: 0 auto 6px; color: var(--ink); }
+  .dock-shapes.empty { visibility: hidden; min-height: 64px; }
+  .dcapo { font: 700 13px var(--font-chord); color: var(--accent); align-self: center; }
   .dshape { display: inline-flex; align-items: flex-end; gap: 6px; }
   .dshape svg { height: 64px; width: auto; }
   .dshape b { font: 700 20px var(--font-chord); }
@@ -585,6 +587,7 @@ body.following #playBtn { opacity: 0.45; }
   .print-shapes figure { margin: 0; text-align: center; }
   .print-shapes svg { width: 44px; height: auto; display: block; }
   .print-shapes figcaption { font: 700 11px var(--font-chord); }
+  .print-shapes .pcapo { font: 700 12px var(--font-chord); align-self: center; }
 }
 
 /* Sections: a header per part of the song, and the song's form as a row of buttons. */

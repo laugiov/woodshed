@@ -253,8 +253,12 @@
     }
 
     // On paper, a guitarist gets the song's shapes once, in the voicing shown (hidden on screen).
+    let printShown = "";
     function renderPrintShapes(s) {
       const box = $("printShapes");
+      const shows = [s.inst, s.pos, s.capo, s.transpose, s.corrections, W.lang()].join("|");
+      if (shows === printShown) return; // drawn again only when the shapes change, not at each pass
+      printShown = shows;
       const shapes = s.inst === "guitar" && app.shapeFor
         ? song.distinctChords().filter((c) => c.pc >= 0).map((c) => {
             const shape = app.shapeFor(c, s);
@@ -262,7 +266,8 @@
             return shape ? h("figure", null, app.guitarDiagram(shape), h("figcaption", null, chordNode(app.nameFor(c, shift, s)))) : null;
           }).filter(Boolean)
         : [];
-      clear(box, shapes);
+      const capo = s.pos === "open" && s.capo ? h("figure", { class: "pcapo" }, W.t("Capo {n}", { n: s.capo })) : null;
+      clear(box, shapes.length ? capo : null, shapes);
       box.hidden = !shapes.length;
     }
 

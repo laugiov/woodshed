@@ -154,8 +154,8 @@
       "Impossible de dessiner la notation. La grille ci-dessous montre le même groove.",
     "Trainer on: {bpm} BPM, +5 BPM each loop up to {max}.": "Progressif activé : {bpm} BPM, +5 BPM à chaque tour jusqu'à {max}.",
     "Trainer off.": "Progressif désactivé.",
-    "With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps":
-      "Avec tes corrections, et les paroles quand elles sont placées. S'ouvre dans OnSong, SongbookPro et les autres applis de recueils",
+    "With your corrections, in the key shown, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps":
+      "Avec tes corrections, dans la tonalité affichée, et les paroles quand elles sont placées. S'ouvre dans OnSong, SongbookPro et les autres applis de recueils",
     "Chord timeline (.lab)": "Accords dans le temps (.lab)",
     "With your corrections. Start, end and chord, for analysis tools": "Avec tes corrections. Début, fin et accord, pour les outils d'analyse",
     "With your corrections. The whole analysis, for developers": "Avec tes corrections. Toute l'analyse, pour les développeurs",
@@ -223,6 +223,7 @@
     "Your correction: {chord}. The analysis had {analysed}.": "Ta correction : {chord}. L'analyse avait {analysed}.",
     yours: "ton choix",
     analysis: "analyse",
+    "Capo {n}": "Capo {n}",
     "Back to the analysis": "Revenir à l'analyse",
     "Back to the analysis: {chord}, to check by ear": "Revenir à l'analyse : {chord}, à vérifier à l'oreille",
     "Back to the analysis: {chord}. {where}": "Retour à l'analyse : {chord}. {where}",
