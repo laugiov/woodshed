@@ -268,12 +268,15 @@ def test_the_band_phones_are_let_in_from_the_library_page(browser: Browser, serv
     address = f"http://{app.lan_addresses()[0]}:{server.port}/"
     expect(page.get_by_test_id("network-address")).to_contain_text(address)
     expect(page.get_by_test_id("network-qr")).to_have_attribute("aria-label", "Code to scan: " + address)
+    expect(page.get_by_test_id("phones")).to_contain_text("allow it on private networks")  # still said once on
     expect(page.get_by_test_id("phones")).to_contain_text("Follow plays along with the device that leads")
     phone = browser.new_context(locale="en-US").new_page()
     phone.goto(address)  # the phone, through the door
     expect(phone.get_by_test_id("phones")).to_contain_text("This device joined the band")
     expect(phone.get_by_test_id("network-switch")).to_have_count(0)
     expect(phone.get_by_test_id("add")).to_be_hidden()
+    expect(phone.get_by_test_id("song-row").first).to_be_visible()
+    expect(phone.get_by_test_id("add-words")).to_have_count(0)  # words are placed from the computer
     switch.click()
     expect(switch).to_have_attribute("aria-checked", "false")
     expect(page.get_by_test_id("network-qr")).to_have_count(0)
@@ -513,3 +516,14 @@ def test_a_removal_made_offline_reaches_the_band_when_the_app_answers_again(
         assert all(fix is not None for fix in removed.values())  # the fix taken back, kept with its removal
     finally:
         (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
+
+
+def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, server.url + "pop.woodshed/index.html", problems)
+    hint = page.get_by_test_id("band-hint")
+    expect(hint).to_have_text("This device plays on its own.")  # visible text, not a tooltip only
+    page.get_by_test_id("band-lead").click()
+    expect(hint).to_have_text("This device plays for the whole band: the song, the place, the loop.")
+    page.get_by_test_id("band-alone").click()
+    assert problems == []

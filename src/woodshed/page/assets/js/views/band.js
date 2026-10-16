@@ -361,6 +361,8 @@
             h("button", { type: "button", class: mode === m ? "on" : "", title: tip, "data-testid": "band-" + m, "aria-pressed": String(mode === m), onclick: () => setMode(m) }, text),
           ),
         ),
+        // What the mode chosen does, as text: a phone has no hover for the buttons' titles.
+        h("span", { class: "band-hint", "data-testid": "band-hint" }, { alone: W.t("This device plays on its own."), lead: W.t("This device plays for the whole band: the song, the place, the loop."), follow: W.t("This device plays along with the device that leads.") }[mode]),
       );
       const banner = $("bandBanner");
       if (mode === "follow") {

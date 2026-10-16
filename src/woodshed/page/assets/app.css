@@ -598,6 +598,10 @@ body.following #playBtn { opacity: 0.45; }
 .form-chip.r-chorus:not(.on) { border-color: var(--accent); }
 .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
 .sec-block { display: grid; gap: inherit; }
+/* A singer on the words view: the words first, not a big chord, up to a tablet held upright. */
+@media (max-width: 1100px) { body[data-inst="voice"][data-sheet="lyrics"] .now { display: none; } }
+.plays.band { flex-wrap: wrap; row-gap: 2px; }
+.band-hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 .free-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.25; color: var(--muted); font-style: italic; }
 .sec-block:first-child > .sec-head:first-child { margin-top: 0; padding-top: 0; }
 .print-shapes { display: none; }
@@ -639,7 +643,7 @@ body.following #playBtn { opacity: 0.45; }
   .now { grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; margin-bottom: 8px; }
   .big { font-size: 58px; }
   .now-side { gap: 4px; padding-bottom: 2px; }
-  body[data-inst="voice"][data-sheet="lyrics"] .now { display: none; }
+
   /* A bar of four chords in a quarter of a phone: they wrap inside the bar, never into the next. */
   .bar { padding-left: 4px; padding-right: 4px; gap: 2px 3px; flex-wrap: wrap; align-content: center; }
   .bar .slash { font-size: 15px; }

@@ -1166,3 +1166,12 @@ def test_the_guitar_panel_names_the_best_capo_and_puts_it_on(open_page: Any) -> 
     assert o.js("Woodshed.app.store.get().capo") == 5
     expect(o.page.get_by_test_id("use-best-capo")).to_have_count(0)  # on: nothing more to offer
     expect(desk).not_to_contain_text("no capo makes")  # no tip saying the opposite
+
+
+def test_on_a_tablet_a_singer_opens_on_the_words_not_a_big_chord(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.set_viewport_size({"width": 1024, "height": 1366})  # an iPad held upright
+    o.page.get_by_test_id("inst-voice").click()
+    expect(o.page.locator(".now")).to_be_hidden()
+    o.page.set_viewport_size({"width": 1440, "height": 900})  # a laptop has the room for it
+    expect(o.page.locator(".now")).to_be_visible()

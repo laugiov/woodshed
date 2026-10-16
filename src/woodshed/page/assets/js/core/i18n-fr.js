@@ -226,6 +226,8 @@
     "Capo {n}": "Capo {n}",
     "no words here": "pas de paroles ici",
     "No words placed from here: the text pasted may stop before the song does.": "Plus de paroles placées à partir d'ici : le texte collé s'arrête peut-être avant le morceau.",
+    "If a phone cannot open it: your computer may have asked whether woodshed (or Python) may accept incoming connections; allow it on private networks.":
+      "Si un téléphone ne l'ouvre pas : ton ordinateur a peut-être demandé si woodshed (ou Python) peut accepter des connexions entrantes ; autorise-le sur les réseaux privés.",
     "Back to the analysis": "Revenir à l'analyse",
     "Back to the analysis: {chord}, to check by ear": "Revenir à l'analyse : {chord}, à vérifier à l'oreille",
     "Back to the analysis: {chord}. {where}": "Retour à l'analyse : {chord}. {where}",

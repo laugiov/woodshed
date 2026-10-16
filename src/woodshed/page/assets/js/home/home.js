@@ -24,6 +24,7 @@
   let setlist = [];
   let titles = {};
   let info = {}; // page folder -> the library's facts on it: key, BPM, length, the band's choices
+  let canUpload = true;
   let editing = null; // the song whose note is being written: the set list waits to be drawn again
   let shown = null; // the last /api/songs answer, to redraw the rows at once
   // One save at a time, each made from the list as the previous save left it: two quick clicks
@@ -168,7 +169,7 @@
         : h("span", null, W.t(STATUS[job.status]) + (job.status === "separating" || job.status === "placing" ? " " + job.percent + " %" : job.step ? " (" + W.t(job.step) + ")" : ""));
     } else status = song && song.complete ? h("span", { class: "okfact" }, song.stems ? W.t("Ready, with parts") : W.t("Ready")) : h("span", null, W.t("Mix only"));
     // The words go on the singer's track: offered once the song has its parts.
-    const addWords = song && song.complete && song.stems && !song.words && !(job && !["done", "failed"].includes(job.status))
+    const addWords = canUpload && song && song.complete && song.stems && !song.words && !(job && !["done", "failed"].includes(job.status))
       ? [" · ", h("a", { href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words"))]
       : null;
     const title = song ? h("a", { href: link(song.folder), "data-testid": "song-link", translate: "no" }, song.title) : h("span", { translate: "no" }, job.name);
@@ -249,7 +250,8 @@
             h("p", null, W.t("On each phone, on the same Wi-Fi: scan the code with the camera, or type")),
             h("p", { class: "net-addr", translate: "no", "data-testid": "network-address" }, addresses.join("  ·  ")),
             h("p", { class: "hint" }, W.t(ROLES)),
-            h("p", { class: "hint" }, W.t("The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.")))));
+            h("p", { class: "hint" }, W.t("The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.")),
+            h("p", { class: "hint" }, W.t("If a phone cannot open it: your computer may have asked whether woodshed (or Python) may accept incoming connections; allow it on private networks.")))));
       } else if (net.on) {
         out.push(h("p", { class: "hint" }, W.t("Let in, but this computer has no network address: is it on the band's Wi-Fi?")));
       } else {
@@ -276,6 +278,7 @@
   function render(data) {
     // A phone of the band can lead and follow, not add songs: the computer running the app does.
     const upload = data.can_upload !== false;
+    canUpload = upload; // a phone of the band plays and follows; words are placed from the computer
     $("drop").hidden = !upload;
     $("addBtn").hidden = !upload;
     info = {};
