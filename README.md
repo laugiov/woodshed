@@ -112,7 +112,7 @@ library every device of the band sees them.
 - **Set list**: line up the evening's songs, with each one's key, tempo and length, the set's total
   time and a note per song ("capo 2, starts on the chorus"), and print it. At the end of a song,
   the pedal (or `N`) takes the whole band to the next one.
-- **The singer's key**: pick the key that suits the voice, then **Keep it for the band**: every
+- **The singer's key**: pick the key that suits the voice, then **Keep it for the band** (the button names the key): every
   device opens the song in that key. The recording keeps its own key (woodshed never pitch-shifts
   the audio), and the page says so while you play in another one.
 

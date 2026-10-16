@@ -459,14 +459,14 @@ flowchart LR
 - If the app stops during a job, that job is not marked failed. It is resumed at next start (`resume`).
 - Uploads are limited to 2 GB and need free disk space for the tracks.
 - The **set list** is `setlist.json` in the library: the order the band plays songs in. The home page shows each song's key (the band's key when there is one), tempo and length, the total, and the leader's note; `@media print` prints the set alone.
-- Started again on a port where woodshed already answers (`running_here`, a GET of `/api/token`), `serve` opens the browser on the running one and returns. The check comes before the `Library` is opened, because opening it clears the uploads cut short, which would be the running app's own.
+- Started again while it runs: the port is taken, and if woodshed answers there (`running_here`, a GET of `/api/token` that never goes through a proxy), `serve` opens the browser on the running one and returns, touching nothing in the library. The uploads cut short by a stop are cleared only once this app holds the port (`Library.clear_cut_uploads`): the running one may be receiving one.
 
 ### Security model
 
 The module docstring states the idea: the server answers any page the browser opens, so it trusts nothing it did not give out itself.
 
 - Binds `127.0.0.1` by default. Another `--host` needs `--allow-network`.
-- **The door** (`AppServer.set_door`, `Door`): the home page's **Let the band's phones join** switch adds a second listener on this computer's network address (from `lan_addresses`), same port, sharing the library, the token and the band. Only a request from loopback may open or close it (`POST /api/network`). The firewall question comes when it opens, not at every start. Closing it shuts the listener, and every request still arriving on a kept-alive connection through it, and every live stream through it, is ended (`accepting` is checked per request and in the stream loop). Started with `--host 0.0.0.0` (or in Docker) there is nothing to switch.
+- **The door** (`AppServer.set_door`, `Door`): the home page's **Let the band's phones join** switch adds a second listener on this computer's network address (from `lan_addresses`), same port, sharing the library, the token and the band, never the uploads (even with `--uploads-from-network`). It opens on private, not link-local, addresses only: a VPN's or a tunnel's is no way in for a phone. Only a request from loopback may open or close it (`POST /api/network`). The firewall question comes when it opens, not at every start. Closing it shuts the listener, and every request still arriving on a kept-alive connection through it, and every live stream through it, is ended (`accepting` is checked per request and in the stream loop). Started with `--host 0.0.0.0` (or in Docker) there is nothing to switch.
 - **Host check** (`_host_ok`): a request whose `Host` header is not one of this computer's names is refused. That stops DNS rebinding, where a hostile site's name suddenly points at your machine.
 - **Token**: a random token per run. Every POST needs it in the `X-Woodshed-Token` header. A cross-site form or fetch cannot send a custom header, and preflight requests (OPTIONS) are refused.
 - The live stream passes the token in the query string (browsers' `EventSource` sends no headers), and also checks `Sec-Fetch-Site`.
