@@ -56,7 +56,7 @@ def test_chords_to_check_are_listed_not_marked(pop: dict[str, Any]) -> None:
         bars[1] = {**bars[1], "chords": [{**first, "doubt": {"id": 0, "why": "", "kind": kind, "alternatives": alts}}]}
         text = exports.chordpro({**pop, "bars": bars})
         assert "?" not in text.split("\n\n", 1)[1]
-        assert ("{comment: check by ear: Part A (G)}" in text) is listed  # by part and chord: no bar numbers
+        assert ("{comment: check by ear: Part A, bar 2 (G)}" in text) is listed  # the part, its bars, the chords
 
 
 def test_chordpro_marks_repeats(pop: dict[str, Any]) -> None:
@@ -271,7 +271,20 @@ def test_several_chords_before_one_word_are_written_apart_not_stacked(pop: dict[
     late = {"text": "late", "start": start + 0.75 * bar, "end": start + 0.9 * bar}
     words["lines"] = [{**words["lines"][0], "words": [words["lines"][0]["words"][0]]},
                       {**words["lines"][0], "text": "late", "words": [late]}]  # fmt: skip
-    text = exports.chordpro(song, words)
+    rows = exports.chordpro(song, words).splitlines()
     n = names(song)
-    assert f"[{n[1][0]}] [{n[1][1]}]late" in text  # the first on its own, the last on the word
-    assert not re.search(r"\]\[", text)  # never two chords stuck on one syllable
+    sung = rows.index(f"[{n[1][1]}]late")  # the last chord on the word
+    assert rows[sung - 1] == f"[{n[1][0]}]"  # the first on a chord row of its own, above the line
+    assert not any(re.search(r"\] *\[[^\]]*\]\w", row) for row in rows)  # never two chords on one word
+
+
+def test_bars_of_chords_after_the_words_are_written_four_a_row(pop: dict[str, Any]) -> None:
+    words = words_for(pop)
+    first = words["lines"][0]
+    words["lines"] = [{**first, "text": "Morning", "words": first["words"][:1]}]  # one word, then bars of chords
+    sec = pop["sections"][0]
+    assert sec["end"] - sec["start"] > 5  # more than four bars left after the word
+    rows = exports.chordpro(pop, words).splitlines()
+    chord_rows = [r for r in rows if r.startswith("[") and not re.search(r"\][^\s\[|]", r)]
+    assert chord_rows and all(r.count(" | ") <= 3 for r in chord_rows)  # four bars a row at most
+    assert any(" | " in r for r in chord_rows)  # bar by bar

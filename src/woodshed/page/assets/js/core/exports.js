@@ -67,11 +67,13 @@
         const parts = new Map();
         for (const [u, c] of doubtful) {
           const sec = sections.find((s) => s.start <= u && u < s.end);
-          const part = sec ? sec.name : "bar " + (u + 1);
-          if (!parts.has(part)) parts.set(part, []);
-          if (!parts.get(part).includes(name(c))) parts.get(part).push(name(c));
+          const part = sec ? sec.name : "";
+          if (!parts.has(part)) parts.set(part, [[], []]);
+          const [bars, names] = parts.get(part);
+          bars.push(u + 1);
+          if (!names.includes(name(c))) names.push(name(c));
         }
-        check = [...parts].map(([part, names]) => part + " (" + names.join(", ") + ")").join(", ");
+        check = [...parts].map(([part, [bars, names]]) => (part ? part + ", " : "") + barList(bars) + " (" + names.join(", ") + ")").join(", ");
       }
       lines.push("{comment: check by ear: " + directiveText(check) + "}");
     }
@@ -100,6 +102,17 @@
     return lines.join("\n") + "\n";
   }
 
+  // Bar numbers as a musician reads them: "bar 3", "bars 18-19, 23" (as exports.bar_list).
+  function barList(bars) {
+    const spans = [];
+    for (const b of [...new Set(bars)].sort((x, y) => x - y)) {
+      const last = spans[spans.length - 1];
+      if (last && b === last[1] + 1) last[1] = b;
+      else spans.push([b, b]);
+    }
+    return (bars.length === 1 ? "bar " : "bars ") + spans.map(([a, z]) => (a === z ? String(a) : a + "-" + z)).join(", ");
+  }
+
   // The rows of each sung part: its lines with the chords on their words, the chords between lines
   // on rows of their own, the chords of the bar leading into a line on its first word.
   function sungRows(song, words, sections, name) {
@@ -115,6 +128,21 @@
       return k;
     };
     const chord = (p) => "[" + name(p.chord) + "]";
+    // Chords with no word of their own: bar by bar, four bars a row, never one long row.
+    const chordRows = (ps) => {
+      const bars = [];
+      let last = null;
+      for (const p of ps) {
+        if (p.bar !== last) {
+          bars.push([]);
+          last = p.bar;
+        }
+        bars[bars.length - 1].push(chord(p));
+      }
+      const out = [];
+      for (let i = 0; i < bars.length; i += 4) out.push(bars.slice(i, i + 4).map((b) => b.join(" ")).join(" | "));
+      return out;
+    };
     const placed = words.place(words.changes());
     const bySection = new Map();
     words.lines.forEach((ln, li) => {
@@ -142,22 +170,27 @@
         const ln = words.lines[li];
         const lead = waiting.filter((p) => ln.start - barTime <= p.t && p.t < ln.start);
         const before = waiting.filter((p) => p.t < ln.start - barTime);
-        if (before.length) rows.push(before.map(chord).join(" "));
+        rows.push(...chordRows(before));
         let inside = waiting.filter((p) => ln.start <= p.t && p.t < ln.end);
         waiting = waiting.filter((p) => p.t >= ln.end);
-        const tokens = ln.words.map((w, wi) => {
+        const tokens = [];
+        ln.words.forEach((w, wi) => {
           const timed = typeof w.start === "number" && typeof w.end === "number"; // as lyrics.js reads a word
           const ahead = inside.filter((p) => timed && p.t <= w.start);
           inside = inside.filter((p) => !(timed && p.t <= w.start));
           const chords = [...(wi === 0 ? lead : []), ...ahead, ...(onWord.get(li + ":" + wi) || [])];
-          // Several chords before one word: the first ones on their own, the last on the word.
-          return chords.slice(0, -1).map((p) => chord(p) + " ").join("") + (chords.length ? chord(chords[chords.length - 1]) : "") + lyricText(w.text);
+          // One chord a word. Those before it: above the line for its first word, after the word
+          // before it otherwise (they change while that word is held).
+          const extra = chords.slice(0, -1);
+          if (extra.length && wi === 0) rows.push(...chordRows(extra));
+          else if (extra.length) tokens[tokens.length - 1] += extra.map((p) => " " + chord(p)).join("");
+          tokens.push((chords.length ? chord(chords[chords.length - 1]) : "") + lyricText(w.text));
         });
         tokens.push(...inside.map(chord));
         const backing = (ln.backing || []).map((b) => " (" + lyricText(b) + ")").join("");
         rows.push(lyricRow(tokens.join(" ") + backing));
       }
-      if (waiting.length) rows.push(waiting.map(chord).join(" "));
+      rows.push(...chordRows(waiting));
       out.set(k, rows);
     }
     return out;

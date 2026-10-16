@@ -118,9 +118,21 @@ def _rows(song: Song, bars: list[int], key: theory.Key) -> list[tuple[list[int],
     return rows
 
 
+def bar_list(bars: list[int]) -> str:
+    """Bar numbers as a musician reads them: "bar 3", "bars 18-19, 23"."""
+    spans: list[list[int]] = []
+    for b in sorted(set(bars)):
+        if spans and b == spans[-1][1] + 1:
+            spans[-1][1] = b
+        else:
+            spans.append([b, b])
+    text = ", ".join(str(a) if a == z else f"{a}-{z}" for a, z in spans)
+    return ("bar " if len(bars) == 1 else "bars ") + text
+
+
 def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> str:
-    """The chords to check by ear, by part ("Chorus 1 (D#m, C#)"): a file has no bar numbers to point
-    at. Without parts, by bar."""
+    """The chords to check by ear, by part with its bars ("Chorus 1, bars 18-19 (D#m, C#)"). Without
+    parts, by bar."""
     doubtful = [
         (u, c)
         for u, bar in enumerate(song["bars"])
@@ -132,13 +144,18 @@ def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> st
     if not sections:
         bars = list(dict.fromkeys(u + 1 for u, _ in doubtful))
         return ("bar " if len(bars) == 1 else "bars ") + ", ".join(map(str, bars))
-    parts: dict[str, list[str]] = {}
+    parts: dict[str, tuple[list[int], list[str]]] = {}
     for u, c in doubtful:
-        part = next((s["name"] for s in sections if s["start"] <= u < s["end"]), f"bar {u + 1}")
-        names = parts.setdefault(part, [])
+        sec = next((s for s in sections if s["start"] <= u < s["end"]), None)
+        part = sec["name"] if sec else ""
+        bars, names = parts.setdefault(part, ([], []))
+        bars.append(u + 1)
         if _name(c, key) not in names:
             names.append(_name(c, key))
-    return ", ".join(f"{part} ({', '.join(names)})" for part, names in parts.items())
+    return ", ".join(
+        (f"{part}, " if part else "") + f"{bar_list(bars)} ({', '.join(names)})"
+        for part, (bars, names) in parts.items()
+    )
 
 
 def _sung(
@@ -174,6 +191,17 @@ def _sung(
     def name(p: dict[str, Any]) -> str:
         return "[" + _name(song["bars"][p["bar"]]["chords"][p["index"]], key) + "]"
 
+    def chord_rows(ps: list[dict[str, Any]]) -> list[str]:
+        """Chords with no word of their own: bar by bar, four bars a row, never one long row."""
+        bars: list[list[str]] = []
+        last = None
+        for p in ps:
+            if p["bar"] != last:
+                bars.append([])
+                last = p["bar"]
+            bars[-1].append(name(p))
+        return [" | ".join(" ".join(b) for b in bars[i : i + 4]) for i in range(0, len(bars), 4)]
+
     begin = {li: min(s for s, _ in ws if s == s) for li, ws in timed.items()}
     finish = {li: max(e for _, e in ws if e == e) for li, ws in timed.items()}
     by_section: dict[int, list[int]] = {}
@@ -196,24 +224,26 @@ def _sung(
             # Chords before the line: those of the bar leading into it go on its first word.
             lead = [p for t, p in waiting if begin[li] - bar_time <= t < begin[li]]
             before = [p for t, p in waiting if t < begin[li] - bar_time]
-            if before:
-                rows.append(" ".join(name(p) for p in before))
+            rows += chord_rows(before)
             inside = [(t, p) for t, p in waiting if begin[li] <= t < finish[li]]
             waiting = [(t, p) for t, p in waiting if t >= finish[li]]
-            tokens = []
+            tokens: list[str] = []
             for wi, w in enumerate(lines[li]["words"]):
                 start = timed[li][wi][0]
                 ahead = [p for t, p in inside if start == start and t <= start]
                 inside = [(t, p) for t, p in inside if not (start == start and t <= start)]
                 chords = (lead if wi == 0 else []) + ahead + on_word.get((li, wi), [])
-                # Several chords before one word: the first ones on their own, the last on the word.
-                ahead_of = "".join(name(p) + " " for p in chords[:-1])
-                tokens.append(ahead_of + (name(chords[-1]) if chords else "") + lyric_text(w["text"]))
+                # One chord a word. Those before it: above the line for its first word, after the
+                # word before it otherwise (they change while that word is held).
+                if chords[:-1] and wi == 0:
+                    rows += chord_rows(chords[:-1])
+                elif chords[:-1]:
+                    tokens[-1] += "".join(" " + name(p) for p in chords[:-1])
+                tokens.append((name(chords[-1]) if chords else "") + lyric_text(w["text"]))
             tokens += [name(p) for _, p in inside]
             backing = lines[li].get("backing") or []
             rows.append(lyric_row(" ".join(tokens) + "".join(f" ({lyric_text(b)})" for b in backing)))
-        if waiting:
-            rows.append(" ".join(name(p) for _, p in waiting))
+        rows += chord_rows([p for _, p in waiting])
         out[k] = rows
     return out
 
