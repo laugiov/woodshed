@@ -119,7 +119,8 @@ def test_a_phone_held_sideways_keeps_the_controls_on_screen(browser: Browser, pa
 def test_on_a_laptop_screen_the_stage_fits_and_has_its_own_theme_button(open_page: Any) -> None:
     o = open_page("pop")
     o.page.set_viewport_size({"width": 1366, "height": 768})
-    o.page.get_by_test_id("stage-open").click()
+    # Without full screen: headless Firefox sometimes gives it the whole virtual desktop.
+    o.js("Woodshed.app.setStage(true, false)")
     play = o.page.get_by_test_id("stage-play").bounding_box()
     assert play is not None and play["y"] + play["height"] <= 768  # the controls on screen, nothing below
     theme = o.js("document.documentElement.dataset.theme")

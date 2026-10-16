@@ -190,6 +190,42 @@ def test_one_device_corrects_the_chart_of_every_device(browser: Browser, pickup_
         (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
 
 
+def test_back_to_the_analysis_reaches_every_device_and_stays(browser: Browser, pickup_server: app.AppServer) -> None:
+    problems: list[str] = []
+    server = pickup_server
+    url = server.url + "pickup.woodshed/index.html"
+    try:
+        guitar = device(browser, url, problems)
+        bass = device(browser, url, problems)
+        before = bass.evaluate(CHART)
+        guitar.get_by_test_id("doubt").first.click()
+        guitar.get_by_test_id("pick").first.click()
+        after = guitar.evaluate(CHART)
+        until(bass, f"{CHART} === {json.dumps(after)}")
+        # A device that took the correction and closed: it keeps it in its browser.
+        keys_context = browser.new_context(viewport={"width": 1280, "height": 800}, locale="en-US")
+        keys = keys_context.new_page()
+        keys.goto(url)
+        until(keys, f"window.Woodshed && window.Woodshed.ready === true && {CHART} === {json.dumps(after)}")
+        keys.close()
+        guitar.get_by_test_id("fixed").first.click()
+        guitar.get_by_test_id("doubt-reset").click()
+        expect(guitar.get_by_test_id("toast")).to_contain_text("Back to the analysis")
+        assert guitar.evaluate(CHART) == before
+        expect(guitar.get_by_test_id("doubt")).to_have_count(1)  # a doubt to check again
+        until(bass, f"{CHART} === {json.dumps(before)}")  # live, no reload
+        again = keys_context.new_page()  # comes back with its old copy of the correction
+        again.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+        again.goto(url)
+        until(again, f"window.Woodshed && window.Woodshed.ready === true && {CHART} === {json.dumps(before)}")
+        again.wait_for_timeout(500)
+        key = guitar.evaluate("Woodshed.app.fixesKey")
+        assert server.library.corrections("pickup.woodshed", key)["fixes"] == {}  # not shared again
+        assert problems == []
+    finally:
+        (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
+
+
 def test_from_disk_there_is_no_band(open_page: Any) -> None:
     o = open_page("pop")
     expect(o.page.get_by_test_id("band")).to_be_hidden()

@@ -288,6 +288,12 @@
             ),
           );
         }),
+        chord.fixed
+          ? h("p", { class: "pop-reset" }, h("button", {
+              type: "button", class: "btn", "data-testid": "doubt-reset", onclick: () => app.uncorrect(chord.doubt.id),
+              "aria-label": W.t("Back to the analysis: {chord}, to check by ear", { chord: named(analysed) }),
+            }, W.t("Back to the analysis")))
+          : null,
         h("p", null, W.t("▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.")),
       );
       pop.hidden = false;

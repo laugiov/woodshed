@@ -359,8 +359,8 @@ def test_corrupted_saved_corrections_never_break_the_page(open_page: Any, stored
     o = open_page("pickup", close_calls=True)
     o.page.get_by_test_id("doubt").first.click()
     o.page.get_by_test_id("pick").first.click()  # creates the key for this song
-    key = o.js("Object.keys(localStorage).find(k => k.startsWith('woodshed:corrections:'))")
-    o.js("([k, v]) => localStorage.setItem(k, v)", [key, stored])
+    key = o.js("Object.keys(localStorage).find(k => /^woodshed:corrections:[^:]+$/.test(k))")
+    o.js("([k, v]) => { localStorage.setItem(k, v); localStorage.setItem(k + ':removed', v); }", [key, stored])
     o.page.reload()
     until(o, "window.Woodshed && window.Woodshed.ready === true")
     assert o.js("Woodshed.current.bars[0].chords.some(c => c.fixed)") is False  # ignored, not applied
@@ -437,6 +437,25 @@ def test_a_seek_while_paused_does_not_step_the_trainer(open_page: Any) -> None:
     o.js("Woodshed.app.seekBar(6)")  # outside the looped line (the second pass), paused
     o.page.wait_for_timeout(500)
     assert state(o)["bpm"] == bpm
+
+
+def test_back_to_the_analysis_gives_back_the_doubt_its_count_and_its_export(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    chart = "JSON.stringify(Woodshed.current.bars.map(b => b.chords.map(c => [c.pc, c.quality, c.beats, !!c.fixed])))"
+    before, spots, cho = o.js(chart), o.page.get_by_test_id("spots").inner_text(), download(o, "export-chordpro")
+    o.page.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("alternative").nth(1).get_by_role("button", name=re.compile("^Use")).click()
+    assert o.js(chart) != before
+    o.page.get_by_test_id("fixed").first.click()
+    reset = o.page.get_by_test_id("doubt-reset")
+    expect(reset).to_have_accessible_name(re.compile("^Back to the analysis"))
+    reset.click()
+    assert o.js(chart) == before
+    expect(o.page.get_by_test_id("spots")).to_have_text(spots)
+    assert download(o, "export-chordpro") == cho  # "check by ear" lists it again
+    o.page.reload()
+    until(o, "window.Woodshed && window.Woodshed.ready === true")
+    assert o.js(chart) == before  # this browser forgot the correction
 
 
 def test_correcting_a_doubt_twice_gives_the_same_chart_after_a_reload(open_page: Any) -> None:

@@ -70,6 +70,7 @@ QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
 NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
+DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
 TYPES = {
     ".flac": "audio/flac",
@@ -259,7 +260,7 @@ class Library:
 
     def _stored(self, folder: str) -> dict[str, Any]:
         """What the library holds for a page; an entry damaged by hand is skipped, the others kept."""
-        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}}
+        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}}
         try:
             data = json.loads(self._corrections_file(folder).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -275,6 +276,8 @@ class Library:
             try:
                 out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
                 out["at"][key] = float(entry.get("at", 0))
+                gone = entry.get("removed", [])
+                out["removed"][key] = {g for g in gone if isinstance(g, str) and DOUBT_ID.fullmatch(g)}
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
         return out
@@ -285,27 +288,46 @@ class Library:
             raise ValueError("key: the analysis the corrections belong to")
         stored = self._stored(folder)
         rev = max(stored["rev"], self.revisions.get(folder, 0))
-        return {"key": key, "fixes": stored["by_key"].get(key, {}), "rev": rev, "band": stored["band"]}
+        removed = sorted(stored["removed"].get(key, ()))
+        return {
+            "key": key,
+            "fixes": stored["by_key"].get(key, {}),
+            "rev": rev,
+            "band": stored["band"],
+            "removed": removed,
+        }
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise ValueError("corrections: a JSON object")
         folder = self._page(data.get("page"))
-        checked = _checked_corrections(data)
+        checked = _checked_corrections(data, removals=True)
         key = checked["key"]
         with self.lock:
             stored = self._stored(folder)
             # Two devices correcting at once: both chords are kept; a later choice for a doubt wins.
-            merged = {**stored["by_key"].get(key, {}), **checked["fixes"]}
+            # A choice of null takes the doubt back to the analysis: it is remembered as removed, so a
+            # device still holding the old fix drops it instead of sharing it again.
+            merged = dict(stored["by_key"].get(key, {}))
+            removed = set(stored["removed"].get(key, ()))
+            for doubt, fix in checked["fixes"].items():
+                if fix is None:
+                    merged.pop(doubt, None)
+                    removed.add(doubt)
+                else:
+                    merged[doubt] = fix
+                    removed.discard(doubt)
             if len(merged) > CORRECTIONS_MAX:
                 raise ValueError("fixes: chords by doubt id")
             stored["by_key"][key] = merged
+            stored["removed"][key] = removed
             stored["at"][key] = time.time()
             for old in sorted(stored["at"], key=stored["at"].get)[: max(0, len(stored["at"]) - CORRECTIONS_KEYS)]:
                 stored["by_key"].pop(old, None)  # the analyses of long ago
+                stored["removed"].pop(old, None)
                 stored["at"].pop(old, None)
             rev = self._write(folder, stored)
-            return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"]}
+            return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"], "removed": sorted(removed)}
 
     def set_band(self, data: Any) -> dict[str, Any]:
         """The band's own choices for a song, from any device: the key it plays in, the leader's note."""
@@ -332,7 +354,14 @@ class Library:
         rev: int = max(stored["rev"], self.revisions.get(folder, 0)) + 1  # kept in the file: grows across restarts
         body: dict[str, Any] = {
             "rev": rev,
-            "by_key": {k: {"fixes": v, "at": stored["at"][k]} for k, v in stored["by_key"].items()},
+            "by_key": {
+                k: {
+                    "fixes": v,
+                    "at": stored["at"][k],
+                    **({"removed": sorted(r)} if (r := stored["removed"].get(k)) else {}),
+                }
+                for k, v in stored["by_key"].items()
+            },
         }
         if stored["band"]:
             body["band"] = stored["band"]
@@ -614,20 +643,23 @@ def _checked_band(data: Any) -> dict[str, Any]:
     return out
 
 
-def _checked_corrections(data: Any) -> dict[str, Any]:
-    """{"key", "fixes"} as a page writes them: chords (pitch class, quality) by doubt id."""
+def _checked_corrections(data: Any, removals: bool = False) -> dict[str, Any]:
+    """{"key", "fixes"} as a page writes them: chords (pitch class, quality) by doubt id; with
+    `removals`, null for a doubt taken back to the analysis."""
     key, fixes = data.get("key"), data.get("fixes")
     if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
         raise ValueError("key: the analysis the corrections belong to")
     if not isinstance(fixes, dict) or len(fixes) > CORRECTIONS_MAX:
         raise ValueError("fixes: chords by doubt id")
     for doubt, fix in fixes.items():
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", doubt) or not isinstance(fix, list) or len(fix) != 2:
+        if removals and fix is None and DOUBT_ID.fullmatch(doubt):
+            continue
+        if not DOUBT_ID.fullmatch(doubt) or not isinstance(fix, list) or len(fix) != 2:
             raise ValueError("fixes: [pitch class, quality] by doubt id")
         pc, quality = fix
         if type(pc) is not int or not 0 <= pc <= 11 or quality not in QUALITIES:
             raise ValueError("fixes: [pitch class, quality] by doubt id")
-    return {"key": key, "fixes": {k: list(v) for k, v in fixes.items()}}
+    return {"key": key, "fixes": {k: None if v is None else list(v) for k, v in fixes.items()}}
 
 
 class Live:

@@ -350,9 +350,14 @@
         merge(bar);
       }
     }
+    // Doubts taken back to the analysis on this device, until the band's library has them: a
+    // device that was offline shares them when it comes back, and the library's copy of the old fix
+    // does not bring it back meanwhile.
+    let pendingRemovals = new Set();
     function saveCorrections() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(fixes));
+        localStorage.setItem(storageKey + ":removed", JSON.stringify([...pendingRemovals]));
       } catch (err) {
         /* private mode or storage off: the correction still applies to this visit */
       }
@@ -377,12 +382,25 @@
         stored = {};
       }
       fixes = validFixes(stored);
+      try {
+        const removed = JSON.parse(localStorage.getItem(storageKey + ":removed") || "[]");
+        pendingRemovals = new Set(Array.isArray(removed) ? removed.filter((id) => typeof id === "string") : []);
+      } catch (err) {
+        pendingRemovals = new Set();
+      }
       applyFixes();
     }
     // The band's corrections (views/band.js, when the page is served by woodshed app): the analysis
     // they belong to, the ones this device has, and taking the band's.
     app.fixesKey = storageKey.split(":").pop();
     app.fixes = () => ({ ...fixes });
+    app.pendingRemovals = () => new Set(pendingRemovals);
+    // The library has these removals: nothing left to share for them.
+    app.removalsHeard = (ids) => {
+      const before = pendingRemovals.size;
+      for (const id of ids) pendingRemovals.delete(id);
+      if (pendingRemovals.size !== before) saveCorrections();
+    };
     app.useFixes = (stored) => {
       const next = validFixes(stored);
       if (JSON.stringify(next) === JSON.stringify(fixes)) return; // nothing new: no redraw
@@ -396,9 +414,24 @@
       for (const bar of original) for (const c of bar) if (c.doubt && c.doubt.id === id) return c;
       return null;
     };
+    // A correction taken back: the chord is the analysis's again, with its doubt to check by ear.
+    app.uncorrect = function uncorrect(id) {
+      const analysed = app.analysedChord(id);
+      delete fixes[id];
+      pendingRemovals.add(id);
+      applyFixes();
+      saveCorrections();
+      popups.closeAll(true);
+      store.set({ corrections: store.get().corrections + 1 });
+      const shared = app.shareFixes ? app.shareFixes({ [id]: null }) : false;
+      if (!app.shareFixes) app.removalsHeard([id]); // opened from disk: this browser was all there was
+      const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
+      app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get())) : "", where }));
+    };
     app.correct = function correct(u, k, alt) {
       const c = song.bars[u].chords[k];
       fixes[c.doubt.id] = [alt.pc, alt.quality];
+      pendingRemovals.delete(c.doubt.id);
       applyFixes();
       saveCorrections();
       popups.closeAll();

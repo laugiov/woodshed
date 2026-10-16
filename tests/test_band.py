@@ -327,7 +327,7 @@ def fixes(page: str = "One.woodshed", **extra: Any) -> dict[str, Any]:
 
 def test_corrections_are_kept_by_the_library_for_every_device(server: app.AppServer) -> None:
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
-    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0, "band": {}}
+    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0, "band": {}, "removed": []}
     status, answer = post(server, "/api/corrections", fixes())
     assert status == 200 and answer["fixes"] == {"3": [9, "m"], "7": [7, ""]} and answer["rev"] > 0
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
@@ -348,6 +348,37 @@ def test_a_page_of_another_analysis_does_not_hide_the_corrections_of_this_one(se
     post(server, "/api/corrections", fixes(key="old999", fixes={"1": [2, ""]}))  # a tab left open before a rebuild
     _, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
     assert json.loads(body)["fixes"] == {"3": [9, "m"], "7": [7, ""]}
+
+
+def test_a_fix_posted_as_null_goes_back_to_the_analysis_for_every_device(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    status, answer = post(server, "/api/corrections", fixes(fixes={"3": None}))  # back to the analysis
+    assert status == 200 and answer["fixes"] == {"7": [7, ""]} and answer["removed"] == ["3"]
+    read = json.loads(request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")[2])
+    assert read["fixes"] == {"7": [7, ""]} and read["removed"] == ["3"]  # another device drops its own copy
+    _, answer = post(server, "/api/corrections", fixes(fixes={"3": [2, "m"]}))  # corrected again later
+    assert answer["fixes"]["3"] == [2, "m"] and answer["removed"] == []
+
+
+def test_removing_every_fix_raises_the_count_to_check_again(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    library = server.library
+    page = library.root / "One.woodshed"
+    monkeypatch.setattr(library, "_chords_to_check", lambda _page: ("a1b2c3", {"3", "7", "9"}))
+    post(server, "/api/corrections", fixes())
+    assert library._left_to_check(page) == 1
+    post(server, "/api/corrections", fixes(fixes={"3": None, "7": None}))
+    assert library._left_to_check(page) == 3
+
+
+def test_a_removal_survives_a_restart_and_only_for_its_analysis(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    post(server, "/api/corrections", fixes(fixes={"3": None}))
+    post(server, "/api/corrections", fixes(key="old999", fixes={"3": [2, ""]}))
+    again = app.Library(server.library.root, server.library.opts)
+    assert again.corrections("One.woodshed", "a1b2c3")["removed"] == ["3"]
+    assert again.corrections("One.woodshed", "old999")["removed"] == []
 
 
 def test_the_revision_keeps_growing_when_the_app_restarts(server: app.AppServer) -> None:
