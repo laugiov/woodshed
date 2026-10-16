@@ -105,6 +105,7 @@
     "funk triad on strings 3-2-1": "triade funk sur les cordes 3-2-1",
     "barre chord, no capo": "accord barré, sans capo",
     "open shape": "position ouverte",
+    "barre shape": "forme barrée",
     "kick on {kick}, snare on {snare}": "grosse caisse sur {kick}, caisse claire sur {snare}",
     "a groove that changes from bar to bar": "un groove qui change d'une mesure à l'autre",
     "kick on {kick}, no steady snare": "grosse caisse sur {kick}, pas de caisse claire régulière",

@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import pytest
 from playwright.sync_api import Browser, Page, expect
 
 from tests.page.conftest import built
@@ -132,3 +133,20 @@ def test_a_touch_screen_is_not_told_about_the_escape_key(browser: Browser, pages
     page.get_by_test_id("stage-open").click()
     assert " ".join(page.get_by_test_id("stage-exit").inner_text().split()) == "Exit stage mode"  # as shown
     page.context.close()
+
+
+@pytest.mark.parametrize("words", [True, False])
+@pytest.mark.parametrize("size", [(1366, 768), (1600, 900), (1280, 800)])
+def test_the_guitar_shapes_on_the_stand_leave_room_for_the_next_chords(
+    open_page: Any, size: tuple[int, int], words: bool
+) -> None:
+    o = open_page("pop", variant="lyrics") if words else open_page("pop")
+    o.page.set_viewport_size({"width": size[0], "height": size[1]})
+    o.page.get_by_test_id("inst-guitar").click()
+    o.js("Woodshed.app.seekBar(1)")
+    o.js("Woodshed.app.setStage(true, false)")  # headless full screen would take the whole desktop
+    expect(o.page.get_by_test_id("stage-shapes")).to_be_visible()
+    mid = o.js("document.querySelector('.stage-mid').getBoundingClientRect().bottom")
+    for part in ("stNow", "stShape", "stNext", "stThen"):
+        bottom = o.js(f"document.getElementById('{part}').getBoundingClientRect().bottom")
+        assert bottom <= mid + 1, f"{part} cut at {size}: {bottom} > {mid}"

@@ -308,3 +308,17 @@ def test_a_chorus_played_with_other_chords_than_the_first_says_so(open_page: Any
     o.js("Woodshed.current.bars.slice(5, 7).forEach(b => b.chords.forEach(c => { c.pc = (c.pc + 2) % 12; }))")
     o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
     expect(o.page.get_by_test_id("played-otherwise")).to_have_text("different chords from Chorus 1: check by ear")
+
+
+def test_a_chorus_with_more_bars_in_front_is_compared_where_it_matches(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    data = json.loads((o.folder / "lyrics.json").read_text(encoding="utf-8"))
+    data["sections"] = [
+        {"name": "Chorus 1", "role": "chorus", "letter": "A", "start": 2, "end": 4},
+        {"name": "Chorus 2", "role": "chorus", "letter": "A", "start": 4, "end": 8},  # two bars more in front
+    ]
+    assert o.js("Woodshed.current.bars[2].chords[0].pc !== Woodshed.current.bars[4].chords[0].pc")  # not bar by bar
+    o.js(f"Woodshed.app.words = Woodshed.lyrics(Woodshed.current, {json.dumps(data)})")
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
+    expect(o.page.get_by_test_id("section").filter(has_text="Chorus 2")).to_be_visible()
+    expect(o.page.get_by_test_id("played-otherwise")).to_have_count(0)

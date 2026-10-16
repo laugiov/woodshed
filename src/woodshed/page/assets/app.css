@@ -320,8 +320,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .stage-shape { font-family: var(--font-chord); font-weight: 600; font-size: clamp(22px, 3vw, 34px); color: var(--accent); margin-top: 10px; }
 /* On the stand, the guitar's shape for the chord now and the next one: no panel needed beside the words. */
 .st-shapes { display: flex; gap: 14px; align-items: flex-end; justify-content: center; margin-top: 8px; color: var(--ink); }
-.st-shapes svg { width: clamp(70px, 9vw, 120px); height: auto; }
-.st-shapes .next svg { width: clamp(52px, 6vw, 84px); opacity: 0.6; }
+.st-shapes svg { width: auto; height: min(12vh, 9vw, 130px); }
+.st-shapes .next svg { width: auto; height: min(8.5vh, 6.5vw, 92px); opacity: 0.6; }
 .stage-next { display: grid; gap: 18px; }
 .stage-next div { font-family: var(--font-chord); font-weight: 600; line-height: 0.9; }
 .stage-next .n1 { font-size: clamp(56px, 10vw, 130px); }
@@ -500,6 +500,10 @@ body.following #playBtn { opacity: 0.45; }
 #stage.st-lyrics .stage-next { grid-area: next; }
 #stage.st-lyrics .stage-lyrics { grid-area: words; }
 #stage.st-lyrics .stage-now { font-size: clamp(80px, min(15vw, 22vh), 220px); }
+/* Next and then share the left column with the chord and its shapes: sized by the height too. */
+#stage.st-lyrics .stage-next .n1 { font-size: clamp(48px, min(9vw, 12vh), 150px); }
+#stage.st-lyrics .stage-next .n2 { font-size: clamp(30px, min(5vw, 7vh), 80px); }
+#stage.st-lyrics .stage-next { gap: 8px; }
 #stage.st-voice .stage-mid { grid-template-columns: minmax(0, 1fr); }
 #stage.st-voice .stage-mid > :not(.stage-lyrics) { display: none; }
 .stage-lyrics { padding-right: 32px; min-width: 0; overflow: hidden; }

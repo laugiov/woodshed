@@ -67,10 +67,17 @@
       const firstOne = list.find((x, j) => j < k && x.role === sec.role);
       if (!firstOne) return null;
       const chords = (u) => (song.bars[u] ? song.bars[u].chords : []).map((c) => c.pc + c.quality).join(" ");
-      const n = Math.min(sec.end - sec.start, firstOne.end - firstOne.start);
-      let differ = 0;
-      for (let i = 0; i < n; i++) if (chords(sec.start + i) !== chords(firstOne.start + i)) differ++;
-      return n && differ / n > 0.25 ? firstOne : null;
+      // The shorter laid along the longer where they agree best: a chorus with two more bars in
+      // front is not "different" for that.
+      const [short, long] = sec.end - sec.start <= firstOne.end - firstOne.start ? [sec, firstOne] : [firstOne, sec];
+      const n = short.end - short.start;
+      let fewest = n;
+      for (let shift = 0; shift <= long.end - long.start - n; shift++) {
+        let differ = 0;
+        for (let i = 0; i < n; i++) if (chords(short.start + i) !== chords(long.start + shift + i)) differ++;
+        fewest = Math.min(fewest, differ);
+      }
+      return n && fewest / n > 0.25 ? firstOne : null;
     }
 
     function sectionHead(sec, k) {

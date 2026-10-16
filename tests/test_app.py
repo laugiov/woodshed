@@ -643,3 +643,22 @@ def test_in_docker_a_library_the_container_cannot_write_says_what_to_do(
     assert cli.main(["app", "/library", "--no-open"]) != 0
     err = capsys.readouterr().err
     assert "Permission denied" in err and "mkdir" in err and "chown" in err
+
+
+def test_started_again_while_it_runs_it_shows_the_running_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr("webbrowser.open", opened.append)
+    running = app.AppServer(app.Library(tmp_path / "library", Options(use_stems=False, open_page=False)))
+    threading.Thread(target=running.serve_forever, daemon=True).start()
+    work = running.library.songs / ".song.mp3.1a2b3c4d.part"
+    work.write_bytes(b"x")  # a song the running app is receiving
+    try:
+        app.serve(tmp_path / "library", Options(use_stems=False, open_page=False), port=running.port)
+    finally:
+        running.shutdown()
+        running.server_close()
+    assert opened == [f"http://127.0.0.1:{running.port}/"]
+    assert "already running" in capsys.readouterr().out
+    assert work.exists()  # its work in progress is left alone

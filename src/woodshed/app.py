@@ -1221,6 +1221,17 @@ class Door(AppServer):
         ThreadingHTTPServer.server_close(self)  # the band's stream belongs to the main server
 
 
+def running_here(port: int) -> bool:
+    """Is woodshed already answering on this port (opened twice from the menu or the Dock)?"""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/token", timeout=1.5) as answer:
+            return isinstance(json.loads(answer.read(4096)).get("token"), str)
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def serve(
     root: Path,
     opts: Options,
@@ -1257,6 +1268,14 @@ def serve(
     library: Library | None = None
     server: AppServer | None = None
     try:  # a stop at any point, start included, leaves the songs in progress to resume
+        if port and running_here(port):
+            # Started again while it runs (the menu, the Dock): the running one is shown. Checked
+            # before the library is opened, which clears uploads cut short: these are its own.
+            url = f"http://127.0.0.1:{port}/"
+            print(f"woodshed app: already running at {url}", flush=True)
+            if open_browser:
+                webbrowser.open(url)
+            return
         library = Library(root, opts)
         server = AppServer(library, host, port, uploads_from_network)
         updated = library.update_pages()

@@ -61,7 +61,10 @@
             ? W.nodes(W.t("sounds {chord}, capo {n}", { n: s.capo }), { chord: h("b", null, chordNode(app.nameFor(c, 0, s))) })
             : W.nodes(W.t("play the {chord} shape, capo {n}", { n: s.capo }), { chord: h("b", null, chordNode(app.nameFor(c, s.capo, s))) });
         }
-        return s.pos === "funk" ? W.t("funk triad on strings 3-2-1") : s.pos === "barre" ? W.t("barre chord, no capo") : W.t("open shape");
+        if (s.pos === "funk") return W.t("funk triad on strings 3-2-1");
+        if (s.pos === "barre") return W.t("barre chord, no capo");
+        // In the Open voicing a chord with no open shape is played as a barre: said as the diagram shows it.
+        return I.tableShape(song.view.shapes, c.pc + s.transpose, c.quality) ? W.t("open shape") : W.t("barre shape");
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
