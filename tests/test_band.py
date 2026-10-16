@@ -327,7 +327,7 @@ def fixes(page: str = "One.woodshed", **extra: Any) -> dict[str, Any]:
 
 def test_corrections_are_kept_by_the_library_for_every_device(server: app.AppServer) -> None:
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
-    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0, "band": {}, "removed": []}
+    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0, "band": {}, "removed": {}}
     status, answer = post(server, "/api/corrections", fixes())
     assert status == 200 and answer["fixes"] == {"3": [9, "m"], "7": [7, ""]} and answer["rev"] > 0
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
@@ -353,11 +353,14 @@ def test_a_page_of_another_analysis_does_not_hide_the_corrections_of_this_one(se
 def test_a_fix_posted_as_null_goes_back_to_the_analysis_for_every_device(server: app.AppServer) -> None:
     post(server, "/api/corrections", fixes())
     status, answer = post(server, "/api/corrections", fixes(fixes={"3": None}))  # back to the analysis
-    assert status == 200 and answer["fixes"] == {"7": [7, ""]} and answer["removed"] == ["3"]
+    assert status == 200 and answer["fixes"] == {"7": [7, ""]} and answer["removed"] == {"3": [9, "m"]}
     read = json.loads(request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")[2])
-    assert read["fixes"] == {"7": [7, ""]} and read["removed"] == ["3"]  # another device drops its own copy
+    # Another device drops its own copy when it is the fix removed (a newer one of its own it keeps).
+    assert read["fixes"] == {"7": [7, ""]} and read["removed"] == {"3": [9, "m"]}
+    _, answer = post(server, "/api/corrections", fixes(fixes={"3": None}))  # said twice by a device
+    assert answer["removed"] == {"3": [9, "m"]}  # still the fix it took back
     _, answer = post(server, "/api/corrections", fixes(fixes={"3": [2, "m"]}))  # corrected again later
-    assert answer["fixes"]["3"] == [2, "m"] and answer["removed"] == []
+    assert answer["fixes"]["3"] == [2, "m"] and answer["removed"] == {}
 
 
 def test_removing_every_fix_raises_the_count_to_check_again(
@@ -377,8 +380,8 @@ def test_a_removal_survives_a_restart_and_only_for_its_analysis(server: app.AppS
     post(server, "/api/corrections", fixes(fixes={"3": None}))
     post(server, "/api/corrections", fixes(key="old999", fixes={"3": [2, ""]}))
     again = app.Library(server.library.root, server.library.opts)
-    assert again.corrections("One.woodshed", "a1b2c3")["removed"] == ["3"]
-    assert again.corrections("One.woodshed", "old999")["removed"] == []
+    assert again.corrections("One.woodshed", "a1b2c3")["removed"] == {"3": [9, "m"]}
+    assert again.corrections("One.woodshed", "old999")["removed"] == {}
 
 
 def test_the_revision_keeps_growing_when_the_app_restarts(server: app.AppServer) -> None:
@@ -712,3 +715,10 @@ def test_a_damaged_band_entry_leaves_the_corrections(server: app.AppServer) -> N
     target.write_text(json.dumps(data))
     read = json.loads(request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")[2])
     assert read["band"] == {} and read["fixes"] == {"3": [9, "m"], "7": [7, ""]}
+
+
+def test_removals_are_bounded_like_corrections(server: app.AppServer) -> None:
+    many = {str(k): None for k in range(app.CORRECTIONS_MAX)}
+    assert post(server, "/api/corrections", fixes(fixes=many))[0] == 200
+    status, _ = post(server, "/api/corrections", fixes(fixes={"extra": None}))
+    assert status == 400  # the file of one song stays small

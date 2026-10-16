@@ -276,8 +276,8 @@ class Library:
             try:
                 out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
                 out["at"][key] = float(entry.get("at", 0))
-                gone = entry.get("removed", [])
-                out["removed"][key] = {g for g in gone if isinstance(g, str) and DOUBT_ID.fullmatch(g)}
+                gone = entry.get("removed", {})
+                out["removed"][key] = _checked_removed(gone)
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
         return out
@@ -288,7 +288,7 @@ class Library:
             raise ValueError("key: the analysis the corrections belong to")
         stored = self._stored(folder)
         rev = max(stored["rev"], self.revisions.get(folder, 0))
-        removed = sorted(stored["removed"].get(key, ()))
+        removed = stored["removed"].get(key, {})
         return {
             "key": key,
             "fixes": stored["by_key"].get(key, {}),
@@ -308,15 +308,18 @@ class Library:
             # Two devices correcting at once: both chords are kept; a later choice for a doubt wins.
             # A choice of null takes the doubt back to the analysis: it is remembered as removed, so a
             # device still holding the old fix drops it instead of sharing it again.
+            # Each removal keeps the fix it removed: a device drops its copy only when it is that one,
+            # so a newer correction made offline is not lost to an older removal.
             merged = dict(stored["by_key"].get(key, {}))
-            removed = set(stored["removed"].get(key, ()))
+            removed = dict(stored["removed"].get(key, {}))
             for doubt, fix in checked["fixes"].items():
-                if fix is None:
-                    merged.pop(doubt, None)
-                    removed.add(doubt)
+                if fix is None:  # said again (a device sharing it twice): the fix first removed is kept
+                    removed[doubt] = merged.pop(doubt, removed.get(doubt))
                 else:
                     merged[doubt] = fix
-                    removed.discard(doubt)
+                    removed.pop(doubt, None)
+            if len(removed) > CORRECTIONS_MAX:
+                raise ValueError("fixes: chords by doubt id")
             if len(merged) > CORRECTIONS_MAX:
                 raise ValueError("fixes: chords by doubt id")
             stored["by_key"][key] = merged
@@ -327,7 +330,7 @@ class Library:
                 stored["removed"].pop(old, None)
                 stored["at"].pop(old, None)
             rev = self._write(folder, stored)
-            return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"], "removed": sorted(removed)}
+            return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"], "removed": removed}
 
     def set_band(self, data: Any) -> dict[str, Any]:
         """The band's own choices for a song, from any device: the key it plays in, the leader's note."""
@@ -358,7 +361,7 @@ class Library:
                 k: {
                     "fixes": v,
                     "at": stored["at"][k],
-                    **({"removed": sorted(r)} if (r := stored["removed"].get(k)) else {}),
+                    **({"removed": r} if (r := stored["removed"].get(k)) else {}),
                 }
                 for k, v in stored["by_key"].items()
             },
@@ -640,6 +643,25 @@ def _checked_band(data: Any) -> dict[str, Any]:
         if not isinstance(note, str) or len(note) > NOTE_MAX:
             raise ValueError(f"note: text, {NOTE_MAX} characters at most")
         out["note"] = " ".join(note.split())  # one line in the set list
+    return out
+
+
+def _checked_removed(data: Any) -> dict[str, list[Any] | None]:
+    """Removals as kept in the file: the fix each doubt had when it went back to the analysis."""
+    out: dict[str, list[Any] | None] = {}
+    if isinstance(data, list):  # an early form: ids only
+        data = dict.fromkeys(data)
+    for doubt, fix in data.items() if isinstance(data, dict) else []:
+        if not isinstance(doubt, str) or not DOUBT_ID.fullmatch(doubt):
+            continue
+        valid = (
+            isinstance(fix, list)
+            and len(fix) == 2
+            and type(fix[0]) is int
+            and 0 <= fix[0] <= 11
+            and fix[1] in QUALITIES
+        )
+        out[doubt] = list(fix) if valid else None
     return out
 
 

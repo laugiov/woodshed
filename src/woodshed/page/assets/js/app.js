@@ -353,11 +353,12 @@
     // Doubts taken back to the analysis on this device, until the band's library has them: a
     // device that was offline shares them when it comes back, and the library's copy of the old fix
     // does not bring it back meanwhile.
-    let pendingRemovals = new Set();
+    // Each with the fix it took back, so the library's copy goes only if it is that same fix.
+    let pendingRemovals = new Map();
     function saveCorrections() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(fixes));
-        localStorage.setItem(storageKey + ":removed", JSON.stringify([...pendingRemovals]));
+        localStorage.setItem(storageKey + ":removed", JSON.stringify(Object.fromEntries(pendingRemovals)));
       } catch (err) {
         /* private mode or storage off: the correction still applies to this visit */
       }
@@ -383,10 +384,19 @@
       }
       fixes = validFixes(stored);
       try {
-        const removed = JSON.parse(localStorage.getItem(storageKey + ":removed") || "[]");
-        pendingRemovals = new Set(Array.isArray(removed) ? removed.filter((id) => typeof id === "string") : []);
+        const removed = JSON.parse(localStorage.getItem(storageKey + ":removed") || "{}");
+        // Only this analysis's doubts, each with a fix as this version writes them: a damaged entry
+        // would make the library refuse every share.
+        const ids = new Set(song.doubts().map((d) => String(d.chord.doubt.id)));
+        const was = validFixes(removed);
+        pendingRemovals = new Map(
+          Object.keys(removed && typeof removed === "object" && !Array.isArray(removed) ? removed : {})
+            .filter((id) => ids.has(id))
+            .slice(0, 2000)
+            .map((id) => [id, was[id] || null]),
+        );
       } catch (err) {
-        pendingRemovals = new Set();
+        pendingRemovals = new Map();
       }
       applyFixes();
     }
@@ -394,11 +404,11 @@
     // they belong to, the ones this device has, and taking the band's.
     app.fixesKey = storageKey.split(":").pop();
     app.fixes = () => ({ ...fixes });
-    app.pendingRemovals = () => new Set(pendingRemovals);
+    app.pendingRemovals = () => new Map(pendingRemovals);
     // The library has these removals: nothing left to share for them.
     app.removalsHeard = (ids) => {
       const before = pendingRemovals.size;
-      for (const id of ids) pendingRemovals.delete(id);
+      for (const id of ids) pendingRemovals.delete(String(id));
       if (pendingRemovals.size !== before) saveCorrections();
     };
     app.useFixes = (stored) => {
@@ -417,14 +427,16 @@
     // A correction taken back: the chord is the analysis's again, with its doubt to check by ear.
     app.uncorrect = function uncorrect(id) {
       const analysed = app.analysedChord(id);
+      pendingRemovals.set(String(id), fixes[id] || null); // doubt ids are keys: strings, as the library sends them
       delete fixes[id];
-      pendingRemovals.add(id);
       applyFixes();
       saveCorrections();
       popups.closeAll(true);
       store.set({ corrections: store.get().corrections + 1 });
       const shared = app.shareFixes ? app.shareFixes({ [id]: null }) : false;
       if (!app.shareFixes) app.removalsHeard([id]); // opened from disk: this browser was all there was
+      const back = document.querySelector('.doubt[data-ref]:not(.fixed)'); // the keyboard to a chord to check
+      if (back && document.activeElement === document.body) back.focus();
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
       app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get())) : "", where }));
     };

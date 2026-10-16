@@ -173,28 +173,37 @@
     let fixesRev = -1;
     async function loadFixes() {
       const r = await api("/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey));
-      if (!r.ok || typeof r.data.rev !== "number") return;
+      if (!r.ok || typeof r.data.rev !== "number" || r.data.rev < fixesRev) return; // an older answer
       fixesRev = Math.max(fixesRev, r.data.rev);
-      const removed = new Set(Array.isArray(r.data.removed) ? r.data.removed : []);
-      app.removalsHeard(removed);
+      const removed = r.data.removed && typeof r.data.removed === "object" && !Array.isArray(r.data.removed) ? r.data.removed : {};
+      app.removalsHeard(Object.keys(removed));
       const pending = app.pendingRemovals();
       const mine = app.fixes();
       const theirs = { ...(r.data.fixes || {}) };
-      // Taken back to the analysis by the band: this device's old copy goes; taken back here and
-      // not yet heard by the library: the library's copy goes, and the removal is shared again.
-      for (const id of removed) delete mine[id];
-      for (const id of pending) delete theirs[id];
+      const same = (a, b) => Array.isArray(a) && Array.isArray(b) && a[0] === b[0] && a[1] === b[1];
+      // Taken back to the analysis by the band: this device's copy goes if it is the fix removed (a
+      // newer one made here offline stays, and is shared). Taken back here and not yet heard by the
+      // library: the library's copy goes if it is the one this device removed, else the band's
+      // later choice wins over the removal.
+      for (const [id, was] of Object.entries(removed)) if (same(mine[id], was)) delete mine[id];
+      for (const [id, was] of pending) {
+        if (!(id in theirs) || same(theirs[id], was)) delete theirs[id];
+        else {
+          pending.delete(id);
+          app.removalsHeard([id]);
+        }
+      }
       const merged = { ...mine, ...theirs }; // the band's choice wins; this device's own are added
       app.useFixes(merged);
       app.useBand(r.data.band || {});
-      if (pending.size) share(Object.fromEntries([...pending].map((id) => [id, null])));
+      if (pending.size) share(Object.fromEntries([...pending.keys()].map((id) => [id, null])));
       if (Object.keys(mine).some((k) => !(k in theirs))) share(app.fixes()); // made before, on this device
     }
     function share(fixes) {
       api("/api/corrections", { page: folder, key: app.fixesKey, fixes }).then((r) => {
         if (!r.ok || typeof r.data.rev !== "number") app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
         else {
-          if (Array.isArray(r.data.removed)) app.removalsHeard(r.data.removed);
+          if (r.data.removed && typeof r.data.removed === "object") app.removalsHeard(Object.keys(r.data.removed));
           heardRev(r.data.rev);
         }
       });

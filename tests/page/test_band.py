@@ -481,3 +481,35 @@ def test_the_library_poll_leaves_the_set_list_as_it_is(browser: Browser, server:
     expect(page.get_by_test_id("network-switch")).to_have_attribute("aria-checked", "true")
     expect(page.get_by_test_id("set-place").first).to_have_attribute("data-kept", "yes")  # not drawn again
     server.set_door(False)
+
+
+def test_a_removal_made_offline_reaches_the_band_when_the_app_answers_again(
+    browser: Browser, pickup_server: app.AppServer
+) -> None:
+    problems: list[str] = []
+    server = pickup_server
+    url = server.url + "pickup.woodshed/index.html"
+    try:
+        guitar = device(browser, url, problems)
+        guitar.get_by_test_id("doubt").first.click()
+        guitar.get_by_test_id("pick").first.click()
+        key = guitar.evaluate("Woodshed.app.fixesKey")
+        until(guitar, "Object.keys(Woodshed.app.fixes()).length === 1")
+        assert len(server.library.corrections("pickup.woodshed", key)["fixes"]) == 1
+        guitar.route("**/api/corrections", lambda route: route.abort())  # the app does not answer
+        guitar.get_by_test_id("fixed").first.click()
+        guitar.get_by_test_id("doubt-reset").click()
+        expect(guitar.get_by_test_id("toast")).to_contain_text("Saved on this device only")
+        assert len(server.library.corrections("pickup.woodshed", key)["fixes"]) == 1  # not heard yet
+        guitar.unroute("**/api/corrections")
+        guitar.evaluate("document.dispatchEvent(new Event('visibilitychange'))")  # back on screen
+        deadline = time.monotonic() + 10
+        while server.library.corrections("pickup.woodshed", key)["fixes"]:
+            assert time.monotonic() < deadline, "the removal was not shared"
+            guitar.wait_for_timeout(100)
+        until(guitar, "Woodshed.app.pendingRemovals().size === 0")  # heard by the library: nothing left to share
+        assert guitar.get_by_test_id("fixed").count() == 0
+        removed = server.library.corrections("pickup.woodshed", key)["removed"]
+        assert all(fix is not None for fix in removed.values())  # the fix taken back, kept with its removal
+    finally:
+        (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
