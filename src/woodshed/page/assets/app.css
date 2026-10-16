@@ -285,7 +285,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 14px; z-index: 40; max-width: calc(100vw - 32px); }
 .stage { position: fixed; inset: 0; z-index: 50; background: var(--bg); color: var(--ink); display: grid; grid-template-rows: auto 1fr auto auto; padding: calc(18px + env(safe-area-inset-top, 0px)) 24px calc(18px + env(safe-area-inset-bottom, 0px)); }
 .stage-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 16px; font-variant-numeric: tabular-nums; }
-.stage-mid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.stage-mid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: center; min-height: 0; overflow: hidden; } /* it gives way: the controls stay on screen */
 .stage-now { font-family: var(--font-chord); font-weight: 700; font-size: clamp(120px, 26vw, 340px); line-height: 0.8; }
 .stage-now .acc { font-size: 0.66em; }
 .stage-shape { font-family: var(--font-chord); font-weight: 600; font-size: clamp(22px, 3vw, 34px); color: var(--accent); margin-top: 10px; }

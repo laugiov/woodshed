@@ -268,6 +268,11 @@
     function renderViewControl(s) {
       const el = $("viewCtl");
       const mode = app.sheetMode(s);
+      // Drawn again only when what it shows changes: a redraw under a click (the band's corrections
+      // arriving) would swallow it.
+      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, W.lang()].join("|");
+      if (el.dataset.shows === shows) return;
+      el.dataset.shows = shows;
       const sheetCtl = app.words
         ? h(
             "div",

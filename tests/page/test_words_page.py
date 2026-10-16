@@ -81,7 +81,7 @@ def test_words_pasted_in_the_page_are_placed_and_shown(page: Page, library: app.
     page.keyboard.press("s")  # the page's own keys are off while the dialog is open
     expect(page.get_by_test_id("stage")).to_be_hidden()
     page.keyboard.press("Escape")
-    page.get_by_test_id("words-open").click()
+    page.get_by_test_id("words-header").click()
     expect(page.get_by_test_id("words-text")).to_have_value(WORDS)  # closed by mistake: the paste is kept
     page.get_by_test_id("words-place").click()
     expect(page.get_by_test_id("words-percent")).to_have_text("50 %")  # half the voice heard
