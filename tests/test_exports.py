@@ -288,3 +288,10 @@ def test_bars_of_chords_after_the_words_are_written_four_a_row(pop: dict[str, An
     chord_rows = [r for r in rows if r.startswith("[") and not re.search(r"\][^\s\[|]", r)]
     assert chord_rows and all(r.count(" | ") <= 3 for r in chord_rows)  # four bars a row at most
     assert any(" | " in r for r in chord_rows)  # bar by bar
+
+
+def test_chordpro_in_the_key_the_band_plays(pop: dict[str, Any]) -> None:
+    text = exports.chordpro(pop, words_for(pop), transpose=3)
+    assert "{key: Eb}" in text  # C up three semitones
+    assert "[Eb]Morning" in text and "[C]" not in text.split("{end_of_verse}")[0].split("}", 5)[-1]
+    assert exports.chordpro(pop, words_for(pop), transpose=0) == exports.chordpro(pop, words_for(pop))

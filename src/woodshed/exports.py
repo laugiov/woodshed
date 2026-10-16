@@ -248,8 +248,29 @@ def _sung(
     return out
 
 
-def chordpro(song: Song, words: dict[str, Any] | None = None) -> str:
-    """The song in ChordPro; with the words placed on it (lyrics.json), each chord on its word."""
+def transposed(song: Song, semitones: int) -> Song:
+    """The song as played `semitones` higher (lower if negative): every chord, its doubt's
+    candidates and the key move; the timing stays."""
+    if semitones % 12 == 0:
+        return song
+
+    def up(c: dict[str, Any]) -> dict[str, Any]:
+        return {**c, "pc": c["pc"] if c["pc"] < 0 else (c["pc"] + semitones) % 12}
+
+    def chord(c: dict[str, Any]) -> dict[str, Any]:
+        doubt = c.get("doubt")
+        if doubt and doubt.get("alternatives"):
+            doubt = {**doubt, "alternatives": [up(a) for a in doubt["alternatives"]]}
+        return {**up(c), **({"doubt": doubt} if "doubt" in c else {})}
+
+    bars = [{**b, "chords": [chord(c) for c in b["chords"]]} for b in song["bars"]]
+    return {**song, "bars": bars, "key": {**song["key"], "pc": (song["key"]["pc"] + semitones) % 12}}
+
+
+def chordpro(song: Song, words: dict[str, Any] | None = None, transpose: int = 0) -> str:
+    """The song in ChordPro; with the words placed on it (lyrics.json), each chord on its word. With
+    `transpose`, in the key the band plays (the page exports in the key it shows)."""
+    song = transposed(song, transpose)
     key = _key(song)
     per = song["beats_per_bar"]
     key_name = theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")

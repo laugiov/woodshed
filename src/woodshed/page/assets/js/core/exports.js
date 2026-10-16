@@ -27,9 +27,10 @@
   const lyricText = (text) => text.replace(CONTROL, "").replace(/\{/g, "(").replace(/\}/g, ")");
   const lyricRow = (row) => (row.startsWith("#") ? " " + row : row);
 
-  function chordpro(song, words) {
+  // `transpose`: in the key the page shows (exports.chordpro(song, words, transpose) in Python).
+  function chordpro(song, words, transpose = 0) {
     const d = data(song);
-    const name = (c) => (c.pc < 0 ? "N.C." : song.chordName(c, 0));
+    const name = (c) => (c.pc < 0 ? "N.C." : song.chordName(c, transpose));
     const cells = (u) => {
       const out = [];
       for (const c of d.bars[u].chords) {
@@ -49,7 +50,7 @@
     ];
     const lines = [
       "{title: " + directiveText(d.title) + "}",
-      "{key: " + song.keyName(0) + "}",
+      "{key: " + song.keyName(transpose) + "}",
       "{tempo: " + Math.round(d.bpm) + "}",
       "{time: " + d.beats_per_bar + "/4}",
       "{comment: chords found by woodshed from " + directiveText(d.file) + "}",

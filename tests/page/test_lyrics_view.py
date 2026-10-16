@@ -231,6 +231,19 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
         assert "{comment: check by ear: " in text and "(" in text.split("check by ear: ")[1].split("}")[0]
 
 
+def test_the_chordpro_is_in_the_key_the_page_shows_like_python(open_page: Any) -> None:
+    from tests.page.test_page import download
+    from woodshed import exports
+
+    o = open_page("pop", variant="lyrics")
+    o.js("Woodshed.app.transposeTo(-2)")  # the band's key, or a key tried by the singer
+    data = o.js("Woodshed.current.song")
+    words = json.loads((o.folder / "lyrics.json").read_text())
+    text = download(o, "export-chordpro")
+    assert "{key: Bb}" in text
+    assert text == exports.chordpro(data, words, transpose=-2)
+
+
 def test_the_chordpro_carries_a_correction_on_its_word(open_page: Any) -> None:
     from tests.page.test_page import download
 

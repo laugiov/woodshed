@@ -811,7 +811,7 @@
       W.clear(
         $("exportItems"),
         item("ChordPro", W.t("With your corrections, and the words when they are placed. Opens in OnSong, SongbookPro and other songbook apps"), {
-          "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words), "text/plain"),
+          "data-testid": "export-chordpro", onclick: () => W.exports.save(stem + ".cho", W.exports.chordpro(song, app.words, store.get().transpose), "text/plain"),
         }),
         item(W.t("Chord timeline (.lab)"), W.t("With your corrections. Start, end and chord, for analysis tools"), {
           "data-testid": "export-lab", onclick: () => W.exports.save(stem + ".lab", W.exports.lab(song), "text/plain"),
