@@ -84,6 +84,15 @@
   W.views.desk = function desk(app) {
     const { song, store } = app;
     const parts = song.parts;
+    // The shape the guitar panel draws for a chord, in the voicing and capo chosen: stage mode shows it too.
+    app.shapeFor = (c, s) => {
+      if (c.pc < 0) return null;
+      const t = s.transpose;
+      if (s.pos === "barre") return I.barreShape(c.pc + t, c.quality);
+      if (s.pos === "funk") return I.funkVoicings(song.distinctChords().map((d) => ({ pc: d.pc + t, quality: d.quality })))[c.pc + t + c.quality] || null;
+      return I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality);
+    };
+    app.guitarDiagram = guitarDiagram;
     const curBar = (s) => Math.floor(s.beat / song.per);
     const note = (text) => h("p", { class: "desk-note" }, text);
 

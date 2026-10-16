@@ -236,6 +236,7 @@
     "Your correction, bar {n}: change it": "Ta correction, mesure {n} : clique pour la changer",
     "You confirmed {chord}, the analysis's chord.": "Tu as confirmé {chord}, l'accord de l'analyse.",
     "Go to {part}": "Aller à {part}",
+    "different chords from {part}: check by ear": "d'autres accords que {part} : à vérifier à l'oreille",
     "1 bar": "1 mesure",
     "{n} bars": "{n} mesures",
     "Loop {part}": "Boucler {part}",

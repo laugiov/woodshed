@@ -880,3 +880,38 @@ def test_following_comes_back_when_the_bar_playing_is_where_the_page_would_put_i
     expect(back).to_be_visible(timeout=4000)
     o.page.mouse.wheel(0, 90)  # back where the page keeps the bar playing
     expect(back).to_be_hidden(timeout=4000)  # following again, by itself
+
+
+@pytest.mark.parametrize("inst", ["guitar", "voice"])
+def test_on_a_phone_the_chart_starts_on_the_first_screen(open_page: Any, inst: str) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.set_viewport_size({"width": 390, "height": 844})
+    o.page.get_by_test_id("inst-" + inst).click()
+    assert o.js("document.getElementById('sheet').getBoundingClientRect().top") < 844 - 120  # above the dock
+    hidden = o.js("getComputedStyle(document.querySelector('.now')).display === 'none'")
+    assert hidden is (inst == "voice")  # the singer reads the words, not a big chord
+    assert o.js("document.documentElement.scrollWidth <= innerWidth + 1")
+    if inst == "voice":
+        o.page.get_by_test_id("sheet-grid").click()  # no words on screen: the chord card is back
+        expect(o.page.locator(".now")).to_be_visible()
+
+
+def test_stage_mode_shows_the_guitar_shapes_of_the_chord_now_and_next(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("inst-guitar").click()
+    o.js("Woodshed.app.seekBar(1)")
+    o.page.get_by_test_id("stage-open").click()
+    shapes = o.page.get_by_test_id("stage-shapes")
+    expect(shapes.locator("svg")).to_have_count(2)
+    before = shapes.inner_html()
+    o.js("Woodshed.app.store.set({pos: 'barre'})")  # another voicing, chosen with the stand open
+    assert shapes.inner_html() != before
+    o.page.get_by_test_id("stage-exit").click()
+    o.page.set_viewport_size({"width": 844, "height": 390})  # a phone held sideways: no room for them
+    o.js("Woodshed.app.setStage(true, false)")  # headless full screen would take the whole desktop
+    expect(shapes).to_have_count(1)
+    expect(shapes).to_be_hidden()
+    o.page.get_by_test_id("stage-exit").click()
+    o.page.get_by_test_id("inst-bass").click()
+    o.page.get_by_test_id("stage-open").click()
+    expect(o.page.get_by_test_id("stage-shapes")).to_have_count(0)  # guitar shapes for the guitar only

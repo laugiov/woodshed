@@ -169,6 +169,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .pop .alt.in-use .an { color: var(--accent); }
 .shape-card .barre-tag { color: var(--warn); font-weight: 700; }
 .back-to-song { position: fixed; right: 18px; bottom: calc(var(--dock-h, 96px) + 68px); z-index: 16; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
+.sec-other { font-size: 12.5px; color: var(--warn); font-weight: 600; }
 .fixed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; margin-left: 3px; vertical-align: super; }
 .variation { margin-left: 64px; font-size: 13.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .variation .ch { font-size: 19px; display: inline; }
@@ -289,6 +290,10 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .stage-now { font-family: var(--font-chord); font-weight: 700; font-size: clamp(120px, 26vw, 340px); line-height: 0.8; }
 .stage-now .acc { font-size: 0.66em; }
 .stage-shape { font-family: var(--font-chord); font-weight: 600; font-size: clamp(22px, 3vw, 34px); color: var(--accent); margin-top: 10px; }
+/* On the stand, the guitar's shape for the chord now and the next one: no panel needed beside the words. */
+.st-shapes { display: flex; gap: 14px; align-items: flex-end; justify-content: center; margin-top: 8px; color: var(--ink); }
+.st-shapes svg { width: clamp(70px, 9vw, 120px); height: auto; }
+.st-shapes .next svg { width: clamp(52px, 6vw, 84px); opacity: 0.6; }
 .stage-next { display: grid; gap: 18px; }
 .stage-next div { font-family: var(--font-chord); font-weight: 600; line-height: 0.9; }
 .stage-next .n1 { font-size: clamp(56px, 10vw, 130px); }
@@ -480,7 +485,7 @@ body.following #playBtn { opacity: 0.45; }
 .st-next-part { font-family: var(--font-chord); font-weight: 700; font-size: clamp(18px, min(2.4vw, 4vh), 30px); color: var(--warn); margin-top: 10px; }
 @media (max-width: 700px) {
   #stage.st-lyrics .stage-mid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "now" "words"; gap: 8px; }
-  #stage.st-lyrics .stage-next { display: none; }
+  #stage.st-lyrics .stage-next, #stage.st-lyrics .st-shapes .next { display: none; }
   #stage.st-lyrics .stage-now { font-size: clamp(56px, 18vw, 96px); }
   .stage-lyrics { padding-right: 0; }
   .lline { grid-template-columns: 40px minmax(0, 1fr); gap: 6px; }
@@ -521,7 +526,7 @@ body.following #playBtn { opacity: 0.45; }
 .form-chip:hover { border-color: var(--accent); }
 .form-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 .form-chip.r-chorus:not(.on) { border-color: var(--accent); }
-.sec-head { display: flex; align-items: baseline; gap: 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
 .sec-head:first-child { margin-top: 0; padding-top: 0; }
 .sec-name { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--font-chord); font-weight: 700; font-size: 26px; line-height: 1.1; color: var(--ink); text-align: left; }
 .sec-head[data-role="chorus"] .sec-name { color: var(--accent); }
@@ -537,6 +542,7 @@ body.following #playBtn { opacity: 0.45; }
 /* A phone held sideways: little height, so smaller type and targets, still 44 px. */
 @media (max-height: 500px) {
   .stage { padding-top: 8px; padding-bottom: 8px; }
+  .st-shapes { display: none; }
   .stage-top .st-section { font-size: 26px; }
   .stage-now { font-size: min(18vw, 30vh); }
   .stage-next .n1 { font-size: 16vh; }
@@ -548,4 +554,17 @@ body.following #playBtn { opacity: 0.45; }
   .st-btn.st-play { min-width: 96px; font-size: 22px; }
   .st-next-song { margin-top: 4px; font-size: 14px; }
   .st-next-song .st-next-btn { font-size: 14px; padding: 6px 12px; }
+}
+
+/* A phone: the chart on the first screen (last in this file: it overrides the rules above). A compact header and "now" card; the singer reads the words,
+   not a big chord. */
+@media (max-width: 640px) {
+  .plays > .label { display: none; }
+  .plays .seg-ctl button { padding: 6px 9px; font-size: 13px; }
+  body[data-inst] .head-actions { gap: 6px; }
+  body[data-inst] .head-actions .btn { padding: 6px 10px; font-size: 13px; }
+  .now { grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; margin-bottom: 8px; }
+  .big { font-size: 58px; }
+  .now-side { gap: 4px; padding-bottom: 2px; }
+  body[data-inst="voice"][data-sheet="lyrics"] .now { display: none; }
 }

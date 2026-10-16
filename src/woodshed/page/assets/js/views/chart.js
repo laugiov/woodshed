@@ -58,15 +58,32 @@
       return out;
     }
 
+    // A verse or a chorus played with different chords from the first one of its kind: said, not hidden
+    // (the band may really play it so, or the chart may be wrong there: an ear decides).
+    const COMPARED = ["verse", "prechorus", "chorus"];
+    function playedOtherwise(sec, k) {
+      if (!COMPARED.includes(sec.role)) return null;
+      const list = app.sections();
+      const firstOne = list.find((x, j) => j < k && x.role === sec.role);
+      if (!firstOne) return null;
+      const chords = (u) => (song.bars[u] ? song.bars[u].chords : []).map((c) => c.pc + c.quality).join(" ");
+      const n = Math.min(sec.end - sec.start, firstOne.end - firstOne.start);
+      let differ = 0;
+      for (let i = 0; i < n; i++) if (chords(sec.start + i) !== chords(firstOne.start + i)) differ++;
+      return n && differ / n > 0.25 ? firstOne : null;
+    }
+
     function sectionHead(sec, k) {
       const first = bar(sec.start);
       const n = sec.end - sec.start;
       const part = W.partName(sec.name);
+      const other = playedOtherwise(sec, k);
       return h(
         "div",
         { class: "sec-head", "data-testid": "section", "data-section": k, "data-role": sec.role },
         h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: W.t("Go to {part}", { part }) }, part),
         h("span", { class: "sec-meta" }, fmt(first.start) + " · " + (n === 1 ? W.t("1 bar") : W.t("{n} bars", { n }))),
+        other ? h("span", { class: "sec-other", "data-testid": "played-otherwise" }, W.t("different chords from {part}: check by ear", { part: W.partName(other.name) })) : null,
         h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: W.t("Loop {part}", { part }) }, W.t("⟲ Loop")),
       );
     }

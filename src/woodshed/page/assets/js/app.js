@@ -566,6 +566,15 @@
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
     app.chart = chart; // its bars, for the tests and the console
+    // The instrument on the page itself: a phone's layout follows it (the singer: words first).
+    const mark = (s) => {
+      document.body.dataset.inst = s.inst;
+      document.body.dataset.sheet = app.sheetMode(s);
+    };
+    mark(store.get());
+    store.on((s, changed) => {
+      if (changed.has("inst") || changed.has("sheet")) mark(s);
+    });
     const dock = views[3];
     for (const v of views) v.render(store.get());
     // The other language, chosen while playing: every view says it again, the music goes on.

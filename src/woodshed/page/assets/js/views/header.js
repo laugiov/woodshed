@@ -124,7 +124,13 @@
       const up = song.upcoming(s.beat, 2);
       const shift = app.showShapes(s) ? s.capo : 0;
       clear($("stNow"), chordNode(app.nameFor(c, shift, s)));
-      clear($("stShape"), app.nowHint(c, s));
+      const shapes = s.inst === "guitar" && app.shapeFor
+        ? [[c, ""], [up[0], "next"]].filter(([x]) => x && x.pc >= 0).map(([x, cls]) => {
+            const shape = app.shapeFor(x, s);
+            return shape ? h("span", { class: cls, "aria-hidden": "true" }, app.guitarDiagram(shape)) : null;
+          })
+        : [];
+      clear($("stShape"), app.nowHint(c, s), shapes.length ? h("div", { class: "st-shapes", "data-testid": "stage-shapes" }, shapes) : null);
       clear($("stNext"), up[0] ? chordNode(app.nameFor(up[0], shift, s)) : W.t("end"));
       clear($("stThen"), up[1] ? chordNode(app.nameFor(up[1], shift, s)) : "");
       // Where the band is: the section, the bar in it, and the next section two bars ahead.
@@ -176,7 +182,7 @@
       clear(box, out);
     }
     store.on((s, changed) => {
-      const keys = ["beat", "transpose", "capo", "bpm", "inst", "sheet", "view", "corrections"];
+      const keys = ["beat", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections"];
       if (changed.has("stage") || (s.stage && keys.some((key) => changed.has(key)))) render(s);
     });
     return { render };

@@ -293,3 +293,18 @@ def test_a_jump_to_the_next_part_does_not_light_the_line_before_it(open_page: An
     jumped = o.js(f"Woodshed.app.lineNow({{time: {chorus} + 0.1, beat: {4 * per}}}).now")
     assert ended == 0  # the verse's last line still held, in the verse
     assert jumped == -1  # the chorus has started: the verse's line is over, nothing lit yet
+
+
+def test_a_chorus_played_with_other_chords_than_the_first_says_so(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    data = json.loads((o.folder / "lyrics.json").read_text(encoding="utf-8"))
+    data["sections"] = [
+        {"name": "Chorus 1", "role": "chorus", "letter": "A", "start": 0, "end": 4},
+        {"name": "Chorus 2", "role": "chorus", "letter": "A", "start": 4, "end": 8},
+    ]
+    o.js(f"Woodshed.app.words = Woodshed.lyrics(Woodshed.current, {json.dumps(data)})")
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")  # drawn again
+    expect(o.page.get_by_test_id("played-otherwise")).to_have_count(0)  # pop plays its loop twice
+    o.js("Woodshed.current.bars.slice(5, 7).forEach(b => b.chords.forEach(c => { c.pc = (c.pc + 2) % 12; }))")
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
+    expect(o.page.get_by_test_id("played-otherwise")).to_have_text("different chords from Chorus 1: check by ear")
