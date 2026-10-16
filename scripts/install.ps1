@@ -9,29 +9,42 @@
 # Double-click instead: scripts/installers/Install woodshed.cmd runs this script.
 #
 # Options, as environment variables:
-#   WOODSHED_SOURCE     what to install (default: the latest version on GitHub)
+#   WOODSHED_SOURCE     what to install (default: the version WOODSHED_REF names, on GitHub)
+#   WOODSHED_REF        a branch or a version tag on GitHub (default: main)
 #   WOODSHED_NO_FFMPEG  set to 1 to leave ffmpeg alone
 #   WOODSHED_NO_MENU    set to 1 to skip the Start menu shortcut
 # Uninstall: uv tool uninstall woodshed
 
 $ErrorActionPreference = "Stop"
 
-# A plain archive of the latest version: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
-$Source = if ($env:WOODSHED_SOURCE) { $env:WOODSHED_SOURCE } else { "https://github.com/laugiov/woodshed/archive/refs/heads/main.zip" }
+$Ref = if ($env:WOODSHED_REF) { $env:WOODSHED_REF } else { "main" }
+# A plain archive: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
+$Source = if ($env:WOODSHED_SOURCE) { $env:WOODSHED_SOURCE } else { "https://github.com/laugiov/woodshed/archive/$Ref.zip" }
+# Windows on ARM: the x64 Python (Windows 11 emulates it), since not every part has an ARM build.
+$Arm = $env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64"
+$Python = if ($Arm) { "cpython-3.13-windows-x86_64-none" } else { "3.13" }
 
+# Programs print their progress on stderr, which Windows PowerShell takes for errors when the output
+# is redirected (as in CI): those must not stop the script, the exit code says.
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "Installing uv (https://docs.astral.sh/uv/) for your user..."
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    & {
+        $ErrorActionPreference = "Continue"
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    }
     if ($LASTEXITCODE -ne 0) { throw "uv could not be installed: see https://docs.astral.sh/uv/" }
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 
+# Replacing woodshed while it runs would fail (Windows keeps running programs' files locked).
+if (Get-Process woodshed -ErrorAction SilentlyContinue) {
+    throw "woodshed is running: close woodshed first (its window), then run the installer again."
+}
+
 Write-Host "Installing woodshed (about 1.5 GB with PyTorch: a few minutes)..."
-# uv prints its progress on stderr, which Windows PowerShell takes for errors when the output is
-# redirected (as in CI): those must not stop the script, the exit code says.
 & {
     $ErrorActionPreference = "Continue"
-    uv tool install --force --refresh-package woodshed --python 3.13 "woodshed[stems] @ $Source"
+    uv tool install --force --refresh-package woodshed --python $Python "woodshed[stems] @ $Source"
 }
 if ($LASTEXITCODE -ne 0) { throw "woodshed could not be installed (see the messages above)" }
 & { $ErrorActionPreference = "Continue"; uv tool update-shell *> $null }

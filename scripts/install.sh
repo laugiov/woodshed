@@ -9,8 +9,11 @@
 # On Linux it adds a menu entry, on macOS an app (~/Applications/woodshed.app). ffmpeg is only
 # needed for AAC (M4A) and video files: the script says how to add it, it does not install it.
 #
+# Intel Macs are not supported (one part has no ready-made build there): Docker works on them.
+#
 # Options, as environment variables:
-#   WOODSHED_SOURCE   what to install (default: the latest version on GitHub)
+#   WOODSHED_SOURCE   what to install (default: the version WOODSHED_REF names, on GitHub)
+#   WOODSHED_REF      a branch or a version tag on GitHub (default: main)
 #   WOODSHED_NO_MENU  set to 1 to skip the menu entry (Linux) or the app (macOS)
 # Uninstall: uv tool uninstall woodshed (and remove the menu entry or the app)
 
@@ -51,29 +54,43 @@ EOF
 #!/bin/sh
 exec open -a Terminal "$(dirname "$0")/../Resources/woodshed.command"
 EOF
+    # The command's path in single quotes, whatever the folder names hold.
+    exe="'$(printf '%s' "$1/woodshed" | sed "s/'/'\\\\''/g")'"
     cat > "$app/Contents/Resources/woodshed.command" <<EOF
 #!/bin/sh
 echo "woodshed opens your library in the browser."
 echo "Keep this window open while you play; close it to stop woodshed."
 echo ""
-"$1/woodshed" app || echo "woodshed stopped: the message above says why."
+$exe app || echo "woodshed stopped: the message above says why."
 EOF
     chmod 755 "$app/Contents/MacOS/woodshed" "$app/Contents/Resources/woodshed.command"
 }
 
-# On macOS a plain archive of the latest version: git is not needed (on a new Mac it asks for
-# Apple's developer tools first), and PyPI's PyTorch is the CPU build there. On Linux git, so that
-# the project's CPU index for PyTorch applies (an archive would bring the 5 GB GPU build).
+REF="${WOODSHED_REF:-main}"
+PYTHON=3.13
+if [ "$(uname -s)" = "Darwin" ]; then
+    # Intel Macs: sphn (a part of Demucs) has no ready-made build there. Asked of the hardware, since
+    # a Terminal running under Rosetta says x86_64 on Apple silicon too.
+    if [ "$(sysctl -in hw.optional.arm64 2>/dev/null)" != "1" ]; then
+        say "This Mac has an Intel processor: the installer needs a Mac with Apple silicon (M1 or newer),"
+        say "because one part of woodshed has no ready-made build for Intel Macs."
+        say "On this Mac, use woodshed with Docker instead:"
+        say "  https://github.com/laugiov/woodshed#with-docker-windows-macos-or-linux"
+        exit 1
+    fi
+    PYTHON=cpython-3.13-macos-aarch64-none  # the Apple silicon build, even from a Rosetta Terminal
+fi
+
+# On macOS a plain archive: git is not needed (on a new Mac it asks for Apple's developer tools
+# first), and PyPI's PyTorch is the CPU build there. On Linux git, so that the project's CPU index
+# for PyTorch applies (an archive would bring the 5 GB GPU build).
 if [ -n "${WOODSHED_SOURCE:-}" ]; then
     SOURCE="$WOODSHED_SOURCE"
 elif [ "$(uname -s)" = "Darwin" ]; then
-    SOURCE="https://github.com/laugiov/woodshed/archive/refs/heads/main.tar.gz"
+    SOURCE="https://github.com/laugiov/woodshed/archive/$REF.tar.gz"
 else
-    SOURCE="git+https://github.com/laugiov/woodshed"
+    SOURCE="git+https://github.com/laugiov/woodshed@$REF"
 fi
-# Demucs pins an old PyTorch on Intel Macs, with no build for Python 3.13.
-PYTHON=3.13
-if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then PYTHON=3.12; fi
 
 if ! command -v uv >/dev/null 2>&1; then
     say "Installing uv (https://docs.astral.sh/uv/) in your home folder..."
@@ -92,6 +109,13 @@ if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "aarch64" ] && ! command -v 
     say "On ARM Linux one part of woodshed is compiled: install a C compiler and Rust first, then run this again:"
     say "  sudo apt install build-essential     (or your system's equivalent)"
     say "  curl --proto '=https' -sSf https://sh.rustup.rs | sh"
+    exit 1
+fi
+
+# Replacing woodshed while it runs would break the running one.
+BIN="$(uv tool dir --bin 2>/dev/null || true)"
+if [ -n "$BIN" ] && command -v pgrep >/dev/null 2>&1 && pgrep -f "$BIN/woodshed app" >/dev/null 2>&1; then
+    say "woodshed is running: close woodshed first (its window), then run the installer again."
     exit 1
 fi
 
