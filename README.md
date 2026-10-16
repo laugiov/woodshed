@@ -107,9 +107,14 @@ library every device of the band sees them.
 - **Stage mode**: the chord now and next in huge type, the words, where you are in the section.
   Readable from the drum stool, with big buttons for a tablet: previous part, play, next part.
 - **Lead and follow**: one device leads, every phone on the network follows to the bar. Start,
-  stop, loop and seek once, for the whole band.
-- **Set list**: line up the evening's songs. At the end of a song, the pedal (or `N`) takes the
-  whole band to the next one.
+  stop, loop and seek once, for the whole band. In the library, **Let the band's phones join**
+  shows the address to open and a code to scan with the phone's camera.
+- **Set list**: line up the evening's songs, with each one's key, tempo and length, the set's total
+  time and a note per song ("capo 2, starts on the chorus"), and print it. At the end of a song,
+  the pedal (or `N`) takes the whole band to the next one.
+- **The singer's key**: pick the key that suits the voice, then **Keep it for the band**: every
+  device opens the song in that key. The recording keeps its own key (woodshed never pitch-shifts
+  the audio), and the page says so while you play in another one.
 
 <p align="center">
   <img src="docs/images/phones.png" alt="The page on a phone, and stage mode on a phone" width="100%">
@@ -171,8 +176,8 @@ does not pay Apple or Microsoft to sign it:
 **Next time**, start woodshed like any other app: **woodshed** in Applications, Launchpad or
 Spotlight on a Mac, in the Start menu on Windows. A small window opens next to your browser: keep
 it open while you play, close it to stop woodshed (on a Mac, Terminal asks whether to terminate
-the running processes: click **Terminate**). Your songs are in the `woodshed` folder of your
-home folder.
+the running processes: click **Terminate**). Started again while it runs, it just shows the
+library. Your songs are in the `woodshed` folder of your home folder.
 
 MP3, WAV, FLAC and Ogg files work as they are. AAC (M4A) and video files need
 [ffmpeg](https://ffmpeg.org/download.html): the Windows installer adds it when it can, and on a Mac
@@ -284,12 +289,13 @@ woodshed lyrics "Song.woodshed" words.txt   # put the words on a page
 woodshed chart song.mp3                     # the chord chart, as text, in the terminal
 ```
 
-**The whole band, on the local network.** Start the library so the other devices can reach it,
-then open it on every phone:
-
-```bash
-woodshed app --host 0.0.0.0 --allow-network
-```
+**The whole band, on the local network.** In the library, press **Let the band's phones join**.
+It shows this computer's address and a code to scan: on each phone, on the same Wi-Fi, scan it with
+the camera (or type the address), open the song and press **Follow**. The first time, your computer
+may ask whether woodshed (or Python) may accept incoming connections: allow it on private networks
+(on Windows, the "Windows Security" box: tick **Private networks** and click **Allow access**). The phones
+can play, lead and follow, not add songs, and the button lets them out again. From a terminal,
+`woodshed app --host 0.0.0.0 --allow-network` starts the library already open to the network.
 
 With Docker, publish the port to the network instead: in `compose.yaml`, `"8000:8000"` in place of
 `"127.0.0.1:8000:8000"`.
@@ -340,9 +346,9 @@ by module: **[Under the hood](docs/architecture.md)**.
 ## Privacy
 
 Everything runs on your computer: the analysis, the models, the library server (which listens on
-this computer only unless you say otherwise). Your recordings, your corrections and your lyrics
-never leave it. Your corrections stay in your browser and, when the band shares them, in your own
-library.
+this computer only until you let the band's phones in). Your recordings, your corrections and your
+lyrics never leave it. The band's corrections, keys and notes are kept by your own library, in its
+folder; a page opened from disk keeps its corrections in that browser.
 
 ## Models and licences
 
@@ -353,6 +359,11 @@ woodshed is MIT. The models it downloads come with their own licences:
 | Demucs (htdemucs) | Instrument tracks | MIT |
 | beat_this | Beats and downbeats | MIT |
 | MMS forced aligner (weights, 1.2 GB) | Placing lyrics (optional) | **CC BY-NC 4.0**: non-commercial use |
+
+The words feature is the only one that needs the MMS weights, and their licence allows
+non-commercial use only. Whether a band paid for its gigs is non-commercial is for you to judge
+from [the licence](https://creativecommons.org/licenses/by-nc/4.0/); this is not legal advice.
+Everything else in woodshed works without the words.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,
 and Atkinson Hyperlegible, Barlow Condensed, JetBrains Mono, Noto Music and Bravura fonts (SIL OFL).

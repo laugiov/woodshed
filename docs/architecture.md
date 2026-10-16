@@ -359,7 +359,7 @@ Song Name.woodshed/
 - `img-src 'self' data:`, `media-src 'self'`, `font-src 'self'`.
 - `style-src 'self' 'unsafe-inline'`.
 
-There is no CDN and no font host. Fonts, samples and VexFlow are vendored under `page/assets/`, pinned by hash in `scripts/vendored.sha256`. `tests/test_page_sources.py` forbids `innerHTML`, `eval` and `document.write` in the page code. Song data reaches the DOM only as text.
+There is no CDN and no font host. Fonts, samples and VexFlow are vendored under `page/assets/`, pinned by hash in `scripts/vendored.sha256`. The QR code generator (qrcode-generator 1.4.4, MIT) is vendored under `page/library-vendor/` instead: only the library's home page uses it, so the song pages (copied into every song folder) do not carry it. `tests/test_page_sources.py` forbids `innerHTML`, `eval` and `document.write` in the page code. Song data reaches the DOM only as text.
 
 ### Scripts and the store
 
@@ -458,13 +458,15 @@ flowchart LR
 - Words pasted on a song page are a job of the same queue (`kind: "words"`, status `placing`): one heavy job at a time, and never two jobs on one song at once. They are allowed from the computer that runs the app, like uploads, and are 32 KB at most. A words job is not resumed after a stop: paste them again.
 - If the app stops during a job, that job is not marked failed. It is resumed at next start (`resume`).
 - Uploads are limited to 2 GB and need free disk space for the tracks.
-- The **set list** is `setlist.json` in the library: the order the band plays songs in.
+- The **set list** is `setlist.json` in the library: the order the band plays songs in. The home page shows each song's key (the band's key when there is one), tempo and length, the total, and the leader's note; `@media print` prints the set alone.
+- Started again on a port where woodshed already answers (`running_here`, a GET of `/api/token`), `serve` opens the browser on the running one and returns. The check comes before the `Library` is opened, because opening it clears the uploads cut short, which would be the running app's own.
 
 ### Security model
 
 The module docstring states the idea: the server answers any page the browser opens, so it trusts nothing it did not give out itself.
 
 - Binds `127.0.0.1` by default. Another `--host` needs `--allow-network`.
+- **The door** (`AppServer.set_door`, `Door`): the home page's **Let the band's phones join** switch adds a second listener on this computer's network address (from `lan_addresses`), same port, sharing the library, the token and the band. Only a request from loopback may open or close it (`POST /api/network`). The firewall question comes when it opens, not at every start. Closing it shuts the listener, and every request still arriving on a kept-alive connection through it, and every live stream through it, is ended (`accepting` is checked per request and in the stream loop). Started with `--host 0.0.0.0` (or in Docker) there is nothing to switch.
 - **Host check** (`_host_ok`): a request whose `Host` header is not one of this computer's names is refused. That stops DNS rebinding, where a hostile site's name suddenly points at your machine.
 - **Token**: a random token per run. Every POST needs it in the `X-Woodshed-Token` header. A cross-site form or fetch cannot send a custom header, and preflight requests (OPTIONS) are refused.
 - The live stream passes the token in the query string (browsers' `EventSource` sends no headers), and also checks `Sec-Fetch-Site`.
@@ -488,6 +490,7 @@ Chord picks are also stored on the server so a phone and a laptop see the same c
 - Keyed by an analysis key, so a re-analysis does not inherit picks for doubts that no longer exist. The last 8 analyses are kept.
 - Two devices writing at once: both sets of picks are merged, and the later choice for the same doubt wins.
 - A revision number grows with each change. Followers hear it through the live stream and read the chart again.
+- The same file keeps the **band's choices** for the song (`POST /api/band`, `Library.set_band`): the key the band plays it in (`transpose` in semitones, -6 to 6, and the key's name, written by the page that chose it) and the leader's note (300 characters). They share the revision and the push: a device with the song open moves to the band's key, and one opening it later starts there. The page never pitch-shifts the audio: while the chords are in another key, it says the recording's.
 
 ### Docker
 
