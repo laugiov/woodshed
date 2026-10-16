@@ -1,4 +1,4 @@
-"""Audio decoding. ffmpeg handles every format; libsndfile is the fallback for WAV and FLAC."""
+"""Audio decoding. ffmpeg handles every format; without it, libsndfile reads MP3, WAV, FLAC and Ogg."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def load(path: str | Path, sr: int = SR, channels: int = 1) -> npt.NDArray[np.fl
 
     This is the only decoder of user files (stem separation goes through it too), so its limits
     apply everywhere: media containers only, local files only, a time limit and a length limit.
-    ffmpeg when installed, else soundfile and librosa for WAV, FLAC and Ogg: the two paths resample
+    ffmpeg when installed, else soundfile and librosa for MP3, WAV, FLAC and Ogg: the two paths resample
     differently, so their samples can differ slightly.
     """
     src = Path(path).expanduser().resolve()

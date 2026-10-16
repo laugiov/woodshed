@@ -14,7 +14,8 @@ as the demo song in [`demo/`](demo/LICENSE.md).
 
 ## Setting up
 
-You need [uv](https://docs.astral.sh/uv/), and ffmpeg for most audio formats.
+You need [uv](https://docs.astral.sh/uv/). ffmpeg is only needed for AAC (M4A) and video files: MP3,
+WAV, FLAC and Ogg are read without it.
 
 ```bash
 git clone https://github.com/laugiov/woodshed && cd woodshed

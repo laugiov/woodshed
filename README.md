@@ -81,7 +81,8 @@ Every page walks you through the same four steps: **listen** with the full band,
 part alone, **loop it slow** (from 70 % tempo, 5 BPM faster on each pass) and **play along** with
 your own part muted. A count-in, a click and per-instrument tracks are one button away. Drag across
 bars to loop them, use a pedal or the arrow keys to move bar by bar. While the song plays, the page
-scrolls with it: your hands stay on the instrument.
+scrolls with it: your hands stay on the instrument. Scroll ahead by hand to read on, and **Back to
+the song** brings the page back to where the band is.
 
 ### English or French, dark or light
 
@@ -128,7 +129,8 @@ library every device of the band sees them.
 becomes a practice page: first with the full mix after a few seconds, then with every instrument's
 track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
 **MusicXML** (MuseScore), a
-chord timeline (`.lab`) or **JSON**, or print a one-page chart for the music stand.
+chord timeline (`.lab`) or **JSON**, or print a compact chart for the music stand (about two A4 pages
+for a song with its words).
 
 **Share a song**: zip its `.woodshed` folder and send it. Unzipped, `index.html` opens in any
 browser, offline, with every track, the words and the parts. **After an update** of woodshed, the
