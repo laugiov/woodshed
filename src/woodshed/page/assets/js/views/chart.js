@@ -71,13 +71,26 @@
       // front is not "different" for that.
       const [short, long] = sec.end - sec.start <= firstOne.end - firstOne.start ? [sec, firstOne] : [firstOne, sec];
       const n = short.end - short.start;
-      let fewest = n;
+      let best = null; // the bars of this part that differ, where the two agree best
       for (let shift = 0; shift <= long.end - long.start - n; shift++) {
-        let differ = 0;
-        for (let i = 0; i < n; i++) if (chords(short.start + i) !== chords(long.start + shift + i)) differ++;
-        fewest = Math.min(fewest, differ);
+        const differ = [];
+        for (let i = 0; i < n; i++) {
+          if (chords(short.start + i) !== chords(long.start + shift + i)) differ.push((short === sec ? sec.start + i : sec.start + shift + i) + 1);
+        }
+        if (!best || differ.length < best.length) best = differ;
       }
-      return n && fewest / n > 0.25 ? firstOne : null;
+      return n && best.length / n > 0.25 ? { part: firstOne, bars: best } : null;
+    }
+    // "bar 6", "bars 6-7, 9": the bars to listen to.
+    function barsText(bars) {
+      const spans = [];
+      for (const b of bars) {
+        const last = spans[spans.length - 1];
+        if (last && b === last[1] + 1) last[1] = b;
+        else spans.push([b, b]);
+      }
+      const list = spans.map(([a, z]) => (a === z ? String(a) : a + "-" + z)).join(", ");
+      return bars.length === 1 ? W.t("bar {n}", { n: list }) : W.t("bars {list}", { list });
     }
 
     function sectionHead(sec, k) {
@@ -90,7 +103,7 @@
         { class: "sec-head", "data-testid": "section", "data-section": k, "data-role": sec.role },
         h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: W.t("Go to {part}", { part }) }, part),
         h("span", { class: "sec-meta" }, fmt(first.start) + " · " + (n === 1 ? W.t("1 bar") : W.t("{n} bars", { n }))),
-        other ? h("span", { class: "sec-other", "data-testid": "played-otherwise" }, W.t("different chords from {part}: check by ear", { part: W.partName(other.name) })) : null,
+        other ? h("span", { class: "sec-other", "data-testid": "played-otherwise" }, W.t("{bars}: different chords from {part}, check by ear", { bars: barsText(other.bars), part: W.partName(other.part.name) })) : null,
         h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: W.t("Loop {part}", { part }) }, W.t("⟲ Loop")),
       );
     }

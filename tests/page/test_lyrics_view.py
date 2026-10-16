@@ -322,7 +322,8 @@ def test_a_chorus_played_with_other_chords_than_the_first_says_so(open_page: Any
     expect(o.page.get_by_test_id("played-otherwise")).to_have_count(0)  # pop plays its loop twice
     o.js("Woodshed.current.bars.slice(5, 7).forEach(b => b.chords.forEach(c => { c.pc = (c.pc + 2) % 12; }))")
     o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
-    expect(o.page.get_by_test_id("played-otherwise")).to_have_text("different chords from Chorus 1: check by ear")
+    said = "bars 6-7: different chords from Chorus 1, check by ear"  # the bars to listen to
+    expect(o.page.get_by_test_id("played-otherwise")).to_have_text(said)
 
 
 def test_a_chorus_with_more_bars_in_front_is_compared_where_it_matches(open_page: Any) -> None:

@@ -1155,3 +1155,14 @@ def test_the_drum_text_says_a_pattern_as_a_drummer_does(open_page: Any, groove: 
     o.js(f"Woodshed.current.parts.groove = {json.dumps(data)}")
     o.page.get_by_test_id("inst-drums").click()
     assert said in o.page.get_by_test_id("desk").inner_text()
+
+
+def test_the_guitar_panel_names_the_best_capo_and_puts_it_on(open_page: Any) -> None:
+    o = open_page("pop")  # C G Am F: the F is a barre without a capo; capo 5 gives G D Em C
+    o.page.get_by_test_id("inst-guitar").click()
+    desk = o.page.get_by_test_id("desk")
+    expect(desk).to_contain_text("Best capo: 5, every shape open (without a capo, barre chords: 1).")
+    o.page.get_by_test_id("use-best-capo").click()
+    assert o.js("Woodshed.app.store.get().capo") == 5
+    expect(o.page.get_by_test_id("use-best-capo")).to_have_count(0)  # on: nothing more to offer
+    expect(desk).not_to_contain_text("no capo makes")  # no tip saying the opposite

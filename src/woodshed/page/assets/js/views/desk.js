@@ -104,7 +104,6 @@
       const chords = song.distinctChords();
       const t = s.transpose;
       const funk = s.pos === "funk" ? I.funkVoicings(chords.map((c) => ({ pc: c.pc + t, quality: c.quality }))) : null;
-      const suggested = song.capoFor(t);
       const cards = chords.map((c) => {
         let shape;
         let label;
@@ -139,22 +138,24 @@
           h("span", { class: "play-hint", style: { display: "block" } }, W.t("▶ hear")),
         );
       });
-      // What the cards show, said plainly: how many barres are left, and the capo that makes the song
-      // clearly easier (theory.suggest_capo: weighted by how long each chord lasts), or none.
-      const barres = chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality)).length;
+      // One line, from what the cards would show at each capo: how many chords need a barre, and the
+      // capo with the fewest (the lowest of equals), with a button to put it on.
+      const barresAt = (k) => chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - k, c.quality)).length;
+      const counts = [0, 1, 2, 3, 4, 5, 6, 7].map(barresAt);
+      const best = counts.indexOf(Math.min(...counts));
+      let useBest = null;
+      if (s.pos === "open" && s.capo !== best) {
+        useBest = h("button", { type: "button", class: "btn", "data-testid": "use-best-capo", onclick: () => store.set({ capo: best }) }, best ? W.t("Use capo {n}", { n: best }) : W.t("Take the capo off"));
+      }
       const tip =
         s.pos === "open"
-          ? s.capo === suggested
-            ? suggested
-              ? W.t("Capo {n} gives open shapes for most of the song.", { n: s.capo })
-              : barres
-                ? W.t("Barre chords here: {n}. No capo makes the song clearly easier.", { n: barres })
-                : W.t("Open shapes, no capo needed.")
-            : suggested
-              ? W.t("Tip: capo {n} gives easier shapes.", { n: suggested })
-              : W.t("Tip: no capo makes the song clearly easier (without one, barre chords: {n}).", {
-                  n: chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t, c.quality)).length,
-                })
+          ? best
+            ? counts[best]
+              ? W.t("Best capo: {c}, {b} barre chords instead of {n}.", { c: best, b: counts[best], n: counts[0] })
+              : W.t("Best capo: {c}, every shape open (without a capo, barre chords: {n}).", { c: best, n: counts[0] })
+            : counts[0]
+              ? W.t("Barre chords: {n}, and no capo gives fewer.", { n: counts[0] })
+              : W.t("Open shapes, no capo needed.")
           : s.pos === "funk"
             ? W.t("Three-note shapes chosen so your hand barely moves from one chord to the next.")
             : W.t("Full barre chords, no capo, concert pitch.");
@@ -168,6 +169,7 @@
         ),
         h("div", { class: "shapes" }, cards),
         note(W.t("{tip} Click a shape to hear it.", { tip })),
+        useBest ? h("div", { class: "hear-row" }, useBest) : null,
         comping(),
       ];
     }
