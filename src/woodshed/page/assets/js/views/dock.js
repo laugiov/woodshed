@@ -91,7 +91,7 @@
     let shownTenth = -1;
     function renderPosition(s) {
       const tenth = Math.floor(s.time * 10);
-      if (tenth !== shownTenth) clear($("posInfo"), h("b", null, fmt(s.time, true)), " / " + fmt(duration));
+      if (tenth !== shownTenth) clear($("posInfo"), h("b", null, fmt(s.time, true)), " / " + fmt(Math.round(duration)));
       shownTenth = tenth;
       const looped = s.loop && app.sections().find((sec) => sec.start === s.loop[0] && sec.end === s.loop[1] + 1);
       const what = !s.loop ? "" : looped ? W.partName(looped.name) : W.t("bars {from}–{to}", { from: s.loop[0] + 1, to: s.loop[1] + 1 });

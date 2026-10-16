@@ -30,7 +30,7 @@
         h("span", null, h("b", null, String(app.songBpm)), " BPM"),
         h("span", null, h("b", null, meta.beats_per_bar + "/4")),
         h("span", null, W.nodes(W.t("Key {key}"), { key: h("b", null, chordNode(minor ? key.slice(0, -1) : key), " " + (minor ? W.t("minor") : W.t("major"))) })),
-        h("span", null, fmt(meta.duration)),
+        h("span", null, fmt(Math.round(meta.duration))), // rounded, as the library lists it
         spots
           ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
           : h("span", { class: "okfact" }, W.t("Nothing to check by ear")),
@@ -128,7 +128,7 @@
       const shapes = s.inst === "guitar" && app.shapeFor
         ? [[c, ""], [up[0], "next"]].filter(([x]) => x && x.pc >= 0).map(([x, cls]) => {
             const shape = app.shapeFor(x, s);
-            return shape ? h("span", { class: cls, "aria-hidden": "true" }, app.guitarDiagram(shape)) : null;
+            return shape ? h("span", { class: cls, "aria-hidden": "true" }, app.guitarDiagram(shape), cls ? h("small", null, W.t("next")) : null) : null;
           })
         : [];
       clear($("stShape"), app.nowHint(c, s), shapes.length ? h("div", { class: "st-shapes", "data-testid": "stage-shapes" }, shapes) : null);
@@ -147,7 +147,9 @@
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
       const what = next ? W.partName(next.name) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
-      $("stComing").textContent = what && left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
+      // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
+      const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
+      $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next: {part}", { part: what }) : "");
       renderLyrics(s, list);
     }
 
@@ -183,7 +185,7 @@
       clear(box, out);
     }
     store.on((s, changed) => {
-      const keys = ["beat", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections"];
+      const keys = ["beat", "playing", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections"];
       if (changed.has("stage") || (s.stage && keys.some((key) => changed.has(key)))) render(s);
     });
     return { render };

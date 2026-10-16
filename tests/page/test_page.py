@@ -1175,3 +1175,31 @@ def test_on_a_tablet_a_singer_opens_on_the_words_not_a_big_chord(open_page: Any)
     expect(o.page.locator(".now")).to_be_hidden()
     o.page.set_viewport_size({"width": 1440, "height": 900})  # a laptop has the room for it
     expect(o.page.locator(".now")).to_be_visible()
+
+
+def test_the_song_length_is_rounded_as_the_library_rounds_it(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("Woodshed.current.song.duration = 222.6")  # 3:43 in the library (rounded), not 3:42
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
+    expect(o.page.get_by_test_id("facts")).to_contain_text("3:43")
+
+
+def test_stage_mode_says_what_comes_and_what_the_buttons_do(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-named")
+    o.js("Woodshed.app.setStage(true, false)")
+    expect(o.page.get_by_test_id("stage-prev")).to_have_attribute(
+        "title", "Tap: back to the start of this part. Twice: the part before."
+    )
+    expect(o.page.get_by_test_id("stage-coming")).to_contain_text("Next: ")  # stopped: the next part named
+    o.page.get_by_test_id("theme").first.evaluate("(b) => b")  # exists
+
+
+def test_the_fit_key_button_names_the_key(open_page: Any) -> None:
+    o = open_page("ballad")  # a sung melody: a range to match
+    o.page.get_by_test_id("inst-voice").click()
+    fit = o.page.get_by_test_id("fit-key")
+    for voice in ("bass", "soprano", "tenor", "alto", "mezzo", "baritone"):
+        o.page.get_by_test_id("voice-" + voice).click()
+        if fit.count():
+            break
+    expect(fit).to_have_text(re.compile(r"^Transpose to [A-G][♯♭]?m? \([+-]\d+\)$"))  # not "Transpose down"

@@ -140,6 +140,9 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 /* The viewer's choices, top right of the page; the logo row is as tall, so the title never runs under them. */
 .prefs { position: absolute; top: 0; right: 0; display: inline-flex; gap: 6px; }
 .btn.icon { padding: 4px 9px; font-size: 15px; line-height: 1.2; }
+/* A finger needs 44 px: the theme and language buttons on a touch screen. */
+@media (pointer: coarse) { .btn.icon, .seg-ctl.lang button { min-height: 44px; min-width: 44px; } }
+.st-shapes .next small { display: block; font: 600 11px var(--font-body); color: var(--muted); text-align: center; }
 .song h1 { margin: 2px 0 0; font-family: var(--font-chord); font-weight: 600; font-size: clamp(26px, 4vw, 38px); line-height: 1.05; text-wrap: balance; }
 .song .file { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; }
 .head-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }

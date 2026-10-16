@@ -368,7 +368,7 @@
                   key: h("b", null, chordNode(song.keyName(best))),
                 }),
                 " ",
-                h("button", { type: "button", class: "btn", "data-testid": "fit-key", onclick: () => app.transposeTo(best) }, W.t("Transpose the song")),
+                h("button", { type: "button", class: "btn", "data-testid": "fit-key", onclick: () => app.transposeTo(best) }, W.t("Transpose to {key} ({n})", { key: W.prettyText(song.keyName(best)), n: (best > 0 ? "+" : "") + best })),
               );
       } else fit = h("p", { class: "fit" }, W.t("Pick your voice type to see the best key."));
       return [

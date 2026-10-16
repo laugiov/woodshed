@@ -228,6 +228,9 @@
     "No words placed from here: the text pasted may stop before the song does.": "Plus de paroles placées à partir d'ici : le texte collé s'arrête peut-être avant le morceau.",
     "If a phone cannot open it: your computer may have asked whether woodshed (or Python) may accept incoming connections; allow it on private networks.":
       "Si un téléphone ne l'ouvre pas : ton ordinateur a peut-être demandé si woodshed (ou Python) peut accepter des connexions entrantes ; autorise-le sur les réseaux privés.",
+    "Next: {part}": "Ensuite : {part}",
+    "next": "ensuite",
+    "Tap: back to the start of this part. Twice: the part before.": "Une fois : retour au début de cette partie. Deux fois : la partie d'avant.",
     "Back to the analysis": "Revenir à l'analyse",
     "Back to the analysis: {chord}, to check by ear": "Revenir à l'analyse : {chord}, à vérifier à l'oreille",
     "Back to the analysis: {chord}. {where}": "Retour à l'analyse : {chord}. {where}",
@@ -374,7 +377,7 @@
     "Song: {low}–{high}": "Morceau : {low} à {high}",
     "This key fits a {voice} voice.": "Cette tonalité va à ta voix ({voice}).",
     "Best key for a {voice} voice: {key} ({n} semitones).": "Meilleure tonalité pour ta voix ({voice}) : {key} ({n} demi-tons).",
-    "Transpose the song": "Transposer le morceau",
+    "Transpose to {key} ({n})": "Transposer en {key} ({n})",
     "Pick your voice type to see the best key.": "Choisis ton type de voix pour voir la meilleure tonalité.",
     "Your range against the song": "Ta tessiture face au morceau",
     "Your voice type": "Ton type de voix",
