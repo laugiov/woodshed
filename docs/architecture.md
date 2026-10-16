@@ -64,7 +64,7 @@ The commands live in `src/woodshed/cli.py`: `woodshed SONG`, and the subcommands
 `src/woodshed/audio.py` is the only decoder of user files. Stem separation goes through it too.
 
 - **With ffmpeg** (found on the PATH): any format ffmpeg can read, video files included. Decoded to 16-bit PCM, then to float32.
-- **Without ffmpeg**: libsndfile through `soundfile`, so WAV, FLAC and Ogg. Resampling is done by librosa.
+- **Without ffmpeg**: libsndfile through `soundfile`, so WAV, FLAC, Ogg and MP3 (the `soundfile` wheels bundle libsndfile 1.2). Resampling is done by librosa.
 - The two paths resample differently, so samples can differ slightly. The docstring says so.
 - Analysis runs at 22,050 Hz mono (`SR`). Stems and the page's tracks use 44,100 Hz stereo.
 
@@ -529,7 +529,8 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 In `.github/workflows/`:
 
 - `ci.yml`: on push and pull request. Jobs: checks (guard, lock, ruff, mypy, actionlint), tests on Python 3.10 to 3.14 (Ubuntu, plus macOS and Windows on 3.10 and 3.14), the page in Chromium and Firefox, a package build and smoke test, and the stems extra with real models.
-- `install.yml`: tries the install scripts on Linux, macOS and Windows, and the Docker image, when those files change.
+- `install.yml`: tries the install scripts on Linux, macOS and Windows (on macOS and Windows from an archive, as users get it), the double-click installers (`scripts/installers/`) and the macOS app they make, and the Docker image, when those files change.
+- `installers.yml`: on version tags, attaches the double-click installers to the GitHub release (`woodshed-installer-macos.zip`, `woodshed-installer-windows.cmd`), set to install that tag (`scripts/package-installers.sh` sets their `WOODSHED_REF`). Pull requests that touch them build them as an artifact, without a write token.
 - `docker.yml`: builds the image on native x86 and ARM machines and publishes one tag for both, from `main` and from version tags.
 
 `scripts/ci.sh` runs a local version. `--full` runs what GitHub runs.
