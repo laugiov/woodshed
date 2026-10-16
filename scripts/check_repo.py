@@ -44,6 +44,7 @@ VENDOR_DIRS = (
     "src/woodshed/page/assets/vendor",
     "src/woodshed/page/assets/fonts",
     "src/woodshed/page/assets/samples",
+    "src/woodshed/page/library-vendor",
     DEMO_DIR,
 )
 HOME_PATH = re.compile(

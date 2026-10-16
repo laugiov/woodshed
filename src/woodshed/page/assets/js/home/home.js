@@ -110,6 +110,67 @@
     );
   }
 
+  // The band's phones: a switch lets them in on this computer's network address, with a code to scan.
+  const ROLES = "On a song page, Lead plays for the whole band, Follow plays along with the device that leads, Alone plays on its own.";
+  function qrCode(text) {
+    const qr = window.qrcode && window.qrcode(0, "M");
+    if (!qr) return null;
+    qr.addData(text);
+    qr.make();
+    const n = qr.getModuleCount();
+    let d = "";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += "M" + (c + 4) + " " + (r + 4) + "h1v1h-1z";
+    // Dark on light in both themes: a camera reads it so.
+    return W.s("svg", { viewBox: "0 0 " + (n + 8) + " " + (n + 8), class: "qr", role: "img", "aria-label": W.t("Code to scan: {address}", { address: text }), "data-testid": "network-qr" },
+      W.s("rect", { width: n + 8, height: n + 8, fill: "#fff" }), W.s("path", { d, fill: "#000" }));
+  }
+  let switching = false;
+  async function setNet(on) {
+    if (switching) return;
+    switching = true;
+    try {
+      const r = await fetch("/api/network", { method: "POST", headers: { "X-Woodshed-Token": token, "Content-Type": "application/json" }, body: JSON.stringify({ on }) });
+      const answer = await r.json();
+      if (r.status === 403 && answer.error === "missing or wrong token") toast(W.t("The library was restarted: reload this page."));
+      else if (!r.ok) toast(W.t("The phones were not let in: {why}", { why: W.t(answer.error) }));
+    } catch (err) {
+      toast(W.t("The app did not answer."));
+    }
+    switching = false;
+    await refresh();
+    const again = document.querySelector('[data-testid="network-switch"]');
+    if (again) again.focus(); // the button was drawn again: the keyboard stays on it
+  }
+  function renderNet(data) {
+    const net = data.network || { on: false, fixed: false, can_switch: false };
+    const addresses = data.addresses || [];
+    const out = [];
+    if (data.container) {
+      out.push(h("p", { class: "hint" }, W.t("Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how.")));
+    } else if (!net.can_switch) {
+      out.push(h("p", { class: "hint" }, W.t("This device joined the band: open a song and press Follow.")));
+    } else {
+      if (!net.fixed) {
+        out.push(h("button", { type: "button", class: "btn net-switch" + (net.on ? " on" : ""), role: "switch", "aria-checked": String(!!net.on), onclick: () => setNet(!net.on), "data-testid": "network-switch" },
+          net.on ? W.t("Phones let in: switch off") : W.t("Let the band's phones join")));
+      }
+      if (net.on && addresses.length) {
+        const code = qrCode(addresses[0]);
+        out.push(h("div", { class: "net-on" }, code,
+          h("div", null,
+            h("p", null, W.t("On each phone, on the same Wi-Fi: scan the code with the camera, or type")),
+            h("p", { class: "net-addr", translate: "no", "data-testid": "network-address" }, addresses.join("  ·  ")),
+            h("p", { class: "hint" }, W.t(ROLES)),
+            h("p", { class: "hint" }, W.t("The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.")))));
+      } else if (net.on) {
+        out.push(h("p", { class: "hint" }, W.t("Let in, but this computer has no network address: is it on the band's Wi-Fi?")));
+      } else {
+        out.push(h("p", { class: "hint" }, W.t("Phones on this Wi-Fi then open the library, lead and follow. The first time, your computer may ask whether woodshed (or Python) may accept incoming connections: allow it on private networks.")));
+      }
+    }
+    clear($("net"), out);
+  }
+
   let busy = false;
   async function refresh() {
     let data;
@@ -130,11 +191,7 @@
     $("drop").hidden = !upload;
     $("addBtn").hidden = !upload;
     for (const s of data.songs) titles[s.folder] = s.title;
-    $("phones").textContent = data.addresses && data.addresses.length
-      ? W.t("Bandmates on the same Wi-Fi: open {addresses} on their phones, and set them not to lock their screen while you play.", { addresses: data.addresses.join(" " + W.t("or") + " ") })
-      : data.container
-        ? W.t("Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how.")
-        : W.t("Phones of the band: start the library with  woodshed app --host 0.0.0.0 --allow-network  and they can follow.");
+    renderNet(data);
     const jobs = data.jobs;
     const byFolder = new Map(jobs.filter((j) => j.page).map((j) => [j.page, j]));
     const rows = data.songs.map((s) => row(s, byFolder.get(s.folder)));

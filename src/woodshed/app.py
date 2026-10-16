@@ -7,6 +7,9 @@ Security: the server answers any page the browser opens, so it trusts nothing it
 out itself. It binds 127.0.0.1 by default, refuses a Host header that is not its own (DNS
 rebinding), needs a per-run token in a custom header for every upload (a cross-site form or
 fetch cannot send it, and preflights are refused), and never reads or writes outside the library.
+The band's phones reach it only when this computer opens the door: `--host 0.0.0.0`, or the switch
+on the library page, which only this computer may use and which adds a listener on this computer's
+network address (closed again, it drops the phones still connected).
 """
 
 from __future__ import annotations
@@ -746,7 +749,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         self.do_GET()
 
+    def _shut(self) -> bool:
+        """A request on a connection kept open through the door after it was closed."""
+        if self.server.accepting:
+            return False
+        self.close_connection = True
+        return True
+
     def do_GET(self) -> None:
+        if self._shut():
+            return
         if not self._host_ok():
             self._error(HTTPStatus.MISDIRECTED_REQUEST, "unknown host")
             return
@@ -766,6 +778,7 @@ class Handler(BaseHTTPRequestHandler):
             state["addresses"] = self.server.lan_urls()
             state["container"] = in_container()
             state["can_upload"] = self._may_upload()
+            state["network"] = {**self.server.main.network_state(), "can_switch": self._from_this_computer()}
             self._json(HTTPStatus.OK, state)
         elif path == "/api/token":
             # Read by the song pages of this server only: no CORS header, so another site's page
@@ -795,6 +808,8 @@ class Handler(BaseHTTPRequestHandler):
             self._static(self.server.library.root, path.lstrip("/"))
 
     def do_POST(self) -> None:
+        if self._shut():
+            return
         if not self._host_ok():
             self._error(HTTPStatus.MISDIRECTED_REQUEST, "unknown host")
             return
@@ -804,6 +819,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         if url.path in ("/api/live", "/api/setlist", "/api/corrections"):
+            self._small_json_post(url.path)
+            return
+        if url.path == "/api/network":
+            if not self._from_this_computer():  # a phone let in cannot let others in, or shut them out
+                self._error(HTTPStatus.FORBIDDEN, "the band's network is opened from the computer that runs the app")
+                return
             self._small_json_post(url.path)
             return
         if url.path == "/api/lyrics":
@@ -892,9 +913,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, saved)
             elif path == "/api/lyrics":
                 self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.add_words(data)))
+            elif path == "/api/network":
+                if not isinstance(data, dict) or not isinstance(data.get("on"), bool):
+                    raise ValueError("on: true or false")
+                self.server.main.set_door(data["on"])
+                self._json(HTTPStatus.OK, self.server.main.network_state())
             else:
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
-        except PermissionError as exc:
+        except (PermissionError, WoodshedError) as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (ValueError, OSError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
@@ -921,7 +947,7 @@ class Handler(BaseHTTPRequestHandler):
             with live.cond:
                 first = {**live.state, "fixes": dict(live.fixes)} if live.fixes else dict(live.state)
                 current: tuple[int, dict[str, Any]] | None = (live.version, first)
-            while not live.closed:
+            while not live.closed and self.server.accepting:
                 if current is not None:
                     seen, shown = current
                     event = {**shown, "now": time.time()}  # the server clock, to measure the offset
@@ -1026,6 +1052,8 @@ class AppServer(ThreadingHTTPServer):
         # the network explicitly (docker run -p 127.0.0.1:8000:8000 keeps them to this computer).
         self.uploads_from_network = uploads_from_network
         self.live = Live()  # before binding: a taken port closes the server inside __init__
+        self.doors: list[Door] = []
+        self.doors_lock = threading.Lock()
         super().__init__((host, port), Handler)
         self.library = library
         self.network = host not in LOOPBACK
@@ -1036,6 +1064,48 @@ class AppServer(ThreadingHTTPServer):
         bound = self.server_address[1]
         self.port = int(bound)
         self.names = {"127.0.0.1", "localhost", "[::1]"} | ({host} if host not in ("0.0.0.0", "::") else set())
+        self.main = self  # the server a door belongs to: itself
+        self.accepting = True
+
+    def network_state(self) -> dict[str, Any]:
+        """For the library page: are the phones let in, and can the switch change it."""
+        fixed = self.network  # started on the network (--host 0.0.0.0, the Docker image): no switch
+        return {"on": fixed or bool(self.doors), "fixed": fixed, "addresses": self.lan_urls()}
+
+    def set_door(self, on: bool) -> None:
+        """Let the band's phones in, on this computer's network address and the same port, or not."""
+        if self.network:
+            return
+        with self.doors_lock:
+            if on and not self.doors:
+                found = lan_addresses()
+                if not found:
+                    raise WoodshedError("no network found: is this computer on the band's Wi-Fi?")
+                try:
+                    for address in found:
+                        self.doors.append(Door(self, address))
+                except OSError as exc:
+                    self._close_doors()
+                    why = exc.strerror or exc
+                    raise WoodshedError(f"the phones cannot be let in on port {self.port} ({why})") from exc
+                for door in self.doors:
+                    door.started = True  # shutdown() then waits for this loop, which may not be running yet
+                    threading.Thread(target=door.serve_forever, name="woodshed-door", daemon=True).start()
+                print(f"woodshed app: the band's phones can open {' or '.join(self.lan_urls())}", flush=True)
+            elif not on and self.doors:
+                self._close_doors()
+                print("woodshed app: the band's phones are out", flush=True)
+
+    def _close_doors(self) -> None:
+        doors, self.doors = self.doors, []
+        for door in doors:
+            door.accepting = False
+            if door.started:
+                door.shutdown()
+            door.server_close()
+        if doors:
+            with self.live.cond:  # the streams of the phones wake up, see the door closed and end
+                self.live._changed()
 
     @property
     def url(self) -> str:
@@ -1043,6 +1113,8 @@ class AppServer(ThreadingHTTPServer):
 
     def lan_urls(self) -> list[str]:
         """The addresses the phones type, looked up once (a name lookup can take seconds)."""
+        if self.doors:
+            return [f"http://{door.address}:{self.port}/" for door in self.doors]
         if not self.network:
             return []
         if self._addresses is None:
@@ -1054,8 +1126,37 @@ class AppServer(ThreadingHTTPServer):
         return self._addresses
 
     def server_close(self) -> None:
+        with self.doors_lock:
+            self._close_doors()
         self.live.close()  # open streams end
         super().server_close()
+
+
+class Door(AppServer):
+    """The library on this computer's network address: the phones' way in, opened from the page.
+
+    The same library, token and band as the server on 127.0.0.1, on the same port. Address
+    literals are accepted as Host (the phones type one) and nothing is uploaded through it.
+    """
+
+    def __init__(self, main: AppServer, address: str) -> None:
+        self.main = main
+        self.address = address
+        self.accepting = True
+        self.started = False
+        ThreadingHTTPServer.__init__(self, (address, main.port), Handler)
+        self.library, self.live, self.token, self.assets = main.library, main.live, main.token, main.assets
+        self.uploads_from_network = main.uploads_from_network
+        self.port = main.port
+        self.names = main.names
+        self.network = True
+        self.doors = []
+
+    def lan_urls(self) -> list[str]:
+        return self.main.lan_urls()
+
+    def server_close(self) -> None:
+        ThreadingHTTPServer.server_close(self)  # the band's stream belongs to the main server
 
 
 def serve(

@@ -469,3 +469,88 @@ def test_the_library_counts_what_is_left_to_check_after_the_band_corrected(serve
     key = app.analysis_key(song)
     assert post(server, "/api/corrections", fixes(key=key, fixes={"1": [7, ""]}))[0] == 200
     assert count() == 1  # as the page says after the band's correction
+
+
+# The switch on the library page: the band's phones let in on this computer's network address.
+
+LAN = app.lan_addresses()
+needs_lan = pytest.mark.skipif(not LAN, reason="this computer has no network address")
+
+
+def by_door(srv: app.AppServer, method: str, path: str, body: bytes | None = None, token: bool = False) -> int:
+    """A phone of the band: through the network address, as a phone types it."""
+    conn = http.client.HTTPConnection(LAN[0], srv.port, timeout=10)
+    headers = {"Host": f"{LAN[0]}:{srv.port}", **({app.TOKEN_HEADER: srv.token} if token else {})}
+    conn.request(method, path, body=body, headers=headers)
+    status = conn.getresponse().status
+    conn.close()
+    return status
+
+
+def songs_state(srv: app.AppServer) -> dict[str, Any]:
+    state: dict[str, Any] = json.loads(request(srv, "GET", "/api/songs")[2])
+    return state
+
+
+@needs_lan
+def test_the_switch_lets_the_phones_in_and_out(server: app.AppServer) -> None:
+    assert songs_state(server)["network"] == {"on": False, "fixed": False, "addresses": [], "can_switch": True}
+    with pytest.raises(OSError):
+        by_door(server, "GET", "/api/songs")  # closed: nobody listens on the network address
+    status, answer = post(server, "/api/network", {"on": True})
+    assert status == 200 and answer["on"] is True
+    assert answer["addresses"] == [f"http://{a}:{server.port}/" for a in LAN]
+    assert by_door(server, "GET", "/api/songs") == 200
+    assert by_door(server, "GET", "/One.woodshed/index.html") == 200
+    # A phone plays and leads, but neither adds songs nor opens or closes the door.
+    assert by_door(server, "POST", "/api/network", json.dumps({"on": False}).encode(), token=True) == 403
+    assert by_door(server, "POST", "/api/songs?name=a.mp3", b"x", token=True) == 403
+    assert songs_state(server)["network"]["on"] is True  # still open
+    status, answer = post(server, "/api/network", {"on": False})
+    assert status == 200 and answer == {"on": False, "fixed": False, "addresses": []}
+    with pytest.raises(OSError):
+        by_door(server, "GET", "/api/songs")
+
+
+@needs_lan
+def test_a_phone_still_connected_is_dropped_when_the_door_closes(server: app.AppServer) -> None:
+    post(server, "/api/network", {"on": True})
+    kept = http.client.HTTPConnection(LAN[0], server.port, timeout=10)  # a keep-alive connection
+    kept.request("GET", "/api/setlist", headers={"Host": f"{LAN[0]}:{server.port}"})
+    first = kept.getresponse()
+    first.read()
+    assert first.status == 200
+    stream = http.client.HTTPConnection(LAN[0], server.port, timeout=10)
+    stream.request("GET", f"/api/live?t={server.token}", headers={"Host": f"{LAN[0]}:{server.port}"})
+    events = stream.getresponse()
+    assert events.readline().startswith(b"data: ")
+    events.readline()
+    post(server, "/api/network", {"on": False})
+    started = time.monotonic()
+    while events.readline() not in (b"",):  # the stream ends, it does not wait for the next ping
+        assert time.monotonic() - started < 5
+    with pytest.raises((OSError, http.client.HTTPException)):
+        kept.request("GET", "/api/setlist", headers={"Host": f"{LAN[0]}:{server.port}"})
+        kept.getresponse().read()
+    kept.close()
+    stream.close()
+
+
+def test_without_a_network_the_switch_says_so(server: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "lan_addresses", lambda: [])
+    status, answer = post(server, "/api/network", {"on": True})
+    assert status == 409 and "no network found" in answer["error"]
+    assert songs_state(server)["network"]["on"] is False
+
+
+def test_started_on_the_network_there_is_nothing_to_switch(server: app.AppServer) -> None:
+    server.network = True  # --host 0.0.0.0, the Docker image
+    status, answer = post(server, "/api/network", {"on": False})
+    assert status == 200 and answer["on"] is True and answer["fixed"] is True
+    assert server.doors == []
+
+
+def test_the_switch_needs_the_token_and_a_yes_or_no(server: app.AppServer) -> None:
+    assert post(server, "/api/network", {"on": True}, token="wrong")[0] == 403
+    assert post(server, "/api/network", {"on": "yes"})[0] == 400
+    assert server.doors == []

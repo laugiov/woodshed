@@ -214,7 +214,34 @@ def test_the_set_list_is_made_on_the_home_page(browser: Browser, server: app.App
     page.get_by_test_id("set-remove").first.click()
     expect(page.get_by_test_id("set-item")).to_have_count(1)
     assert server.library.setlist() == ["pop.woodshed"]
-    expect(page.get_by_test_id("phones")).to_contain_text("--allow-network")  # on loopback: how to open it up
+    assert problems == []
+
+
+@pytest.mark.skipif(not app.lan_addresses(), reason="this computer has no network address")
+def test_the_band_phones_are_let_in_from_the_library_page(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = browser.new_context(locale="en-US").new_page()
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    page.goto(server.url)
+    switch = page.get_by_test_id("network-switch")
+    expect(switch).to_have_attribute("aria-checked", "false")
+    expect(page.get_by_test_id("phones")).to_contain_text("allow it on private networks")  # the firewall's question
+    switch.click()
+    expect(switch).to_have_attribute("aria-checked", "true")
+    expect(switch).to_be_focused()
+    address = f"http://{app.lan_addresses()[0]}:{server.port}/"
+    expect(page.get_by_test_id("network-address")).to_contain_text(address)
+    expect(page.get_by_test_id("network-qr")).to_have_attribute("aria-label", "Code to scan: " + address)
+    expect(page.get_by_test_id("phones")).to_contain_text("Follow plays along with the device that leads")
+    phone = browser.new_context(locale="en-US").new_page()
+    phone.goto(address)  # the phone, through the door
+    expect(phone.get_by_test_id("phones")).to_contain_text("This device joined the band")
+    expect(phone.get_by_test_id("network-switch")).to_have_count(0)
+    expect(phone.get_by_test_id("add")).to_be_hidden()
+    switch.click()
+    expect(switch).to_have_attribute("aria-checked", "false")
+    expect(page.get_by_test_id("network-qr")).to_have_count(0)
+    assert server.doors == []
     assert problems == []
 
 

@@ -397,6 +397,9 @@
     Alone: "Seul",
     Lead: "Mener",
     Follow: "Suivre",
+    "This device plays on its own.": "Cet appareil joue de son côté.",
+    "This device plays for the whole band: the song, the place, the loop.": "Cet appareil joue pour tout le groupe : le morceau, l'endroit, la boucle.",
+    "This device plays along with the device that leads.": "Cet appareil joue avec celui qui mène.",
     "Waiting for a leader": "En attente d'un meneur",
     "another device presses Lead": "un autre appareil appuie sur Mener",
     "The leader is silent": "Le meneur ne répond plus",
@@ -467,13 +470,27 @@
     "Mix only": "Mix seulement",
     "add the words": "ajouter les paroles",
     "In the set": "Dans le set",
-    "Bandmates on the same Wi-Fi: open {addresses} on their phones, and set them not to lock their screen while you play.":
-      "Pour le groupe sur le même Wi-Fi : ouvre {addresses} sur leurs téléphones, et règle-les pour que l'écran ne se verrouille pas pendant que vous jouez.",
-    or: "ou",
     "Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how.":
       "Pour le groupe sur le même Wi-Fi : ouvre l'adresse réseau de cet ordinateur sur leurs téléphones, avec le port de compose.yaml (par exemple 192.168.1.20:8000). Le port doit être publié sur le réseau : compose.yaml explique comment.",
-    "Phones of the band: start the library with  woodshed app --host 0.0.0.0 --allow-network  and they can follow.":
-      "Téléphones du groupe : lance la bibliothèque avec  woodshed app --host 0.0.0.0 --allow-network  et ils pourront suivre.",
+    "The band's phones": "Les téléphones du groupe",
+    "Let the band's phones join": "Laisser entrer les téléphones du groupe",
+    "Phones let in: switch off": "Téléphones admis : fermer",
+    "Code to scan: {address}": "Code à scanner : {address}",
+    "The phones were not let in: {why}": "Les téléphones ne sont pas admis : {why}",
+    "The app did not answer.": "L'appli n'a pas répondu.",
+    "This device joined the band: open a song and press Follow.": "Cet appareil a rejoint le groupe : ouvre un morceau et appuie sur Suivre.",
+    "On each phone, on the same Wi-Fi: scan the code with the camera, or type":
+      "Sur chaque téléphone, sur le même Wi-Fi : scanne le code avec l'appareil photo, ou tape",
+    "On a song page, Lead plays for the whole band, Follow plays along with the device that leads, Alone plays on its own.":
+      "Sur la page d'un morceau, Mener joue pour tout le groupe, Suivre joue avec l'appareil qui mène, Seul joue de son côté.",
+    "The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.":
+      "Les téléphones peuvent jouer, mener et suivre, pas ajouter de morceaux. Règle-les pour que l'écran ne se verrouille pas pendant que vous jouez.",
+    "Let in, but this computer has no network address: is it on the band's Wi-Fi?":
+      "Admis, mais cet ordinateur n'a pas d'adresse réseau : est-il sur le Wi-Fi du groupe ?",
+    "Phones on this Wi-Fi then open the library, lead and follow. The first time, your computer may ask whether woodshed (or Python) may accept incoming connections: allow it on private networks.":
+      "Les téléphones sur ce Wi-Fi ouvrent alors la bibliothèque, mènent et suivent. La première fois, ton ordinateur peut demander si woodshed (ou Python) peut accepter des connexions entrantes : autorise-le sur les réseaux privés.",
+    "the band's network is opened from the computer that runs the app": "le réseau du groupe s'ouvre depuis l'ordinateur qui fait tourner l'appli",
+    "no network found: is this computer on the band's Wi-Fi?": "aucun réseau trouvé : cet ordinateur est-il sur le Wi-Fi du groupe ?",
     "1 song": "1 morceau",
     "0 songs": "0 morceau",
     "{n} songs": "{n} morceaux",

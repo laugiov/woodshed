@@ -319,8 +319,12 @@
         h(
           "div",
           { class: "seg-ctl", role: "group", "aria-label": W.t("Band") },
-          [["alone", W.t("Alone")], ["lead", W.t("Lead")], ["follow", W.t("Follow")]].map(([m, text]) =>
-            h("button", { type: "button", class: mode === m ? "on" : "", "data-testid": "band-" + m, "aria-pressed": String(mode === m), onclick: () => setMode(m) }, text),
+          [
+            ["alone", W.t("Alone"), W.t("This device plays on its own.")],
+            ["lead", W.t("Lead"), W.t("This device plays for the whole band: the song, the place, the loop.")],
+            ["follow", W.t("Follow"), W.t("This device plays along with the device that leads.")],
+          ].map(([m, text, tip]) =>
+            h("button", { type: "button", class: mode === m ? "on" : "", title: tip, "data-testid": "band-" + m, "aria-pressed": String(mode === m), onclick: () => setMode(m) }, text),
           ),
         ),
       );
