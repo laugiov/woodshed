@@ -224,6 +224,8 @@
     yours: "ton choix",
     analysis: "analyse",
     "Capo {n}": "Capo {n}",
+    "no words here": "pas de paroles ici",
+    "No words placed from here: the text pasted may stop before the song does.": "Plus de paroles placées à partir d'ici : le texte collé s'arrête peut-être avant le morceau.",
     "Back to the analysis": "Revenir à l'analyse",
     "Back to the analysis: {chord}, to check by ear": "Revenir à l'analyse : {chord}, à vérifier à l'oreille",
     "Back to the analysis: {chord}. {where}": "Retour à l'analyse : {chord}. {where}",

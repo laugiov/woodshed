@@ -598,6 +598,7 @@ body.following #playBtn { opacity: 0.45; }
 .form-chip.r-chorus:not(.on) { border-color: var(--accent); }
 .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
 .sec-block { display: grid; gap: inherit; }
+.free-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.25; color: var(--muted); font-style: italic; }
 .sec-block:first-child > .sec-head:first-child { margin-top: 0; padding-top: 0; }
 .print-shapes { display: none; }
 .sec-name { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--font-chord); font-weight: 700; font-size: 26px; line-height: 1.1; color: var(--ink); text-align: left; }

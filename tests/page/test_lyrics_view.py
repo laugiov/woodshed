@@ -337,3 +337,21 @@ def test_a_chorus_with_more_bars_in_front_is_compared_where_it_matches(open_page
     o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
     expect(o.page.get_by_test_id("section").filter(has_text="Chorus 2")).to_be_visible()
     expect(o.page.get_by_test_id("played-otherwise")).to_have_count(0)
+
+
+def test_bars_without_words_inside_a_sung_part_and_at_the_end_are_said(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    data = json.loads((o.folder / "lyrics.json").read_text(encoding="utf-8"))
+    starts = o.js("Woodshed.current.bars.map((b) => b.start)")
+    # A first line in bar 1, the second moved to bar 4: bar 3 of the part is not sung, nor the end.
+    second = data["lines"][1]
+    shift = starts[3] - second["words"][0]["start"]
+    second["words"] = [{**w, "start": w["start"] + shift, "end": w["end"] + shift} for w in second["words"]]
+    first = data["lines"][0]
+    first["words"] = [w for w in first["words"] if w["start"] < starts[1]]
+    data["sections"] = [{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 8}]
+    o.js(f"Woodshed.app.words = Woodshed.lyrics(Woodshed.current, {json.dumps(data)})")
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
+    notes = o.page.get_by_test_id("free-note")
+    expect(notes.first).to_have_text("no words here")  # inside the part: said, not an unexplained grid
+    expect(notes.last).to_contain_text("No words placed from here")  # after the last sung line

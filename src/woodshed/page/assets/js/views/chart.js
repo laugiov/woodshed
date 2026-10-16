@@ -175,7 +175,7 @@
     const barLabel = (b, u, s) => W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
 
     // Bars no sung line holds (an intro, a solo, an ending), as bars of the grid, four a row.
-    function freeRow(list, s) {
+    function freeRow(list, s, note) {
       const cells = [];
       for (let col = 0; col < 4; col++) {
         const u = list[col];
@@ -197,7 +197,7 @@
       return h(
         "div",
         { class: "line", "data-testid": "line" },
-        h("div", { class: "line-label" }, h("span", { class: "t" }, fmt(bar(list[0]).start))),
+        h("div", { class: "line-label" }, h("span", { class: "t" }, fmt(bar(list[0]).start)), note ? h("span", { class: "free-note", "data-testid": "free-note" }, note) : null),
         h("div", { class: "staff four" }, h("div", { class: "plain-bar" }), cells, h("div", { class: "plain-end" })),
       );
     }
@@ -214,6 +214,19 @@
         else blocks.push((run = { at: u, t: bar(u).start, free: [u] }));
       });
       blocks.sort((x, y) => x.t - y.t);
+      // Bars no line holds: inside a sung part they are said ("no words here"), after the last sung
+      // line once ("the text may stop before the song"): never an unexplained grid among the words.
+      const lastSung = rows.reduce((m, r) => Math.max(m, r.bars[r.bars.length - 1].bar), -1);
+      const sung = new Set(rows.map((r) => (sections.length ? song.sectionIndex(r.firstBar, sections) : -1)));
+      let endSaid = false;
+      const freeNote = (x) => {
+        if (x.at > lastSung) {
+          if (endSaid) return null;
+          endSaid = true;
+          return W.t("No words placed from here: the text pasted may stop before the song does.");
+        }
+        return sung.has(sections.length ? song.sectionIndex(x.at, sections) : -1) ? W.t("no words here") : null;
+      };
       const out = [];
       let shown = -1;
       for (const x of blocks) {
@@ -223,7 +236,7 @@
           out.push(sectionHead(sections[shown], shown));
         }
         if (x.free) {
-          out.push(freeRow(x.free, s));
+          out.push(freeRow(x.free, s, freeNote(x)));
           continue;
         }
         const r = x.row;
