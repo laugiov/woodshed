@@ -2,12 +2,15 @@ name: Installers
 
 # The double-click installers musicians download, attached to the GitHub release of each version tag:
 # woodshed-installer-macos.zip (the .command file, zipped so that it stays executable) and
-# woodshed-installer-windows.cmd. Run by hand, it builds them as a workflow artifact, and attaches
-# them to the release of the tag given, if any.
+# woodshed-installer-windows.cmd, both set to install that tag. On pull requests and when run by
+# hand, they are built and kept as a workflow artifact; run by hand with a tag, they are attached to
+# that tag's release.
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths: ["scripts/installers/**", "scripts/install.*", ".github/workflows/installers.yml"]
   workflow_dispatch:
     inputs:
       tag:
@@ -31,11 +34,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
       - name: Package
         run: |
-          mkdir dist
-          (cd scripts/installers && zip -X ../../dist/woodshed-installer-macos.zip "Install woodshed.command")
-          cp "scripts/installers/Install woodshed.cmd" dist/woodshed-installer-windows.cmd
+          mkdir build dist
+          cp "scripts/installers/Install woodshed.command" "scripts/installers/Install woodshed.cmd" build/
+          if [ -n "$TAG" ]; then  # install the tag's version, not main's
+            sed -i "s|WOODSHED_REF:-main}|WOODSHED_REF:-$TAG}|" "build/Install woodshed.command"
+            sed -i "s|WOODSHED_REF=main\"|WOODSHED_REF=$TAG\"|" "build/Install woodshed.cmd"
+            grep -qF "WOODSHED_REF:-$TAG}" "build/Install woodshed.command"
+            grep -qF "WOODSHED_REF=$TAG\"" "build/Install woodshed.cmd"
+          fi
+          (cd build && zip -X ../dist/woodshed-installer-macos.zip "Install woodshed.command")
+          cp "build/Install woodshed.cmd" dist/woodshed-installer-windows.cmd
           # Finder runs the file only if it is executable; cmd.exe wants Windows line endings.
           zipinfo dist/woodshed-installer-macos.zip | grep -q '^-rwxr-xr-x.*Install woodshed.command$'
           test "$(grep -c $'\r$' dist/woodshed-installer-windows.cmd)" = "$(wc -l < dist/woodshed-installer-windows.cmd)"

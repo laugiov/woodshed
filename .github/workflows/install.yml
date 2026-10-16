@@ -33,8 +33,15 @@ jobs:
       - name: ffmpeg, as the script tells users to add it
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg; else sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; fi
-      - name: Install woodshed with the script
-        run: WOODSHED_SOURCE="$PWD" sh scripts/install.sh
+      - name: Install woodshed with the script (on macOS from an archive, as users get it)
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            git archive --format=tar.gz --prefix=woodshed/ -o "$RUNNER_TEMP/w.tar.gz" HEAD
+            echo "WOODSHED_SOURCE=file://$RUNNER_TEMP/w.tar.gz" >> "$GITHUB_ENV"
+            WOODSHED_SOURCE="file://$RUNNER_TEMP/w.tar.gz" sh scripts/install.sh
+          else
+            WOODSHED_SOURCE="$PWD" sh scripts/install.sh
+          fi
       - name: A page from the demo song (the mix only, the models are not downloaded here)
         run: |
           "$(uv tool dir --bin)/woodshed" "demo/As I Am.mp3" --no-stems --no-open -o out
@@ -46,14 +53,28 @@ jobs:
         run: |
           test -x "scripts/installers/Install woodshed.command"
           rm -rf ~/Applications/woodshed.app
-          WOODSHED_SOURCE="$PWD" bash "scripts/installers/Install woodshed.command"
+          WOODSHED_INSTALL_SCRIPT="$PWD/scripts/install.sh" bash "scripts/installers/Install woodshed.command"
           app=~/Applications/woodshed.app/Contents
           plutil -lint "$app/Info.plist"
           test -x "$app/MacOS/woodshed"
           test -x "$app/Resources/woodshed.command"
           sh -n "$app/Resources/woodshed.command"
-          bin="$(uv tool dir --bin)"
-          grep -qF "\"$bin/woodshed\" app" "$app/Resources/woodshed.command"
+          grep -qF "$(uv tool dir --bin)/woodshed' app" "$app/Resources/woodshed.command"
+      - name: The app starts woodshed in a Terminal window, and the library answers
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          open ~/Applications/woodshed.app
+          for _ in $(seq 1 90); do
+            curl -sf http://127.0.0.1:8000/ | grep -q woodshed && ok=1 && break
+            sleep 1
+          done
+          pkill -f "woodshed app" || true
+          if [ -z "${ok:-}" ]; then
+            echo "::error::woodshed did not answer within 90 s of opening the app (could the runner open Terminal?)"
+            pgrep -fil "terminal|woodshed" || true
+            exit 1
+          fi
 
   windows:
     name: Install script, windows-latest
@@ -62,10 +83,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
-      - name: Install woodshed with the script
+      - name: Install woodshed with the script, from an archive as users get it
         shell: pwsh
         run: |
-          $env:WOODSHED_SOURCE = (Get-Location).Path
+          $zip = Join-Path $env:RUNNER_TEMP "w.zip"
+          git archive --format=zip --prefix=woodshed/ -o $zip HEAD
+          if ($LASTEXITCODE -ne 0) { throw "no archive" }
+          $env:WOODSHED_SOURCE = ([System.Uri]$zip).AbsoluteUri
+          "WOODSHED_SOURCE=$env:WOODSHED_SOURCE" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           ./scripts/install.ps1
       - name: A page from the demo song, and the Start menu shortcut
         shell: pwsh
@@ -82,7 +107,7 @@ jobs:
           WOODSHED_NO_OPEN: "1"
           WOODSHED_NO_PAUSE: "1"
         run: |
-          $env:WOODSHED_SOURCE = (Get-Location).Path
+          $env:WOODSHED_INSTALL_SCRIPT = Join-Path (Get-Location).Path "scripts\install.ps1"
           $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
           Remove-Item $link
           & "./scripts/installers/Install woodshed.cmd"
