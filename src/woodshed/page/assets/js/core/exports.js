@@ -68,13 +68,13 @@
         const parts = new Map();
         for (const [u, c] of doubtful) {
           const sec = sections.find((s) => s.start <= u && u < s.end);
-          const part = sec ? sec.name : "";
+          const part = sec ? sec.name : "outside the parts";
           if (!parts.has(part)) parts.set(part, [[], []]);
           const [bars, names] = parts.get(part);
           bars.push(u + 1);
           if (!names.includes(name(c))) names.push(name(c));
         }
-        check = [...parts].map(([part, [bars, names]]) => (part ? part + ", " : "") + barList(bars) + " (" + names.join(", ") + ")").join(", ");
+        check = [...parts].map(([part, [bars, names]]) => part + ", " + barList(bars) + " (" + names.join(", ") + ")").join(", ");
       }
       lines.push("{comment: check by ear: " + directiveText(check) + "}");
     }
@@ -111,7 +111,7 @@
       if (last && b === last[1] + 1) last[1] = b;
       else spans.push([b, b]);
     }
-    return (bars.length === 1 ? "bar " : "bars ") + spans.map(([a, z]) => (a === z ? String(a) : a + "-" + z)).join(", ");
+    return (spans.length === 1 && spans[0][0] === spans[0][1] ? "bar " : "bars ") + spans.map(([a, z]) => (a === z ? String(a) : a + "-" + z)).join(", ");
   }
 
   // The rows of each sung part: its lines with the chords on their words, the chords between lines
@@ -174,17 +174,21 @@
         rows.push(...chordRows(before));
         let inside = waiting.filter((p) => ln.start <= p.t && p.t < ln.end);
         waiting = waiting.filter((p) => p.t >= ln.end);
-        const tokens = [];
+        let tokens = [];
         ln.words.forEach((w, wi) => {
           const timed = typeof w.start === "number" && typeof w.end === "number"; // as lyrics.js reads a word
           const ahead = inside.filter((p) => timed && p.t <= w.start);
           inside = inside.filter((p) => !(timed && p.t <= w.start));
           const chords = [...(wi === 0 ? lead : []), ...ahead, ...(onWord.get(li + ":" + wi) || [])];
-          // One chord a word. Those before it: above the line for its first word, after the word
-          // before it otherwise (they change while that word is held).
+          // One chord a word. Those before it go on a chord row of their own: above the line for its
+          // first word; for a later word the line breaks there (they change while the word before it
+          // is held).
           const extra = chords.slice(0, -1);
-          if (extra.length && wi === 0) rows.push(...chordRows(extra));
-          else if (extra.length) tokens[tokens.length - 1] += extra.map((p) => " " + chord(p)).join("");
+          if (extra.length && tokens.length) {
+            rows.push(lyricRow(tokens.join(" ")));
+            tokens = [];
+          }
+          rows.push(...chordRows(extra));
           tokens.push((chords.length ? chord(chords[chords.length - 1]) : "") + lyricText(w.text));
         });
         tokens.push(...inside.map(chord));

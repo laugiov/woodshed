@@ -211,7 +211,7 @@ def test_damaged_part_names_are_ignored(open_page: Any, bad: Any) -> None:
     assert o.js("Woodshed.app.sections().map((s) => s.name)") == names
 
 
-@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named", "lyrics-stacked"])
+@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named", "lyrics-stacked", "lyrics-midline"])
 def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, variant: str) -> None:
     from tests.page.test_page import download
     from woodshed import exports
@@ -221,10 +221,10 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
     words = json.loads((o.folder / "lyrics.json").read_text())
     text = download(o, "export-chordpro")
     assert text == exports.chordpro(data, words)
-    assert ("Morning comes" in text or variant == "lyrics-stacked") and "{start_of_" in text
+    assert ("Morning comes" in text or variant in ("lyrics-stacked", "lyrics-midline")) and "{start_of_" in text
     if variant == "lyrics-named":
         assert '{start_of_chorus: label="Chorus 1"}' in text  # the parts as the page names them
-    if variant == "lyrics-stacked":
+    if variant in ("lyrics-stacked", "lyrics-midline"):
         # One chord a word: the chords before it on a row of their own, bar by bar.
         assert not re.search(r"\] *\[[^\]]*\]\w", text) and "][" not in text
         assert re.search(r"^\[[^\]]+\]$", text, re.M)  # a chord row above the line

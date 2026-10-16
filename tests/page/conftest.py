@@ -82,6 +82,7 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     change(data["song"])
     named = data["song"].pop("_lyrics_sections", None)
     late = data["song"].pop("_lyrics_late", False)
+    midline = data["song"].pop("_lyrics_midline", False)
     if data["song"].pop("_lyrics", False):
         lyrics = lyrics_for(data["song"])
         if late:  # a line whose only word comes late in bar 2, after both of its chord changes
@@ -89,6 +90,11 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
             first = {**lyrics["lines"][0], "words": lyrics["lines"][0]["words"][:1]}
             word = {"text": "late", "start": start + 0.75 * (end - start), "end": start + 0.9 * (end - start)}
             lyrics["lines"] = [first, {**lyrics["lines"][0], "text": "late", "words": [word]}]
+        if midline:  # one line: a word on bar 1, then one late in bar 2, after two chord changes
+            start, end = data["song"]["bars"][1]["start"], data["song"]["bars"][1]["end"]
+            early = lyrics["lines"][0]["words"][0]
+            word = {"text": "late", "start": start + 0.75 * (end - start), "end": start + 0.9 * (end - start)}
+            lyrics["lines"] = [{**lyrics["lines"][0], "text": early["text"] + " late", "words": [early, word]}]
         if named is not None:
             lyrics["sections"] = named
         (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(lyrics) + ";\n")
@@ -190,6 +196,14 @@ def _lyrics_stacked(song: dict[str, Any]) -> None:
     song["_lyrics_late"] = True
 
 
+def _lyrics_midline(song: dict[str, Any]) -> None:
+    """As lyrics-stacked, with both words on one line: the chords that change while the first word is
+    held cannot all go on the second."""
+    _lyrics_stacked(song)
+    del song["_lyrics_late"]
+    song["_lyrics_midline"] = True
+
+
 def _groove_edge(song: dict[str, Any]) -> None:
     """A kick on the & of 1 in 55 % of the bars: drawn by the notation (over half the bars), below the
     strong hits a relative rule would keep."""
@@ -217,6 +231,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "bass-doubts": _bass_doubts,
     "groove-edge": _groove_edge,
     "lyrics-stacked": _lyrics_stacked,
+    "lyrics-midline": _lyrics_midline,
 }  # fmt: skip
 
 

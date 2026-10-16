@@ -127,7 +127,7 @@ def bar_list(bars: list[int]) -> str:
         else:
             spans.append([b, b])
     text = ", ".join(str(a) if a == z else f"{a}-{z}" for a, z in spans)
-    return ("bar " if len(bars) == 1 else "bars ") + text
+    return ("bar " if len(spans) == 1 and spans[0][0] == spans[0][1] else "bars ") + text
 
 
 def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> str:
@@ -147,15 +147,12 @@ def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> st
     parts: dict[str, tuple[list[int], list[str]]] = {}
     for u, c in doubtful:
         sec = next((s for s in sections if s["start"] <= u < s["end"]), None)
-        part = sec["name"] if sec else ""
+        part = sec["name"] if sec else "outside the parts"
         bars, names = parts.setdefault(part, ([], []))
         bars.append(u + 1)
         if _name(c, key) not in names:
             names.append(_name(c, key))
-    return ", ".join(
-        (f"{part}, " if part else "") + f"{bar_list(bars)} ({', '.join(names)})"
-        for part, (bars, names) in parts.items()
-    )
+    return ", ".join(f"{part}, {bar_list(bars)} ({', '.join(names)})" for part, (bars, names) in parts.items())
 
 
 def _sung(
@@ -233,12 +230,13 @@ def _sung(
                 ahead = [p for t, p in inside if start == start and t <= start]
                 inside = [(t, p) for t, p in inside if not (start == start and t <= start)]
                 chords = (lead if wi == 0 else []) + ahead + on_word.get((li, wi), [])
-                # One chord a word. Those before it: above the line for its first word, after the
-                # word before it otherwise (they change while that word is held).
-                if chords[:-1] and wi == 0:
-                    rows += chord_rows(chords[:-1])
-                elif chords[:-1]:
-                    tokens[-1] += "".join(" " + name(p) for p in chords[:-1])
+                # One chord a word. Those before it go on a chord row of their own: above the line for
+                # its first word; for a later word the line breaks there (they change while the word
+                # before it is held).
+                if chords[:-1] and tokens:
+                    rows.append(lyric_row(" ".join(tokens)))
+                    tokens = []
+                rows += chord_rows(chords[:-1])
                 tokens.append((name(chords[-1]) if chords else "") + lyric_text(w["text"]))
             tokens += [name(p) for _, p in inside]
             backing = lines[li].get("backing") or []

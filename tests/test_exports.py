@@ -295,3 +295,8 @@ def test_chordpro_in_the_key_the_band_plays(pop: dict[str, Any]) -> None:
     assert "{key: Eb}" in text  # C up three semitones
     assert "[Eb]Morning" in text and "[C]" not in text.split("{end_of_verse}")[0].split("}", 5)[-1]
     assert exports.chordpro(pop, words_for(pop), transpose=0) == exports.chordpro(pop, words_for(pop))
+
+
+def test_bar_lists_read_as_a_musician_says_them() -> None:
+    assert exports.bar_list([18, 18]) == "bar 18"  # two doubts in one bar
+    assert exports.bar_list([18, 19, 23]) == "bars 18-19, 23"
