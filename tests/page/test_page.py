@@ -915,3 +915,24 @@ def test_stage_mode_shows_the_guitar_shapes_of_the_chord_now_and_next(open_page:
     o.page.get_by_test_id("inst-bass").click()
     o.page.get_by_test_id("stage-open").click()
     expect(o.page.get_by_test_id("stage-shapes")).to_have_count(0)  # guitar shapes for the guitar only
+
+
+@pytest.mark.parametrize("sheet", ["grid", "lyrics"])
+def test_on_a_phone_a_bar_of_four_chords_stays_in_its_bar(open_page: Any, sheet: str) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.set_viewport_size({"width": 390, "height": 844})
+    # Every bar split into four one-beat chords, the last a doubt: the densest bar a chart has.
+    o.js(
+        "(() => { Woodshed.current.bars.forEach((b, u) => { const c = b.chords[0];"
+        " b.chords = [0, 1, 2, 3].map((k) => ({ ...c, pc: (c.pc + 2 * k) % 12, beats: 1,"
+        " doubt: k === 3 ? c.doubt || { id: 'dense' + u, kind: 'chord', alternatives: [] } : null })); });"
+        " Woodshed.app.store.set({ corrections: Woodshed.app.store.get().corrections + 1 }); })()"
+    )
+    o.page.get_by_test_id("sheet-" + sheet).click()
+    spill = o.js(
+        "[...document.querySelectorAll('.bar[data-bar]')].filter((b) => { const r = b.getBoundingClientRect();"
+        " return [...b.children].some((e) => e.getBoundingClientRect().right > r.right + 1); })"
+        ".map((b) => b.dataset.bar)"
+    )
+    assert o.js("document.querySelectorAll('.bar[data-bar]').length") > 0  # bars of the grid on screen
+    assert spill == []
