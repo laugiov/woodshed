@@ -35,12 +35,20 @@
 .set-note-input { width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--accent); background: var(--bg); color: var(--ink); font: inherit; font-size: 13px; }
 .set-tools { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .set-place { padding: 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+/* The set on paper, for the music stand: one song a row, the title large, key and tempo bold. */
 @media print {
   .home > :not([data-testid="set-panel"]), .home .set-tools, .home #printSet, .home .set-note.empty, .home .hint { display: none !important; }
-  .home .setlist li { break-inside: avoid; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 16px; }
-  .home .set-facts, .home .set-n { color: #000; font-size: 14px; }
-  .home .set-note { color: #000; font-style: italic; }
-  .home .setlist a { color: #000; text-decoration: none; font-weight: 700; }
+  .home .wrap { max-width: none; padding: 0; }
+  .home [data-testid="set-panel"] { border: 0; padding: 0; }
+  .home .set-head .label, .home #setSummary { font-size: 16pt; color: #000; }
+  .home .setlist { gap: 0; }
+  .home .setlist li { break-inside: avoid; border-bottom: 1px solid #999; border-radius: 0; padding: 5pt 0; grid-template-columns: 2.2em minmax(0, 1fr); }
+  .home .set-n { color: #000; font-size: 18pt; }
+  .home .setlist a { color: #000; text-decoration: none; font-weight: 700; font-size: 18pt; }
+  .home .set-facts { color: #000; font-size: 13pt; gap: 4pt 16pt; }
+  .home .set-facts span:nth-child(-n+2) { font-weight: 700; }
+  .home .set-facts .band-key { color: #000; }
+  .home .set-note { color: #000; font-style: italic; font-size: 13pt; }
 }
 .net-switch.on { background: var(--accent-soft); border-color: var(--accent); }
 .net-on { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; margin-top: 12px; }
@@ -533,16 +541,16 @@ body.following #playBtn { opacity: 0.45; }
   .song h1 { font-size: 22px; }
   .facts { font-size: 11px; margin-top: 0; }
   .panel { padding: 0; }
-  .sec-head { margin-top: 2px; padding-top: 4px; }
+  .sec-head { margin-top: 2px; padding-top: 2px; }
   .sec-name { font-size: 15px !important; }
   .sheet { border: 0; padding: 0; gap: 2px; }
   .line { grid-template-columns: 34px minmax(0, 1fr); gap: 4px; break-inside: avoid; }
   .line-label .t, .lline .t { font-size: 8.5px; }
-  .bar { min-height: 0; padding: 1px 5px 13px; }
-  .bar .ch, .ch { font-size: 15px; }
+  .bar { min-height: 0; padding: 0 5px 11px; }
+  .bar .ch, .ch { font-size: 14px; }
   .lline { grid-template-columns: 34px minmax(0, 1fr); padding: 0 2px; gap: 4px; }
   .lwords { font-size: 12px; line-height: 1.1; }
-  .lwords .nb { margin: 9px 0 1px; }
+  .lwords .nb { margin: 7px 0 0; }
   .lwords .bl { height: 2em; margin: 0 5px 0 6px; }
   .lwords .bl i { top: -10px; font-size: 7.5px; }
   .lw .lc { font-size: 1em; min-height: 1.1em; }
@@ -552,6 +560,13 @@ body.following #playBtn { opacity: 0.45; }
   .lline { break-inside: avoid; }
   .lline .t { color: #000; }
   .lline.check .wt { text-decoration: none; }
+  /* A part on one page when it fits; its head never alone at the foot of a page. */
+  .sec-block { break-inside: avoid; }
+  .sec-head { break-after: avoid; }
+  .print-shapes:not([hidden]) { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 0 0 4px; color: #000; }
+  .print-shapes figure { margin: 0; text-align: center; }
+  .print-shapes svg { width: 44px; height: auto; display: block; }
+  .print-shapes figcaption { font: 700 11px var(--font-chord); }
 }
 
 /* Sections: a header per part of the song, and the song's form as a row of buttons. */
@@ -561,7 +576,9 @@ body.following #playBtn { opacity: 0.45; }
 .form-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 .form-chip.r-chorus:not(.on) { border-color: var(--accent); }
 .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
-.sec-head:first-child { margin-top: 0; padding-top: 0; }
+.sec-block { display: grid; gap: inherit; }
+.sec-block:first-child > .sec-head:first-child { margin-top: 0; padding-top: 0; }
+.print-shapes { display: none; }
 .sec-name { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--font-chord); font-weight: 700; font-size: 26px; line-height: 1.1; color: var(--ink); text-align: left; }
 .sec-head[data-role="chorus"] .sec-name { color: var(--accent); }
 .sec-meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }

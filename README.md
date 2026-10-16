@@ -129,8 +129,9 @@ library every device of the band sees them.
 becomes a practice page: first with the full mix after a few seconds, then with every instrument's
 track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
 **MusicXML** (MuseScore), a
-chord timeline (`.lab`) or **JSON**, or print a compact chart for the music stand (about two A4 pages
-for a song with its words).
+chord timeline (`.lab`) or **JSON**, or print a compact chart for the music stand: about two A4 pages
+for a song with its words, each part kept on one page, the song's guitar shapes on top when Guitar
+is picked.
 
 **Share a song**: zip its `.woodshed` folder and send it. Unzipped, `index.html` opens in any
 browser, offline, with every track, the words and the parts. **After an update** of woodshed, the

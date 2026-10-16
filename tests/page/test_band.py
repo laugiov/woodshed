@@ -426,9 +426,14 @@ def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server:
         expect(page.get_by_test_id("song-row")).to_have_count(1)
         page.get_by_test_id("find").fill("nothing like it")
         expect(page.get_by_test_id("no-match")).to_be_visible()
-        # Printed: the set alone, with its notes, without the buttons.
+        # Printed: the set alone, with its notes, without the buttons, readable from a stand.
         page.emulate_media(media="print")
         expect(page.get_by_test_id("set-panel")).to_be_visible()
+        expect(page.get_by_test_id("set-summary")).to_be_visible()  # the total at the top
+        title = items.first.locator("a").evaluate("(a) => parseFloat(getComputedStyle(a).fontSize)")
+        assert title >= 24  # 18 pt
+        key = items.first.locator(".set-facts span").first.evaluate("(s) => getComputedStyle(s).fontWeight")
+        assert int(key) >= 700
         expect(page.get_by_test_id("library")).to_be_hidden()
         expect(page.get_by_test_id("band-network")).to_be_hidden()
         expect(page.get_by_test_id("set-place").first).to_be_hidden()

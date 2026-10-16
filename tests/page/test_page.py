@@ -955,3 +955,41 @@ def test_on_a_phone_a_bar_of_four_chords_stays_in_its_bar(open_page: Any, sheet:
     )
     assert o.js("document.querySelectorAll('.bar[data-bar]').length") > 0  # bars of the grid on screen
     assert spill == []
+
+
+@pytest.mark.parametrize("sheet", ["grid", "lyrics"])
+def test_on_paper_a_part_stays_on_one_page_when_it_fits(open_page: Any, sheet: str) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.get_by_test_id("sheet-" + sheet).click()
+    o.page.emulate_media(media="print")
+    blocks = o.page.locator("#sheet > .sec-block")
+    heads = o.page.locator("#sheet .sec-head")
+    expect(heads.first).to_be_visible()
+    assert blocks.count() == heads.count() > 0  # each part with its lines in one block
+    blocks_js = "[...document.querySelectorAll('#sheet > .sec-block')]"
+    kept = blocks_js + ".every(b => getComputedStyle(b).breakInside === 'avoid')"
+    assert o.js(kept)
+    assert o.js("getComputedStyle(document.querySelector('.sec-head')).breakAfter") == "avoid"
+
+
+def test_on_paper_a_guitarist_gets_the_shapes_of_the_song(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("inst-guitar").click()
+    strip = o.page.get_by_test_id("print-shapes")
+    expect(strip).to_be_hidden()  # paper only
+    o.page.emulate_media(media="print")
+    expect(strip).to_be_visible()
+    assert strip.locator("svg").count() == o.js("Woodshed.current.distinctChords().filter(c => c.pc >= 0).length")
+    o.page.emulate_media(media="screen")
+    o.page.get_by_test_id("inst-bass").click()
+    o.page.emulate_media(media="print")
+    expect(strip).to_be_hidden()  # a bassist reads the chart
+
+
+def test_print_the_chart_opens_the_print_dialog_once(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("(() => { window.printed = 0; window.print = () => { window.printed++; }; })()")
+    o.page.get_by_test_id("export").click()
+    o.page.get_by_test_id("export-print").click()
+    o.page.wait_for_timeout(300)
+    assert o.js("window.printed") == 1

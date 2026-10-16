@@ -222,8 +222,32 @@
           ),
         );
       }
-      clear($("sheet"), out);
+      clear($("sheet"), inBlocks(out));
       paintLyrics(s);
+    }
+
+    // Each part with its lines in one block: on paper a part stays on one page when it fits.
+    function inBlocks(items) {
+      const blocks = [];
+      for (const el of items) {
+        if (!blocks.length || el.classList.contains("sec-head")) blocks.push(h("div", { class: "sec-block" }));
+        blocks[blocks.length - 1].append(el);
+      }
+      return blocks;
+    }
+
+    // On paper, a guitarist gets the song's shapes once, in the voicing shown (hidden on screen).
+    function renderPrintShapes(s) {
+      const box = $("printShapes");
+      const shapes = s.inst === "guitar" && app.shapeFor
+        ? song.distinctChords().filter((c) => c.pc >= 0).map((c) => {
+            const shape = app.shapeFor(c, s);
+            const shift = s.pos === "open" ? s.capo : 0;
+            return shape ? h("figure", null, app.guitarDiagram(shape), h("figcaption", null, chordNode(app.nameFor(c, shift, s)))) : null;
+          }).filter(Boolean)
+        : [];
+      clear(box, shapes);
+      box.hidden = !shapes.length;
     }
 
     function paintLyrics(s) {
@@ -236,6 +260,7 @@
       const sections = app.sections();
       if (app.sheetMode(s) === "lyrics") {
         renderLyrics(s, sections);
+        renderPrintShapes(s);
         renderForm(s);
         renderViewControl(s);
         paintBars(s);
@@ -248,7 +273,8 @@
         if (head) lines.push(sectionHead(head[0], head[1]));
         lines.push(row(gr, g, s));
       });
-      clear($("sheet"), lines);
+      clear($("sheet"), inBlocks(lines));
+      renderPrintShapes(s);
       renderForm(s);
       renderViewControl(s);
       paintBars(s);
