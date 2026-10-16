@@ -299,11 +299,12 @@
       });
       const groove = d.parts.groove;
       if (groove) {
+        const hits = W.instruments.grooveHits(groove); // as exports.groove_hits
         for (let u = 0; u < d.bars.length; u++) {
           for (let i = 0; i < per * SLOTS; i++) {
             const at = u * per * PPQ + i * sixteenth;
             for (const [row, pitch] of [["kick", 36], ["snare", 38], ["hat", 42]]) {
-              if (groove[row][i] > 0.5) note(drums, 9, pitch, at, sixteenth / 2, row !== "hat" ? 100 : 70);
+              if (hits[row][i]) note(drums, 9, pitch, at, sixteenth / 2, row !== "hat" ? 100 : 70);
             }
           }
         }

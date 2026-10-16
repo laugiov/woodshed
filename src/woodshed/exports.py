@@ -326,6 +326,20 @@ def lab(song: Song) -> str:
     return "".join(f"{s:.3f} {e:.3f} {label}\n" for s, e, label in rows)
 
 
+def groove_hits(groove: dict[str, Any]) -> dict[str, list[bool]]:
+    """The drums' one rule, as the page's instruments.grooveHits: a slot is played when it is hit in
+    more than half the bars; a drum hit a little everywhere and never steadily (top slot under 0.6,
+    half the slots or more at 0.2 and over) plays nothing."""
+
+    def diffuse(row: list[float]) -> bool:
+        return max(row) < 0.6 and sum(p >= 0.2 for p in row) >= len(row) / 2
+
+    return {
+        k: [False] * len(groove[k]) if diffuse(groove[k]) else [p > 0.5 for p in groove[k]]
+        for k in ("kick", "snare", "hat")
+    }
+
+
 # MIDI: chords, bass line and drums on the beat grid, at the song's tempo (type 1, 480 PPQ).
 
 
@@ -377,11 +391,12 @@ def midi(song: Song) -> bytes:
                 _note(bass, 1, e[0], (u * per) * PPQ + i * sixteenth, (end - i) * sixteenth - 10, 90)
         groove = parts["groove"]
         if groove:
+            hits = groove_hits(groove)
             for u in range(len(song["bars"])):
                 for i in range(per * STEM_SLOTS):
                     at = (u * per) * PPQ + i * sixteenth
                     for row, pitch in (("kick", 36), ("snare", 38), ("hat", 42)):
-                        if groove[row][i] > 0.5:
+                        if hits[row][i]:
                             _note(drums, 9, pitch, at, sixteenth // 2, 100 if row != "hat" else 70)
     else:  # without stems: the root on each chord, so the file still has a bass line
         for b, n, c in chord_spans(song):

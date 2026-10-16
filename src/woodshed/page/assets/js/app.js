@@ -69,9 +69,9 @@
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
         const hits = I.grooveHits(g); // as the notation and the drums panel
-        const kick = I.hitsText(g.kick, song.per, (p, i) => hits.kick[i]);
-        const snare = I.hitsText(g.snare, song.per, (p, i) => hits.snare[i]);
-        if (!kick && !snare) return W.t("a groove that changes from bar to bar");
+        const kick = I.playedText(hits.kick, song.per);
+        const snare = I.playedText(hits.snare, song.per);
+        if (!kick && !snare) return W.t("no clear groove");
         if (!snare) return W.nodes(W.t("kick on {kick}, no steady snare"), { kick: h("b", null, kick) });
         if (!kick) return W.nodes(W.t("snare on {snare}, no steady kick"), { snare: h("b", null, snare) });
         return W.nodes(W.t("kick on {kick}, snare on {snare}"), { kick: h("b", null, kick), snare: h("b", null, snare) });
@@ -522,7 +522,7 @@
             const at = t + (rep * g.kick.length + i) * sixteenth;
             if (hits.kick[i]) sounds.note("drums", 36, at, 0.3, 0.95);
             if (hits.snare[i]) sounds.note("drums", 38, at, 0.4, 0.8);
-            if (g.hat[i] > 0.4) sounds.note("drums", 42, at, 0.12, 0.12 + 0.3 * g.hat[i]);
+            if (hits.hat[i]) sounds.note("drums", 42, at, 0.12, 0.12 + 0.3 * g.hat[i]);
           });
         }
       });

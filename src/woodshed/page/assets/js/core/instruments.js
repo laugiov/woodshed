@@ -156,8 +156,18 @@
     return out;
   }
 
+  // The slots a drum plays, said as a drummer says them: "every eighth" rather than eight counts.
+  function playedText(played, per) {
+    const n = played.filter(Boolean).length;
+    if (!n) return "";
+    if (n === played.length) return W.t("every sixteenth");
+    if (played.every((p, i) => p === (i % 2 === 0))) return W.t("every eighth");
+    if (n > played.length / 2) return W.t("most sixteenths");
+    return hitsText(played.map(Number), per, (p, i) => played[i]);
+  }
+
   W.instruments = {
     STRINGS, VOICES, tableShape, barreShape, openOrBarre, triadOf, triadCandidates, funkVoicings,
-    fingeredMidi, keysMidi, bassFrets, counts, bestTranspose, hitsText, grooveHits,
+    fingeredMidi, keysMidi, bassFrets, counts, bestTranspose, hitsText, grooveHits, playedText,
   };
 })();

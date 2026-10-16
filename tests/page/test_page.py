@@ -569,6 +569,16 @@ def test_midi_and_musicxml_from_the_page_equal_the_python_ones(open_page: Any, n
     assert download(o, "export-musicxml") == exports.musicxml(data)
 
 
+def test_a_groove_with_nothing_steady_gives_no_drums_in_the_midi_like_python(open_page: Any) -> None:
+    from woodshed import exports
+
+    o = open_page("pop", variant="groove-diffuse")
+    data = o.js("Woodshed.current.song")
+    hits = exports.groove_hits(data["parts"]["groove"])
+    assert not any(hits["kick"]) and not any(hits["snare"])  # the panel's "no clear groove"
+    assert download_bytes(o, "export-midi") == exports.midi(data)
+
+
 def test_midi_and_musicxml_carry_the_corrections(open_page: Any) -> None:
     from woodshed import exports
 
@@ -1118,3 +1128,30 @@ def test_a_looped_passage_shows_the_bass_tab_of_every_looped_bar(open_page: Any)
     expect(tabs).to_have_count(8)  # a long loop: its first eight bars
     o.js("Woodshed.app.store.set({loopOn: false})")
     expect(tabs).to_have_count(1)
+
+
+def _row(on: dict[int, float], rest: float = 0.0) -> list[float]:
+    return [on.get(i, rest) for i in range(16)]
+
+
+@pytest.mark.parametrize(
+    ("groove", "said"),
+    [
+        # A hi-hat on every sixteenth is said so, not as sixteen counts.
+        ({"kick": _row({0: 0.9, 8: 0.9}), "snare": _row({4: 0.9, 12: 0.9}), "hat": _row({}, 0.9)},
+         "Hi-hat on every sixteenth."),
+        ({"kick": _row({0: 0.9, 8: 0.9}), "snare": _row({4: 0.9, 12: 0.9}),
+          "hat": _row({i: 0.8 for i in range(0, 16, 2)})},
+         "Hi-hat on every eighth."),
+        # The Rival Within: kick and snare under half the bars, a steady hi-hat on the beats.
+        ({"kick": _row({0: 0.4, 4: 0.49, 8: 0.4, 12: 0.42}), "snare": _row({0: 0.39, 4: 0.29, 8: 0.35, 12: 0.34}),
+          "hat": _row({0: 0.82, 4: 0.65, 8: 0.72, 12: 0.64}, 0.1)},
+         "Trust your ears here. Hi-hat on 1, 2, 3 and 4."),
+    ],
+)  # fmt: skip
+def test_the_drum_text_says_a_pattern_as_a_drummer_does(open_page: Any, groove: dict[str, Any], said: str) -> None:
+    o = open_page("pop")
+    data = {**groove, "agreement": {"kick": 0.9, "snare": 0.9, "hat": 0.9}, "bars": 16}
+    o.js(f"Woodshed.current.parts.groove = {json.dumps(data)}")
+    o.page.get_by_test_id("inst-drums").click()
+    assert said in o.page.get_by_test_id("desk").inner_text()

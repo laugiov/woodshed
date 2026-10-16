@@ -107,7 +107,10 @@
     "open shape": "position ouverte",
     "barre shape": "forme barrée",
     "kick on {kick}, snare on {snare}": "grosse caisse sur {kick}, caisse claire sur {snare}",
-    "a groove that changes from bar to bar": "un groove qui change d'une mesure à l'autre",
+    "no clear groove": "pas de groove net",
+    "every sixteenth": "toutes les doubles croches",
+    "every eighth": "toutes les croches",
+    "most sixteenths": "la plupart des doubles croches",
     "kick on {kick}, no steady snare": "grosse caisse sur {kick}, pas de caisse claire régulière",
     "snare on {snare}, no steady kick": "caisse claire sur {snare}, pas de grosse caisse régulière",
     "chord tones {notes}": "notes de l'accord {notes}",
@@ -354,7 +357,7 @@
     "Bars matching the main groove: {list}.": "Mesures conformes au groove principal : {list}.",
     "No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here.":
       "Pas de groove net : ni grosse caisse ni caisse claire ne revient dans la plupart des mesures, donc rien n'est écrit. Fie-toi à ton oreille ici.",
-    "Hi-hat on {hits}.": "Charleston sur {hits}.",
+    "Hi-hat on {hits}.": "Charley sur {hits}.",
     "Solid dot: played in more than half the bars; faint: now and then": "Point plein : joué dans plus de la moitié des mesures ; pâle : de temps en temps",
     "Fills are not detected yet.": "Les breaks ne sont pas encore détectés.",
     "No vocal track was separated for this song: run woodshed with stems to get this part.":

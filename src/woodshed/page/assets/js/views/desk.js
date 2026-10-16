@@ -312,12 +312,12 @@
     function grooveText(g, pct) {
       const hits = I.grooveHits(g);
       const said = [W.t("Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.", { bars: g.bars })];
+      const [kick, snare, hat] = ["kick", "snare", "hat"].map((k) => I.playedText(hits[k], song.per));
       if (!hits.clear) {
         said.push(W.t("No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here."));
+        if (hat) said.push(W.t("Hi-hat on {hits}.", { hits: hat })); // a steady hi-hat is still a steady hi-hat
         return said.join(" ");
       }
-      const text = (k) => I.hitsText(g[k], song.per, (p, i) => hits[k][i]);
-      const [kick, snare, hat] = [text("kick"), text("snare"), text("hat")];
       said.push(kick ? W.t("Kick on {hits}.", { hits: kick }) : W.t("No kick in more than half the bars."));
       said.push(snare ? W.t("Snare on {hits}.", { hits: snare }) : W.t("No snare in more than half the bars."));
       if (hat) said.push(W.t("Hi-hat on {hits}.", { hits: hat }));

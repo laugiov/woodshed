@@ -211,6 +211,14 @@ def _groove_edge(song: dict[str, Any]) -> None:
     groove["kick"] = [1.0 if i in (0, 8) else 0.55 if i == 2 else 0.0 for i in range(len(groove["kick"]))]
 
 
+def _groove_diffuse(song: dict[str, Any]) -> None:
+    """Beyond the Sky's read: a kick a little on every slot, nothing steady (no clear groove)."""
+    groove = song["parts"]["groove"]
+    groove["kick"] = [0.51, 0.42, 0.25, 0.39, 0.33, 0.21, 0.28, 0.18, 0.25, 0.23, 0.21, 0.21, 0.37, 0.18, 0.26, 0.26]
+    groove["snare"] = [0.05, 0.05, 0.07, 0.02, 0.02, 0.0, 0.05, 0.02, 0.0, 0.02, 0.0, 0.0, 0.05, 0.0, 0.04, 0.02]
+    groove["hat"] = [0.28, 0.23, 0.14, 0.14, 0.32, 0.18, 0.19, 0.18, 0.32, 0.14, 0.16, 0.16, 0.39, 0.19, 0.25, 0.26]
+
+
 def _bass_doubts(song: dict[str, Any]) -> None:
     """Bar 1 heard with little confidence, bar 2 with no bass at all."""
     bass = song["parts"]["bass"]
@@ -230,6 +238,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "groove-loose": _groove_loose,
     "bass-doubts": _bass_doubts,
     "groove-edge": _groove_edge,
+    "groove-diffuse": _groove_diffuse,
     "lyrics-stacked": _lyrics_stacked,
     "lyrics-midline": _lyrics_midline,
 }  # fmt: skip
