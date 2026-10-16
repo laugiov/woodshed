@@ -1025,3 +1025,24 @@ def test_the_drum_text_notation_and_grid_tell_one_story(open_page: Any, groove: 
         assert "Kick on 1 and the & of 3" in text and "Snare on 2 and 4" in text
         assert "Hi-hat on 1, 2, 3 and 4" in text
         expect(played).to_have_count(8)  # what the text names, and nothing else
+
+
+def test_on_a_tablet_the_guitar_shapes_stay_in_sight_above_the_player(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.set_viewport_size({"width": 820, "height": 1180})  # an iPad held upright: the panel is under the chart
+    strip = o.page.get_by_test_id("dock-shapes")
+    o.page.reload()
+    until(o, "window.Woodshed && window.Woodshed.ready === true")
+    expect(strip.locator("svg").first).to_be_visible()  # the guitar is the first instrument: at once
+    o.page.get_by_test_id("inst-guitar").click()
+    o.js("Woodshed.app.seekBar(2)")
+    expect(strip.locator("svg")).to_have_count(2)  # the chord now and the next one
+    box = strip.bounding_box()
+    assert box is not None and box["y"] + box["height"] <= 1180  # in sight, whatever the scroll
+    o.js("window.scrollTo(0, document.body.scrollHeight)")
+    expect(strip).to_be_in_viewport()
+    o.page.set_viewport_size({"width": 1280, "height": 900})  # the panel beside the chart: no need
+    expect(strip).to_be_hidden()
+    o.page.set_viewport_size({"width": 820, "height": 1180})
+    o.page.get_by_test_id("inst-bass").click()
+    expect(strip).to_be_hidden()  # shapes for the guitar

@@ -293,6 +293,17 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 
 /* Player dock */
 .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--dock); border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 20px rgba(0,0,0,0.06); }
+.dock-shapes { display: none; }
+@media (max-width: 900px) {
+  .dock-shapes:not([hidden]) { display: flex; gap: 14px; align-items: flex-end; justify-content: center; max-width: 1220px; margin: 0 auto 6px; color: var(--ink); }
+  .dshape { display: inline-flex; align-items: flex-end; gap: 6px; }
+  .dshape svg { height: 64px; width: auto; }
+  .dshape b { font: 700 20px var(--font-chord); }
+  .dshape.next { opacity: 0.6; }
+  .dshape.next svg { height: 48px; }
+  .dshape.next b { font-size: 16px; }
+}
+@media (max-width: 900px) and (max-height: 500px) { .dock-shapes:not([hidden]) { display: none; } }
 .dock-in { max-width: 1220px; margin: 0 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; }
 .play { width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 20px; cursor: pointer; display: grid; place-items: center; }
 .wavebox { display: grid; gap: 3px; min-width: 0; }

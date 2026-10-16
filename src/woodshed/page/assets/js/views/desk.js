@@ -365,6 +365,7 @@
       $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
       const body = { guitar, bass, piano: keys, drums, voice }[s.inst](s);
       clear($("desk"), body);
+      renderDockShapes(s);
       if (s.inst === "drums") app.drawDrumStaff();
       clear($("trVal"), chordNode(song.keyName(s.transpose)), s.transpose ? " (" + (s.transpose > 0 ? "+" : "") + s.transpose + ")" : "");
       $("capoVal").textContent = String(s.capo);
@@ -372,7 +373,30 @@
 
     let lastBar = -1;
     let lastChord = "";
+    // A tablet or a phone puts the guitar panel under the chart: the shapes of the chord now and the
+    // next one ride above the player instead, in sight while the page follows the song (CSS shows
+    // them on single-column layouts only; stage mode has its own).
+    let dockShown = "";
+    function renderDockShapes(s) {
+      const box = $("dockShapes");
+      const c = song.chordAtBeat(s.beat);
+      const next = song.upcoming(s.beat, 1)[0];
+      const shift = s.pos === "open" ? s.capo : 0;
+      const shows = s.inst === "guitar" && !s.stage ? [c, next].map((x) => (x && x.pc >= 0 ? x.pc + x.quality : "")).join("|") + "|" + [s.pos, s.capo, s.transpose, s.corrections].join("|") : "";
+      if (shows === dockShown) return;
+      dockShown = shows;
+      const cards = shows
+        ? [[c, ""], [next, "next"]].filter(([x]) => x && x.pc >= 0).map(([x, cls]) => {
+            const shape = app.shapeFor(x, s);
+            return shape ? h("span", { class: "dshape " + cls }, app.guitarDiagram(shape), h("b", null, chordNode(app.nameFor(x, shift, s)))) : null;
+          }).filter(Boolean)
+        : [];
+      clear(box, cards);
+      box.hidden = !cards.length;
+    }
+
     store.on((s, changed) => {
+      renderDockShapes(s);
       const u = curBar(s);
       const c = song.chordAtBeat(s.beat);
       const chordKey = c.pc + c.quality;
