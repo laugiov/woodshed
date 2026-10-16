@@ -23,6 +23,8 @@
   // The set list: the order the band plays in, saved in the library.
   let setlist = [];
   let titles = {};
+  let info = {}; // page folder -> the library's facts on it: key, BPM, length, the band's choices
+  let editing = null; // the song whose note is being written: the set list waits to be drawn again
   let shown = null; // the last /api/songs answer, to redraw the rows at once
   // One save at a time, each made from the list as the previous save left it: two quick clicks
   // never start from the same list.
@@ -45,35 +47,101 @@
     });
     return saving;
   }
-  function move(folder, by) {
+  // To a place in the set: one step with the arrows, or straight to a position.
+  function moveTo(folder, place) {
     saveSet((next) => {
       const k = next.indexOf(folder);
-      if (k < 0) return null;
+      if (k < 0 || place === k) return null;
       next.splice(k, 1);
-      next.splice(Math.max(0, Math.min(next.length, k + by)), 0, folder);
+      next.splice(Math.max(0, Math.min(next.length, place)), 0, folder);
       return next;
+    }).then(() => {
+      const moved = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-place"]');
+      if (moved) moved.focus(); // the keyboard goes with the song
     });
   }
-  function renderSet() {
+  // A set of 40 songs is over an hour: hours and minutes.
+  const setLength = (t) => (t >= 3600 ? W.t("{h} h {m} min", { h: Math.floor(t / 3600), m: Math.round((t % 3600) / 60) }) : fmt(t));
+  // The leader's note on a song ("capo 2, starts on the chorus"): kept by the library with the song,
+  // shown on its page on every device.
+  async function saveNote(folder, note) {
+    try {
+      const r = await fetch("/api/band", { method: "POST", headers: { "X-Woodshed-Token": token, "Content-Type": "application/json" }, body: JSON.stringify({ page: folder, note }) });
+      const answer = await r.json();
+      if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
+      else if (!r.ok) toast(W.t("The note was not saved: {why}", { why: answer.error }));
+      else info[folder] = { ...(info[folder] || {}), band: answer.band };
+    } catch (err) {
+      toast(W.t("The note was not saved."));
+    }
+  }
+  function noteEditor(folder, note) {
+    const input = h("input", { type: "text", class: "set-note-input", maxlength: "300", value: note, "aria-label": W.t("Note for {song}", { song: titles[folder] || folder }), "data-testid": "set-note-input" });
+    let done = false;
+    const finish = async (keep) => {
+      if (done) return;
+      done = true;
+      if (keep && input.value.trim() !== note) await saveNote(folder, input.value);
+      editing = null;
+      renderSet(true);
+      const again = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-note"]');
+      if (again) again.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    return input;
+  }
+  function renderSet(force) {
+    if (editing && !force) return; // drawn again when the note is written: the text stays as typed
+    const known = setlist.filter((f) => info[f]);
+    const total = known.reduce((n, f) => n + (info[f].duration || 0), 0);
+    $("setSummary").textContent = setlist.length
+      ? (setlist.length === 1 ? W.t("1 song") : W.t("{n} songs", { n: setlist.length })) + " · " + setLength(total)
+      : "";
+    $("printSet").hidden = setlist.length === 0;
     clear(
       $("setlist"),
-      setlist.map((folder, k) =>
-        h(
+      setlist.map((folder, k) => {
+        const s = info[folder] || {};
+        const band = s.band || {};
+        const facts = [];
+        if (s.key) facts.push(h("span", { class: band.key ? "band-key" : "" }, chordNode(band.key || s.key), band.key ? " " + W.t("(the band's key)") : ""));
+        if (s.bpm) facts.push(h("span", null, s.bpm + " BPM"));
+        if (s.duration) facts.push(h("span", null, fmt(s.duration)));
+        const noteEl = editing === folder
+          ? noteEditor(folder, band.note || "")
+          : h("button", { type: "button", class: "set-note" + (band.note ? "" : " empty"), "data-testid": "set-note", onclick: () => {
+              editing = folder;
+              renderSet(true);
+            } }, band.note ? h("span", { translate: "no" }, band.note) : W.t("+ Note"));
+        return h(
           "li",
-          { "data-testid": "set-item" },
-          h("a", { href: link(folder), translate: "no" }, titles[folder] || folder.replace(/\.woodshed$/, "")),
+          { "data-testid": "set-item", "data-set-song": folder },
+          h("span", { class: "set-n" }, String(k + 1)),
+          h("div", { class: "set-song" },
+            h("a", { href: link(folder), translate: "no" }, titles[folder] || folder.replace(/\.woodshed$/, "")),
+            h("span", { class: "set-facts" }, facts),
+            noteEl),
           h(
             "span",
             { class: "set-tools" },
-            h("button", { type: "button", class: "btn", "aria-label": W.t("Earlier in the set"), disabled: k === 0 ? "" : null, onclick: () => move(folder, -1), "data-testid": "set-up" }, "↑"),
-            h("button", { type: "button", class: "btn", "aria-label": W.t("Later in the set"), disabled: k === setlist.length - 1 ? "" : null, onclick: () => move(folder, 1), "data-testid": "set-down" }, "↓"),
+            h("select", { class: "set-place", "aria-label": W.t("Place in the set"), "data-testid": "set-place", onchange: (e) => moveTo(folder, Number(e.target.value)) },
+              setlist.map((x, j) => h("option", { value: String(j), selected: j === k ? "" : null }, String(j + 1)))),
+            h("button", { type: "button", class: "btn", "aria-label": W.t("Earlier in the set"), disabled: k === 0 ? "" : null, onclick: () => moveTo(folder, k - 1), "data-testid": "set-up" }, "↑"),
+            h("button", { type: "button", class: "btn", "aria-label": W.t("Later in the set"), disabled: k === setlist.length - 1 ? "" : null, onclick: () => moveTo(folder, k + 1), "data-testid": "set-down" }, "↓"),
             h("button", { type: "button", class: "btn", "aria-label": W.t("Out of the set"), onclick: () => saveSet((next) => next.filter((x) => x !== folder)), "data-testid": "set-remove" }, "✕"),
           ),
-        ),
-      ),
+        );
+      }),
     );
     $("setEmpty").hidden = setlist.length > 0;
+    const input = document.querySelector('[data-testid="set-note-input"]');
+    if (input) input.focus();
   }
+
 
   function row(song, job) {
     let status;
@@ -190,12 +258,19 @@
     const upload = data.can_upload !== false;
     $("drop").hidden = !upload;
     $("addBtn").hidden = !upload;
-    for (const s of data.songs) titles[s.folder] = s.title;
+    info = {};
+    for (const s of data.songs) {
+      titles[s.folder] = s.title;
+      info[s.folder] = s;
+    }
+    renderSet();
     renderNet(data);
     const jobs = data.jobs;
     const byFolder = new Map(jobs.filter((j) => j.page).map((j) => [j.page, j]));
-    const rows = data.songs.map((s) => row(s, byFolder.get(s.folder)));
+    const wanted = fold($("find").value);
+    const rows = data.songs.filter((s) => !wanted || fold(s.title).includes(wanted)).map((s) => row(s, byFolder.get(s.folder)));
     for (const j of jobs) if (!j.page || !data.songs.some((s) => s.folder === j.page)) rows.unshift(row(null, j));
+    if (wanted && !rows.length) rows.push(h("tr", null, h("td", { colspan: "8", class: "muted", "data-testid": "no-match" }, W.t("No song matches this search."))));
     clear($("rows"), rows);
     $("empty").hidden = rows.length > 0;
     const ready = data.songs.length;
@@ -225,6 +300,10 @@
     }
   }
 
+  // "beyonce" finds "Beyoncé": accents and case aside.
+  const fold = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  $("find").addEventListener("input", () => shown && render(shown));
+  $("printSet").addEventListener("click", () => window.print());
   $("addBtn").addEventListener("click", () => $("files").click());
   $("files").addEventListener("change", (e) => {
     upload([...e.target.files]);

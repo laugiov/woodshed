@@ -20,6 +20,28 @@
 .home .options label { display: inline-flex; gap: 6px; align-items: center; margin: 8px 18px 0 0; }
 .home .options input[type=number] { width: 6em; }
 .band-note { color: var(--warn); font-weight: 600; }
+.set-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
+.set-head .label { margin: 0; }
+.set-head #printSet { margin-left: auto; }
+.set-head #find { margin-left: auto; min-width: 0; width: min(260px, 100%); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+.home .setlist li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: start; }
+.home .setlist li::before { content: none; }
+.set-n { font-family: var(--font-chord); font-weight: 700; font-size: 18px; color: var(--muted); text-align: right; }
+.set-song { display: grid; gap: 2px; min-width: 0; }
+.set-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 13px; }
+.set-facts .band-key { color: var(--accent); font-weight: 600; }
+.set-note { justify-self: start; border: none; background: none; padding: 2px 0; color: var(--warn); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.set-note.empty { color: var(--muted); }
+.set-note-input { width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--accent); background: var(--bg); color: var(--ink); font: inherit; font-size: 13px; }
+.set-tools { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.set-place { padding: 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+@media print {
+  .home > :not([data-testid="set-panel"]), .home .set-tools, .home #printSet, .home .set-note.empty, .home .hint { display: none !important; }
+  .home .setlist li { break-inside: avoid; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 16px; }
+  .home .set-facts, .home .set-n { color: #000; font-size: 14px; }
+  .home .set-note { color: #000; font-style: italic; }
+  .home .setlist a { color: #000; text-decoration: none; font-weight: 700; }
+}
 .net-switch.on { background: var(--accent-soft); border-color: var(--accent); }
 .net-on { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; margin-top: 12px; }
 .net-on p { margin: 0 0 6px; }
@@ -317,6 +339,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .acc { position: relative; top: -0.3em; font-size: 0.82em; line-height: 0; margin: 0 0.04em 0 0.02em;
        -webkit-text-stroke: 0.06em currentColor; }
 .big .acc, .stage-now .acc, .stage-next .acc { font-size: 0.6em; top: -0.55em; -webkit-text-stroke: 0.04em currentColor; }
+/* In small text the stroke fills the sign in: the plain glyph, a little larger. */
+.library .acc, .set-facts .acc, .facts .acc { -webkit-text-stroke: 0; font-size: 0.95em; top: -0.2em; }
 .brandrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-height: 32px; padding-right: 130px; }
 .seg-ctl.lang button { padding: 4px 9px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
@@ -573,4 +597,15 @@ body.following #playBtn { opacity: 0.45; }
   .big { font-size: 58px; }
   .now-side { gap: 4px; padding-bottom: 2px; }
   body[data-inst="voice"][data-sheet="lyrics"] .now { display: none; }
+}
+
+/* The library on a phone: the set's buttons under the title, the table without the BPM column (the
+   set list says it) and with smaller text. */
+@media (max-width: 640px) {
+  .home .setlist li { grid-template-columns: 2em minmax(0, 1fr); }
+  .home .set-tools { grid-column: 2; justify-content: flex-start; margin-left: 0; }
+  .home .library { font-size: 13px; }
+  .home .library th:nth-child(3), .home .library td:nth-child(3) { display: none; }
+  .home .library td, .home .library th { padding-left: 4px; padding-right: 4px; }
+  .set-head #find { width: 100%; margin-left: 0; }
 }

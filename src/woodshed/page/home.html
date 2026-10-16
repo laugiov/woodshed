@@ -36,7 +36,8 @@
   </section>
 
   <section class="panel" data-testid="set-panel">
-    <div class="label">Set list</div>
+    <div class="set-head"><div class="label">Set list</div><span class="facts" id="setSummary" data-testid="set-summary"></span>
+      <button class="btn" id="printSet" type="button" hidden data-testid="set-print">Print the set</button></div>
     <ol class="setlist" id="setlist" data-testid="setlist"></ol>
     <p class="hint" id="setEmpty">No set yet: add songs with <b>+ Set</b> in the library below. On a song page,
       <b>N</b> goes to the next song of the set, and the band follows the device that leads.</p>
@@ -48,7 +49,8 @@
   </section>
 
   <section class="panel">
-    <div class="label">Library</div>
+    <div class="set-head"><div class="label">Library</div>
+      <input type="search" id="find" placeholder="Find a song" aria-label="Find a song" data-testid="find" autocomplete="off"></div>
     <table class="library" data-testid="library">
       <thead><tr><th>Song</th><th>Key</th><th>BPM</th><th class="wide">Meter</th><th class="wide">Length</th><th class="wide">To check</th><th>Status</th><th><span class="sr-only">Set list</span></th></tr></thead>
       <tbody id="rows"></tbody>

@@ -356,3 +356,48 @@ def test_the_band_key_chosen_on_one_device_reaches_the_others(browser: Browser, 
         assert problems == []
     finally:  # the library is the module's: the next tests open pop in its recorded key
         (server.library.root / app.CORRECTIONS_DIR / "pop.woodshed.json").unlink(missing_ok=True)
+
+
+def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = browser.new_context(locale="en-US").new_page()
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    try:
+        server.library.set_band({"page": "waltz.woodshed", "transpose": 2, "key": "D"})
+        page.goto(server.url)
+        items = page.get_by_test_id("set-item")
+        expect(items).to_have_count(2)
+        expect(page.get_by_test_id("set-summary")).to_contain_text("2 songs · ")  # and the set's length
+        expect(items.nth(1)).to_contain_text("BPM")
+        expect(items.nth(1)).to_contain_text("(the band's key)")  # the key the band plays, not the record's
+        # Straight to a place, not one click per place; the keyboard stays with the song.
+        items.nth(1).get_by_test_id("set-place").select_option("0")
+        expect(items.first).to_contain_text("waltz")
+        assert server.library.setlist() == ["waltz.woodshed", "pop.woodshed"]
+        expect(items.first.get_by_test_id("set-place")).to_be_focused()
+        # A note per song, kept by the library: Enter keeps it, Escape leaves it as it was.
+        items.nth(1).get_by_test_id("set-note").click()
+        page.get_by_test_id("set-note-input").fill("capo 2, starts on the chorus")
+        page.get_by_test_id("set-note-input").press("Enter")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2, starts on the chorus")
+        assert server.library.corrections("pop.woodshed", "x1")["band"]["note"] == "capo 2, starts on the chorus"
+        items.nth(1).get_by_test_id("set-note").click()
+        page.get_by_test_id("set-note-input").fill("something else")
+        page.get_by_test_id("set-note-input").press("Escape")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2, starts on the chorus")
+        # Finding a song in a long library.
+        page.get_by_test_id("find").fill("WAL")
+        expect(page.get_by_test_id("song-row")).to_have_count(1)
+        page.get_by_test_id("find").fill("nothing like it")
+        expect(page.get_by_test_id("no-match")).to_be_visible()
+        # Printed: the set alone, with its notes, without the buttons.
+        page.emulate_media(media="print")
+        expect(page.get_by_test_id("set-panel")).to_be_visible()
+        expect(page.get_by_test_id("library")).to_be_hidden()
+        expect(page.get_by_test_id("band-network")).to_be_hidden()
+        expect(page.get_by_test_id("set-place").first).to_be_hidden()
+        expect(items.nth(1).get_by_test_id("set-note")).to_be_visible()
+        assert problems == []
+    finally:
+        for name in ("pop", "waltz"):
+            (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)
