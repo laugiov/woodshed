@@ -112,9 +112,11 @@ if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "aarch64" ] && ! command -v 
     exit 1
 fi
 
-# Replacing woodshed while it runs would break the running one.
+# Replacing woodshed while it runs would break the running one. pgrep takes a regular expression:
+# the folder's name is escaped.
 BIN="$(uv tool dir --bin 2>/dev/null || true)"
-if [ -n "$BIN" ] && command -v pgrep >/dev/null 2>&1 && pgrep -f "$BIN/woodshed app" >/dev/null 2>&1; then
+running="$(printf '%s' "$BIN/woodshed app" | sed 's/[\.*^$+?(){|[]/\\&/g')"
+if [ -n "$BIN" ] && command -v pgrep >/dev/null 2>&1 && pgrep -f "$running" >/dev/null 2>&1; then
     say "woodshed is running: close woodshed first (its window), then run the installer again."
     exit 1
 fi

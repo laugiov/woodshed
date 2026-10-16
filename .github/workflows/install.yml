@@ -46,14 +46,17 @@ jobs:
         run: |
           "$(uv tool dir --bin)/woodshed" "demo/As I Am.mp3" --no-stems --no-open -o out
           test -f "out/As I Am.woodshed/index.html"
+      # The installers download install.sh / install.ps1 from GitHub at this commit, as they do at a
+      # tag; what those install is this checkout's archive (WOODSHED_SOURCE, set above).
       - name: The double-click installer, as Finder runs it, and the app it makes
         if: runner.os == 'macOS'
         env:
           WOODSHED_NO_OPEN: "1"
+          WOODSHED_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           test -x "scripts/installers/Install woodshed.command"
           rm -rf ~/Applications/woodshed.app
-          WOODSHED_INSTALL_SCRIPT="$PWD/scripts/install.sh" bash "scripts/installers/Install woodshed.command"
+          bash "scripts/installers/Install woodshed.command"
           app=~/Applications/woodshed.app/Contents
           plutil -lint "$app/Info.plist"
           test -x "$app/MacOS/woodshed"
@@ -66,10 +69,10 @@ jobs:
         run: |
           open ~/Applications/woodshed.app
           for _ in $(seq 1 90); do
-            curl -sf http://127.0.0.1:8000/ | grep -q woodshed && ok=1 && break
+            curl -sf -m 3 http://127.0.0.1:8000/ | grep -q woodshed && ok=1 && break
             sleep 1
           done
-          pkill -f "woodshed app" || true
+          pkill -f "$(uv tool dir --bin)/woodshed app" || true
           if [ -z "${ok:-}" ]; then
             echo "::error::woodshed did not answer within 90 s of opening the app (could the runner open Terminal?)"
             pgrep -fil "terminal|woodshed" || true
@@ -106,8 +109,8 @@ jobs:
         env:
           WOODSHED_NO_OPEN: "1"
           WOODSHED_NO_PAUSE: "1"
+          WOODSHED_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $env:WOODSHED_INSTALL_SCRIPT = Join-Path (Get-Location).Path "scripts\install.ps1"
           $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
           Remove-Item $link
           & "./scripts/installers/Install woodshed.cmd"

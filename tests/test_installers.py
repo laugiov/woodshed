@@ -3,9 +3,11 @@ installers as shipped. install.sh runs against stubs (uv, uname, sysctl, pgrep, 
 
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -22,7 +24,7 @@ STUBS = {
     "sysctl": 'echo "$STUB_ARM64"',
     "uv": 'printf \'%s\\t\' "$@" >> "$STUB_LOG"; echo >> "$STUB_LOG"\n'
     '[ "$1 $2 $3" = "tool dir --bin" ] && echo "$STUB_BIN"\nexit 0',
-    "pgrep": 'exit "${STUB_RUNNING:-1}"',
+    "pgrep": 'printf \'%s\\t\' "$@" >> "$STUB_PGREP_LOG"; echo >> "$STUB_PGREP_LOG"; exit "${STUB_RUNNING:-1}"',
     "curl": "exit 1",  # nothing is downloaded
 }
 
@@ -37,7 +39,8 @@ Calls = list[list[str]]
 
 def run_install(tmp_path: Path, system: str, arch: str, arm64: str = "", **env: str) -> tuple[int, str, Calls]:
     """install.sh with WOODSHED_NO_MENU=1: its exit code, its output and the uv commands it ran."""
-    stubs, bin_dir, home = tmp_path / "stubs", tmp_path / "bin", tmp_path / "home"
+    # The bin folder's name holds characters that mean something in a regular expression (pgrep).
+    stubs, bin_dir, home = tmp_path / "stubs", tmp_path / "b.in (x+y)", tmp_path / "home"
     for folder in (stubs, bin_dir, home):
         folder.mkdir(exist_ok=True)
     for name, body in STUBS.items():
@@ -50,6 +53,7 @@ def run_install(tmp_path: Path, system: str, arch: str, arm64: str = "", **env: 
         env={
             "PATH": f"{stubs}{os.pathsep}{os.environ.get('PATH', '')}", "HOME": str(home), "WOODSHED_NO_MENU": "1",
             "STUB_OS": system, "STUB_ARCH": arch, "STUB_ARM64": arm64, "STUB_BIN": str(bin_dir), "STUB_LOG": str(log),
+            "STUB_PGREP_LOG": str(tmp_path / "pgrep.log"),
             **env,
         },
         capture_output=True, text=True, check=False,
@@ -97,6 +101,11 @@ def test_a_running_woodshed_stops_the_install(tmp_path: Path) -> None:
     assert code == 1
     assert "close woodshed first" in out
     assert not [c for c in calls if c[:2] == ["tool", "install"]]
+    # pgrep looks for this install's woodshed only (not one in Docker), its folder name escaped.
+    [args] = [line.split("\t")[:-1] for line in (tmp_path / "pgrep.log").read_text(encoding="utf-8").splitlines()]
+    target = f"{tmp_path / 'b.in (x+y)'}/woodshed app"
+    assert args == ["-f", re.sub(r"([\\.*^$+?(){|\[])", r"\\\1", target)]
+    assert re.fullmatch(args[1], target) and not re.search(target, target)  # unescaped, it would miss
 
 
 def shell_function(name: str) -> str:
@@ -155,3 +164,62 @@ def test_the_mac_installer_is_executable_in_git() -> None:
     if not out.stdout:
         pytest.skip("not tracked yet")
     assert out.stdout.startswith("100755 "), "Finder runs the .command file only if it is executable"
+
+
+def run_mac_installer(
+    tmp_path: Path, installer: Path, script_body: str, **env: str
+) -> subprocess.CompletedProcess[str]:
+    """Install woodshed.command with a stub install.sh in place of the real one."""
+    script = tmp_path / "install.sh"
+    write_script(script, script_body)
+    return subprocess.run(
+        ["bash", str(installer)],
+        env={
+            "PATH": os.environ.get("PATH", ""), "HOME": str(tmp_path), "WOODSHED_NO_OPEN": "1",
+            "WOODSHED_INSTALL_SCRIPT": str(script), **env,
+        },
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+
+
+needs_bash = pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"), reason="needs bash")
+PACKAGE = ROOT / "scripts" / "package-installers.sh"
+
+
+@needs_bash
+def test_the_mac_installer_installs_main_as_shipped(tmp_path: Path) -> None:
+    proc = run_mac_installer(tmp_path, MAC_INSTALLER, 'echo "ref=$WOODSHED_REF"')
+    assert proc.returncode == 0, proc.stderr
+    assert "ref=main" in proc.stdout and "Done: woodshed is installed." in proc.stdout
+
+
+@needs_bash
+def test_the_mac_installer_stops_when_the_install_fails(tmp_path: Path) -> None:
+    proc = run_mac_installer(tmp_path, MAC_INSTALLER, "exit 3")
+    assert proc.returncode == 1
+    assert "The installation stopped" in proc.stdout and "Done: woodshed is installed." not in proc.stdout
+
+
+@needs_bash
+@pytest.mark.skipif(not (shutil.which("zip") and shutil.which("zipinfo")), reason="needs zip")
+def test_a_release_packages_installers_that_install_its_tag(tmp_path: Path) -> None:
+    out = tmp_path / "dist"
+    subprocess.run(["bash", str(PACKAGE), str(out), "v1.2.3"], check=True, capture_output=True)
+    with zipfile.ZipFile(out / "woodshed-installer-macos.zip") as z:
+        [info] = z.infolist()
+        assert info.filename == "Install woodshed.command"
+        assert (info.external_attr >> 16) & 0o777 == 0o755
+        installer = tmp_path / info.filename
+        installer.write_bytes(z.read(info))
+    proc = run_mac_installer(tmp_path, installer, 'echo "ref=$WOODSHED_REF"')
+    assert "ref=v1.2.3" in proc.stdout, proc.stderr
+    windows = (out / "woodshed-installer-windows.cmd").read_bytes()
+    assert b'if not defined WOODSHED_REF set "WOODSHED_REF=v1.2.3"\r\n' in windows
+    assert windows.count(b"\n") == windows.count(b"\r\n")
+
+
+@needs_bash
+@pytest.mark.parametrize("tag", ["v1|x", "v1;rm", "1.0", "v1/../x"])
+def test_a_release_refuses_a_strange_tag(tmp_path: Path, tag: str) -> None:
+    proc = subprocess.run(["bash", str(PACKAGE), str(tmp_path / "dist"), tag], capture_output=True, text=True)
+    assert proc.returncode != 0 and "bad tag" in proc.stderr

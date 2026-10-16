@@ -1,10 +1,10 @@
 @echo off
 rem Double-click to install woodshed on Windows. It downloads scripts/install.ps1 from GitHub and runs
-rem it (it also adds woodshed to the Start menu), then starts woodshed. The release sets WOODSHED_REF
-rem below to its own version tag.
+rem it (it also adds woodshed to the Start menu), then starts woodshed. WOODSHED_REF is also how a
+rem release installs its own version: scripts/package-installers.sh sets its default below to the tag.
 rem
 rem Options, as environment variables (for tests):
-rem   WOODSHED_REF             the branch or version tag to install (default: below)
+rem   WOODSHED_REF             the branch, version tag or commit to install (default: below)
 rem   WOODSHED_INSTALL_SCRIPT  a local install.ps1 to run, instead of the one on GitHub
 rem   WOODSHED_SOURCE          what install.ps1 installs (see there)
 rem   WOODSHED_NO_OPEN         set to 1 to not start woodshed at the end
@@ -46,6 +46,7 @@ call :pause
 exit /b 0
 
 :failed
+if defined WOODSHED_DOWNLOADED del "%WOODSHED_INSTALL_SCRIPT%" 2>nul
 echo.
 echo The installation stopped: the messages above say why.
 echo Once that is sorted, double-click the installer again,

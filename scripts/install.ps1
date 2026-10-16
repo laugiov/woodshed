@@ -16,6 +16,8 @@
 # Uninstall: uv tool uninstall woodshed
 
 $ErrorActionPreference = "Stop"
+# TLS 1.2 for the downloads: older Windows PowerShell setups do not offer it by default.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
 
 $Ref = if ($env:WOODSHED_REF) { $env:WOODSHED_REF } else { "main" }
 # A plain archive: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
@@ -30,7 +32,7 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "Installing uv (https://docs.astral.sh/uv/) for your user..."
     & {
         $ErrorActionPreference = "Continue"
-        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        powershell -ExecutionPolicy ByPass -c "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
     }
     if ($LASTEXITCODE -ne 0) { throw "uv could not be installed: see https://docs.astral.sh/uv/" }
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"

@@ -147,7 +147,7 @@ build for them).
 1. From the [latest release](https://github.com/laugiov/woodshed/releases/latest) (under
    **Assets**), download the installer for your computer:
    - **Mac**: `woodshed-installer-macos.zip`. Double-click it to get **Install woodshed**
-     (`Install woodshed.command`).
+     (`Install woodshed.command`); Safari may unzip it for you, in your Downloads folder.
    - **Windows**: `woodshed-installer-windows.cmd`.
 2. Double-click it. A window says what it does, then installs woodshed for you only: about 1.5 GB
    to download, a few minutes, no administrator rights for the install itself.
@@ -159,8 +159,9 @@ does not pay Apple or Microsoft to sign it:
 
 - **Mac**: macOS says it cannot check the file. Click **Done** (or **OK**), open **System
   Settings**, then **Privacy & Security**, scroll down and click **Open Anyway** next to
-  "Install woodshed", then **Open Anyway** again and enter your Mac password. On macOS 14 or
-  older, you can instead right-click the file, choose **Open**, then **Open** again.
+  "Install woodshed", then **Open Anyway** again and enter your Mac password (or use Touch ID).
+  On macOS 14 or older, you can instead right-click the file, choose **Open**, then **Open**
+  again.
 - **Windows**: your browser may hold the download back. In Edge, click **...** next to it, then
   **Keep**, **Show more** and **Keep anyway**; in Chrome, **Keep**. When you double-click it, an
   "Open File - Security Warning" box asks: click **Run**. If a blue "Windows protected your PC"
@@ -177,7 +178,8 @@ MP3, WAV, FLAC and Ogg files work as they are. AAC (M4A) and video files need
 [ffmpeg](https://ffmpeg.org/download.html): the Windows installer adds it when it can, and on a Mac
 `brew install ffmpeg` does it (with [Homebrew](https://brew.sh)).
 
-**To update**, close woodshed first (its window), then run the installer again. **To uninstall**,
+**To update**, close woodshed first (its window), download the installer again from the
+[latest release](https://github.com/laugiov/woodshed/releases/latest) and run it. **To uninstall**,
 open Terminal (Mac) or PowerShell (Windows) and type `uv tool uninstall woodshed`, then
 `uv cache clean` (it frees the space the downloads took). Then remove the shortcut: on a Mac, drag
 **woodshed** from the Applications folder of your home folder to the Trash; on Windows, delete
