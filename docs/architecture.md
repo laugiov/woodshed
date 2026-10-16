@@ -529,8 +529,8 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 In `.github/workflows/`:
 
 - `ci.yml`: on push and pull request. Jobs: checks (guard, lock, ruff, mypy, actionlint), tests on Python 3.10 to 3.14 (Ubuntu, plus macOS and Windows on 3.10 and 3.14), the page in Chromium and Firefox, a package build and smoke test, and the stems extra with real models.
-- `install.yml`: tries the install scripts on Linux, macOS and Windows, the double-click installers (`scripts/installers/`) on macOS and Windows, and the Docker image, when those files change.
-- `installers.yml`: on version tags, attaches the double-click installers to the GitHub release (`woodshed-installer-macos.zip`, `woodshed-installer-windows.cmd`).
+- `install.yml`: tries the install scripts on Linux, macOS and Windows (on macOS and Windows from an archive, as users get it), the double-click installers (`scripts/installers/`) and the macOS app they make, and the Docker image, when those files change.
+- `installers.yml`: on version tags, attaches the double-click installers to the GitHub release (`woodshed-installer-macos.zip`, `woodshed-installer-windows.cmd`), set to install that tag (`WOODSHED_REF`). Pull requests that touch them build them as an artifact.
 - `docker.yml`: builds the image on native x86 and ARM machines and publishes one tag for both, from `main` and from version tags.
 
 `scripts/ci.sh` runs a local version. `--full` runs what GitHub runs.

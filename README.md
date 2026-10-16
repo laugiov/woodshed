@@ -140,35 +140,46 @@ download one file and double-click it.
 
 ### Download and double-click: Mac and Windows
 
+For a Mac with Apple silicon (M1 or newer) or a Windows PC. Intel Macs: use
+[Docker](#with-docker-windows-macos-or-linux) instead (one part of woodshed has no ready-made
+build for them).
+
 1. From the [latest release](https://github.com/laugiov/woodshed/releases/latest) (under
    **Assets**), download the installer for your computer:
-   - **Mac**: `woodshed-installer-macos.zip`. Double-click it to get **Install woodshed**.
-   - **Windows**: `woodshed-installer-windows.cmd`. If your browser asks, choose **Keep**.
+   - **Mac**: `woodshed-installer-macos.zip`. Double-click it to get **Install woodshed**
+     (`Install woodshed.command`).
+   - **Windows**: `woodshed-installer-windows.cmd`.
 2. Double-click it. A window says what it does, then installs woodshed for you only: about 1.5 GB
-   to download, a few minutes. No password, no administrator rights.
+   to download, a few minutes, no administrator rights for the install itself.
 3. When it says **Done**, woodshed starts and opens your library in the browser. Drop a song on
    the page and play.
 
 **The first time only**, your computer warns you about the installer, because this free project
 does not pay Apple or Microsoft to sign it:
 
-- **Mac**: macOS says it cannot check the file. Click **Done**, open **System Settings**, then
-  **Privacy & Security**, scroll down and click **Open Anyway** next to "Install woodshed". On
-  macOS 14 or older, you can instead right-click the file, choose **Open**, then **Open** again.
-- **Windows**: if a blue "Windows protected your PC" box appears, click **More info**, then
-  **Run anyway**.
+- **Mac**: macOS says it cannot check the file. Click **Done** (or **OK**), open **System
+  Settings**, then **Privacy & Security**, scroll down and click **Open Anyway** next to
+  "Install woodshed", then **Open Anyway** again and enter your Mac password. On macOS 14 or
+  older, you can instead right-click the file, choose **Open**, then **Open** again.
+- **Windows**: your browser may hold the download back. In Edge, click **...** next to it, then
+  **Keep**, **Show more** and **Keep anyway**; in Chrome, **Keep**. When you double-click it, an
+  "Open File - Security Warning" box asks: click **Run**. If a blue "Windows protected your PC"
+  box appears, click **More info**, then **Run anyway**. If nothing works, right-click the file,
+  choose **Properties**, tick **Unblock**, click **OK** and double-click it again.
 
 **Next time**, start woodshed like any other app: **woodshed** in Applications, Launchpad or
 Spotlight on a Mac, in the Start menu on Windows. A small window opens next to your browser: keep
-it open while you play, close it to stop woodshed. Your songs are in the `woodshed` folder of your
+it open while you play, close it to stop woodshed (on a Mac, Terminal asks whether to terminate
+the running processes: click **Terminate**). Your songs are in the `woodshed` folder of your
 home folder.
 
 MP3, WAV, FLAC and Ogg files work as they are. AAC (M4A) and video files need
 [ffmpeg](https://ffmpeg.org/download.html): the Windows installer adds it when it can, and on a Mac
 `brew install ffmpeg` does it (with [Homebrew](https://brew.sh)).
 
-**To update**, run the installer again. **To uninstall**, open Terminal (Mac) or PowerShell
-(Windows) and type `uv tool uninstall woodshed`, then remove the shortcut: on a Mac, drag
+**To update**, close woodshed first (its window), then run the installer again. **To uninstall**,
+open Terminal (Mac) or PowerShell (Windows) and type `uv tool uninstall woodshed`, then
+`uv cache clean` (it frees the space the downloads took). Then remove the shortcut: on a Mac, drag
 **woodshed** from the Applications folder of your home folder to the Trash; on Windows, delete
 `woodshed` from the Start menu folder (right-click it, **Open file location**). Your songs stay
 where they are.
@@ -216,7 +227,7 @@ curl -LsSf https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/insta
 The script installs [uv](https://docs.astral.sh/uv/) if needed, then woodshed with its own Python
 and the CPU build of PyTorch, in your home folder: no sudo, nothing system-wide (uv adds its
 folder to your PATH). It adds woodshed to the applications menu on Linux, and the woodshed app to
-`~/Applications` on macOS. It tells you how to add [ffmpeg](https://ffmpeg.org/download.html) if it
+`~/Applications` on macOS (Apple silicon only: Intel Macs use Docker). It tells you how to add [ffmpeg](https://ffmpeg.org/download.html) if it
 is missing (only for AAC (M4A) and video files: MP3, WAV, FLAC and Ogg work without it).
 
 On Windows, in PowerShell:
@@ -230,7 +241,8 @@ and woodshed gets a Start menu shortcut. The double-click installers run these s
 
 Uninstall: `uv tool uninstall woodshed`. Read the scripts before running them if you like:
 [install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1), and the double-click
-installers in [scripts/installers](scripts/installers).
+installers from the [latest release](https://github.com/laugiov/woodshed/releases/latest)
+(their source is in `scripts/installers/`).
 
 ### By hand
 
