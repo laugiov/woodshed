@@ -399,6 +399,7 @@ While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the ba
 
 - `audio/sounds.js` plays previews (a chord shape, a bass riff, the groove, a candidate chord, the count-in) with the Web Audio API. Samples come from the FluidR3 GM SoundFont (MIT), in `page/assets/samples/samples-<instrument>.js`, loaded on first use per instrument. Only the notes needed are decoded.
 - Drum notation is drawn by VexFlow 4.2.2 with the Bravura font (`page/assets/vendor/`). `app.js` loads it on first use. If it fails, the hit grid shows the same groove.
+- **One rule for the drums** (`instruments.grooveHits`, ported as `exports.groove_hits` for the MIDI): a slot is played when it is hit in more than half the bars; a drum hit a little everywhere and never steadily (its top slot under 0.6, half its slots or more at 0.2 and over) plays nothing. The text, the notation, the grid (played slots solid, the rest faint), the groove heard, the now-hint and the MIDI all use it; with no kick nor snare played, the panel says "no clear groove".
 
 ### Corrections
 
@@ -412,7 +413,7 @@ From the page's Export menu, and written into `exports/` at build time:
 
 | Format | File | Notes |
 |---|---|---|
-| ChordPro | `.cho` | With the words and parts when lyrics are placed. For OnSong, SongbookPro. |
+| ChordPro | `.cho` | With the words and parts when lyrics are placed, in the key the page shows (`transpose`). One chord a word: the chords a word cannot carry go on chord rows, bar by bar, four bars a row (a line breaks before a word whose earlier chords changed while the word before was held). "check by ear" names the part, its bars and the chords. For OnSong, SongbookPro. |
 | MIDI | `.mid` | Type 1, 480 ticks per beat. Chords, bass line, drums on the beat grid. |
 | MusicXML | `.musicxml` | Chord symbols over the bars, and the bass line. For MuseScore. |
 | Chord timeline | `.lab` | MIREX style. |
@@ -489,6 +490,7 @@ Chord picks are also stored on the server so a phone and a laptop see the same c
 - One file per page in `.corrections/` inside the library. Never served.
 - Keyed by an analysis key, so a re-analysis does not inherit picks for doubts that no longer exist. The last 8 analyses are kept.
 - Two devices writing at once: both sets of picks are merged, and the later choice for the same doubt wins.
+- **Back to the analysis**: a pick posted as `null` removes it and leaves a tombstone holding the fix it removed (`removed`, per analysis key, bounded like the picks). A device drops its own copy of a fix only when it is that one, so a newer pick made offline survives an older removal. A removal made offline stays pending on the device (`<storage key>:removed`) until the library's answer lists it.
 - A revision number grows with each change. Followers hear it through the live stream and read the chart again.
 - The same file keeps the **band's choices** for the song (`POST /api/band`, `Library.set_band`): the key the band plays it in (`transpose` in semitones, -6 to 6, and the key's name, written by the page that chose it) and the leader's note (300 characters). They share the revision and the push: a device with the song open moves to the band's key, and one opening it later starts there. The page never pitch-shifts the audio: while the chords are in another key, it says the recording's.
 

@@ -66,7 +66,7 @@ never hides inside a lyric line.
 | Guitar | Bass | Drums |
 |:---:|:---:|:---:|
 | <img src="docs/images/desk-guitar.png" alt="Guitar: chord shapes, open, barre or funk triads, and the strumming rhythm" width="100%"> | <img src="docs/images/desk-bass.png" alt="Bass: the line as played, in tab" width="100%"> | <img src="docs/images/desk-drums.png" alt="Drums: the main groove in notation, with a hit grid" width="100%"> |
-| Shapes in open, barre or funk-triad positions, capo suggestions, and when the chords hit in the bar. | The line as played, in tab, bar by bar. Hear any bar on its own. | The main groove in notation, from the isolated drum track, and how often each hit happens. |
+| Shapes in open, barre or funk-triad positions, barre chords tagged, the best capo for the song, and when the chords hit in the bar. | The line as played, in tab, bar by bar. Hear any bar on its own. | The main groove in notation, from the isolated drum track, and how often each hit happens. |
 
 | Keys | Voice |
 |:---:|:---:|
@@ -74,6 +74,12 @@ never hides inside a lyric line.
 | The voicing heard on the record, on a keyboard, with the next chord outlined. | The range of the melody against your voice type, and the key that suits you. |
 
 Change the key and everything follows: the chart, the shapes, the tab, the keyboard.
+
+**For singers.** Pick **Voice**: the page opens on the words, with the next part named. Paste the
+words (**+ Add the words**), pick your voice type and **Transpose to** the key it suggests, then
+**Keep it for the band**: every device opens the song in your key, and the page reminds you that
+the recording stays in its own. Tap a line's time to sing from there; stage mode shows the words
+big, your line lit, and the next part coming. The ChordPro export follows the key you keep.
 
 ### A method, not just a chart
 
@@ -152,11 +158,14 @@ For a Mac with Apple silicon (M1 or newer) or a Windows PC. Intel Macs: use
 [Docker](#with-docker-windows-macos-or-linux) instead (one part of woodshed has no ready-made
 build for them).
 
-1. From the [latest release](https://github.com/laugiov/woodshed/releases/latest) (under
-   **Assets**), download the installer for your computer:
-   - **Mac**: `woodshed-installer-macos.zip`. Double-click it to get **Install woodshed**
-     (`Install woodshed.command`); Safari may unzip it for you, in your Downloads folder.
-   - **Windows**: `woodshed-installer-windows.cmd`.
+1. Download the installer for your computer:
+   - **Mac**: [woodshed-installer-macos.zip](https://github.com/laugiov/woodshed/releases/latest/download/woodshed-installer-macos.zip).
+     Double-click it to get **Install woodshed** (`Install woodshed.command`); Safari may unzip it
+     for you, in your Downloads folder.
+   - **Windows**: [woodshed-installer-windows.cmd](https://github.com/laugiov/woodshed/releases/latest/download/woodshed-installer-windows.cmd).
+
+   Both come from the [latest release](https://github.com/laugiov/woodshed/releases/latest), with
+   what changed in it.
 2. Double-click it. A window says what it does, then installs woodshed for you only: about 1.5 GB
    to download, a few minutes, no administrator rights for the install itself.
 3. When it says **Done**, woodshed starts and opens your library in the browser. Drop a song on
@@ -184,7 +193,9 @@ library. Your songs are in the `woodshed` folder of your home folder.
 
 MP3, WAV, FLAC and Ogg files work as they are. AAC (M4A) and video files need
 [ffmpeg](https://ffmpeg.org/download.html): the Windows installer adds it when it can, and on a Mac
-`brew install ffmpeg` does it (with [Homebrew](https://brew.sh)).
+`brew install ffmpeg` does it (with [Homebrew](https://brew.sh)). Without Homebrew, turn an M4A into
+an MP3 in the Music app: **Music** > **Settings** > **Files** > **Import Settings**, choose **MP3
+Encoder**, then select the song and **File** > **Convert** > **Create MP3 Version**.
 
 **To update**, close woodshed first (its window), download the installer again from the
 [latest release](https://github.com/laugiov/woodshed/releases/latest) and run it. **To uninstall**,
@@ -363,10 +374,11 @@ woodshed is MIT. The models it downloads come with their own licences:
 | beat_this | Beats and downbeats | MIT |
 | MMS forced aligner (weights, 1.2 GB) | Placing lyrics (optional) | **CC BY-NC 4.0**: non-commercial use |
 
-The words feature is the only one that needs the MMS weights, and their licence allows
-non-commercial use only. Whether a band paid for its gigs is non-commercial is for you to judge
-from [the licence](https://creativecommons.org/licenses/by-nc/4.0/); this is not legal advice.
-Everything else in woodshed works without the words.
+**If your band is paid to play, leave the words feature aside** unless you are sure your use is
+non-commercial: it is the only part that needs the MMS weights, and
+[their licence](https://creativecommons.org/licenses/by-nc/4.0/) allows non-commercial use only
+(this is not legal advice). Everything else in woodshed is MIT and free for any use, paid gigs
+included.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,
 and Atkinson Hyperlegible, Barlow Condensed, JetBrains Mono, Noto Music and Bravura fonts (SIL OFL).
@@ -379,7 +391,13 @@ you don't have the rights to.
 
 - Alpha: the core (chart, sections, lyrics, parts, band mode) works, and the page is tested in
   Chromium and Firefox on every push and pull request. Installation will get simpler.
-- The bass tab and the drum groove are marked experimental in the page.
+- How accurate it is, as measured when the engine was built (October 2026; no larger benchmark
+  yet): on "Let It Be" against the Isophonics reference, chords 84.5 %
+  right (major/minor), beats and downbeats found at 0.97 (F-measure); on a funk cover, the drum
+  groove's kick and snare matched 9 bars out of 10, and the bass notes' octave was checked on two
+  real recordings. The bass tab note by note is not measured yet: it is marked experimental in the
+  page, as the drum groove, and both say when the read is unsure ("no clear groove", "no bass heard
+  in this bar"). Check them by ear.
 - Chords are triads by default; `--sevenths` adds 7 and m7 chords, less reliably.
 - Lyrics: Latin letters only (most accented letters are fine); write numbers out as words ("twenty", not "20").
 
