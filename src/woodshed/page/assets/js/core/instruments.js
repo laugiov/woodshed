@@ -139,13 +139,25 @@
     const keep = kept || ((p) => p > 0.6 * top && p > 0.2);
     const on = [];
     shares.forEach((p, i) => {
-      if (keep(p)) on.push(i % 4 === 0 ? c[i] : W.t("the {count} of {beat}", { count: c[i], beat: Math.floor(i / 4) + 1 }));
+      if (keep(p, i)) on.push(i % 4 === 0 ? c[i] : W.t("the {count} of {beat}", { count: c[i], beat: Math.floor(i / 4) + 1 }));
     });
     return on.length > 1 ? W.t("{list} and {last}", { list: on.slice(0, -1).join(", "), last: on[on.length - 1] }) : on.join("");
   }
 
+  // The drums' one rule, for the text, the notation, the grid and the groove heard: a slot is played
+  // when it is hit in more than half the bars. A drum hit a little everywhere and never steadily
+  // (the top slot under 0.6, half the slots or more at 0.2 and over) is no groove to write: none of
+  // its slots is played, and with no kick nor snare played the read says so.
+  function grooveHits(g) {
+    const diffuse = (row) => Math.max(...row) < 0.6 && row.filter((p) => p >= 0.2).length >= row.length / 2;
+    const out = {};
+    for (const k of ["kick", "snare", "hat"]) out[k] = diffuse(g[k]) ? g[k].map(() => false) : g[k].map((p) => p > 0.5);
+    out.clear = out.kick.some(Boolean) || out.snare.some(Boolean);
+    return out;
+  }
+
   W.instruments = {
     STRINGS, VOICES, tableShape, barreShape, openOrBarre, triadOf, triadCandidates, funkVoicings,
-    fingeredMidi, keysMidi, bassFrets, counts, bestTranspose, hitsText,
+    fingeredMidi, keysMidi, bassFrets, counts, bestTranspose, hitsText, grooveHits,
   };
 })();

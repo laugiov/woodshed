@@ -338,7 +338,6 @@
     "Hi-hat": "Charley",
     Snare: "Caisse claire",
     Kick: "Grosse caisse",
-    "Bigger dot: hit in more bars": "Plus gros point : frappé dans plus de mesures",
     "Notation: hits played in more than half the bars": "Notation : frappes jouées dans plus de la moitié des mesures",
     "▶ Hear the groove": "▶ Écouter le groove",
     "▶ Groove with the band": "▶ Groove avec le groupe",
@@ -352,8 +351,10 @@
     "snare {share}": "caisse claire {share}",
     "hi-hat {share}": "charley {share}",
     "Bars matching the main groove: {list}.": "Mesures conformes au groove principal : {list}.",
-    "The groove changes too much from bar to bar to write one down: trust your ears here.":
-      "Le groove change trop d'une mesure à l'autre pour en écrire un : fie-toi à tes oreilles ici.",
+    "No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here.":
+      "Pas de groove net : ni grosse caisse ni caisse claire ne revient dans la plupart des mesures, donc rien n'est écrit. Fie-toi à ton oreille ici.",
+    "Hi-hat on {hits}.": "Charleston sur {hits}.",
+    "Solid dot: played in more than half the bars; faint: now and then": "Point plein : joué dans plus de la moitié des mesures ; pâle : de temps en temps",
     "Fills are not detected yet.": "Les breaks ne sont pas encore détectés.",
     "No vocal track was separated for this song: run woodshed with stems to get this part.":
       "Aucune piste de voix séparée pour ce morceau : lance woodshed avec les pistes séparées (stems) pour avoir cette partie.",

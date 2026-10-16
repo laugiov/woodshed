@@ -58,21 +58,24 @@
     return out;
   }
 
-  function rhythmGrid(label, shares, per, id) {
+  // `played`: the slots the drums' rule keeps, drawn solid; the others faint and small.
+  function rhythmGrid(label, shares, per, id, played) {
     const counts = I.counts(per);
     return h(
       "div",
       { class: "groove", id, style: { gridTemplateColumns: "56px repeat(" + counts.length + ", minmax(0, 1fr))" } },
       h("span"),
       counts.map((c, i) => h("span", { class: "ct" + (i % 4 === 0 ? " downbeat" : "") }, c)),
-      ...(Array.isArray(label) ? label : [[label, shares]]).map(([name, row]) => [
+      ...(Array.isArray(label) ? label : [[label, shares, null]]).map(([name, row, on]) => [
         h("span", { class: "rl" }, name),
         row.map((v, i) => {
-          const size = v < 0.1 ? 0 : 6 + Math.round(v * 12);
+          const hit = on ? on[i] : null;
+          const size = v < 0.1 ? 0 : hit === false ? 4 + Math.round(v * 6) : 6 + Math.round(v * 12);
+          const opacity = hit === false ? 0.3 : 0.25 + v * 0.75;
           return h(
             "span",
             { class: "cell" + (i % 4 === 0 ? " q0" : ""), "data-six": i, title: W.t("{name}, {count}: hit in {pct}% of bars", { name, count: counts[i], pct: Math.round(v * 100) }) },
-            size ? h("span", { class: "dot", style: { width: size + "px", height: size + "px", opacity: (0.25 + v * 0.75).toFixed(2) } }) : null,
+            size ? h("span", { class: "dot" + (hit ? " on" : ""), style: { width: size + "px", height: size + "px", opacity: opacity.toFixed(2) } }) : null,
           );
         }),
       ]),
@@ -266,11 +269,12 @@
       const g = parts.groove;
       if (!g) return note(W.t("No steady groove was found on the drum track (too few bars with drums)."));
       const pct = (x) => W.t("{n}%", { n: Math.round(x * 100) });
+      const hits = I.grooveHits(g);
       return [
         h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Main groove {tag}"), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
-        song.per === 4 ? h("div", { class: "staffbox", id: "drumStaff", "data-testid": "drum-staff", "aria-label": W.t("Drum notation of the main groove") }) : null,
-        rhythmGrid([[W.t("Hi-hat"), g.hat], [W.t("Snare"), g.snare], [W.t("Kick"), g.kick]], null, song.per, "grooveGrid"),
-        h("div", { class: "legend-row" }, h("span", null, W.t("Bigger dot: hit in more bars")), song.per === 4 ? h("span", null, W.t("Notation: hits played in more than half the bars")) : null),
+        song.per === 4 && hits.clear ? h("div", { class: "staffbox", id: "drumStaff", "data-testid": "drum-staff", "aria-label": W.t("Drum notation of the main groove") }) : null,
+        rhythmGrid([[W.t("Hi-hat"), g.hat, hits.hat], [W.t("Snare"), g.snare, hits.snare], [W.t("Kick"), g.kick, hits.kick]], null, song.per, "grooveGrid"),
+        h("div", { class: "legend-row" }, h("span", null, W.t("Solid dot: played in more than half the bars; faint: now and then")), song.per === 4 && hits.clear ? h("span", null, W.t("Notation: hits played in more than half the bars")) : null),
         h(
           "div",
           { class: "hear-row" },
@@ -284,16 +288,19 @@
     // One rule for the text, the notation and the groove heard: a hit played in more than half the
     // bars. What no bar mostly plays is said, not invented; an agreement only for what is played.
     function grooveText(g, pct) {
-      const steady = (p) => p > 0.5;
-      const kick = I.hitsText(g.kick, song.per, steady);
-      const snare = I.hitsText(g.snare, song.per, steady);
-      const hat = g.hat.some(steady);
+      const hits = I.grooveHits(g);
       const said = [W.t("Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.", { bars: g.bars })];
+      if (!hits.clear) {
+        said.push(W.t("No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here."));
+        return said.join(" ");
+      }
+      const text = (k) => I.hitsText(g[k], song.per, (p, i) => hits[k][i]);
+      const [kick, snare, hat] = [text("kick"), text("snare"), text("hat")];
       said.push(kick ? W.t("Kick on {hits}.", { hits: kick }) : W.t("No kick in more than half the bars."));
       said.push(snare ? W.t("Snare on {hits}.", { hits: snare }) : W.t("No snare in more than half the bars."));
+      if (hat) said.push(W.t("Hi-hat on {hits}.", { hits: hat }));
       const agree = [kick ? W.t("kick {share}", { share: pct(g.agreement.kick) }) : null, snare ? W.t("snare {share}", { share: pct(g.agreement.snare) }) : null, hat ? W.t("hi-hat {share}", { share: pct(g.agreement.hat) }) : null].filter(Boolean);
       if (agree.length) said.push(W.t("Bars matching the main groove: {list}.", { list: agree.join(", ") }));
-      if (!kick && !snare) said.push(W.t("The groove changes too much from bar to bar to write one down: trust your ears here."));
       said.push(W.t("Fills are not detected yet."));
       return said.join(" ");
     }

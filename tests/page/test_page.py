@@ -822,8 +822,8 @@ def test_a_drum_read_with_no_steady_hit_says_so_instead_of_inventing_one(open_pa
     o = open_page("pop", variant="groove-loose")
     o.page.get_by_test_id("inst-drums").click()
     text = o.page.locator("#desk").inner_text()
-    assert "No kick in more than half the bars." in text and "No snare in more than half the bars." in text
-    assert "trust your ears" in text and "kick 1" not in text.lower()
+    assert "No clear groove" in text and "Trust your ears" in text
+    assert "kick on" not in text.lower() and "snare on" not in text.lower()
 
 
 def test_the_bass_tab_draws_doubtful_notes_faint_and_says_when_a_bar_has_no_bass(open_page: Any) -> None:
@@ -993,3 +993,35 @@ def test_print_the_chart_opens_the_print_dialog_once(open_page: Any) -> None:
     o.page.get_by_test_id("export-print").click()
     o.page.wait_for_timeout(300)
     assert o.js("window.printed") == 1
+
+
+BEYOND_THE_SKY = {  # a read with nothing steady: every slot of the kick between 0.18 and 0.51
+    "kick": [0.51, 0.42, 0.25, 0.39, 0.33, 0.21, 0.28, 0.18, 0.25, 0.23, 0.21, 0.21, 0.37, 0.18, 0.26, 0.26],
+    "snare": [0.05, 0.05, 0.07, 0.02, 0.02, 0.0, 0.05, 0.02, 0.0, 0.02, 0.0, 0.0, 0.05, 0.0, 0.04, 0.02],
+    "hat": [0.28, 0.23, 0.14, 0.14, 0.32, 0.18, 0.19, 0.18, 0.32, 0.14, 0.16, 0.16, 0.39, 0.19, 0.25, 0.26],
+    "agreement": {"kick": 0.72, "snare": 0.97, "hat": 0.78}, "bars": 57,
+}  # fmt: skip
+AS_I_AM = {  # a clear rock groove: kick on 1 and the & of 3, snare on 2 and 4, hi-hat on the beats
+    "kick": [0.56, 0.0, 0.25, 0.0, 0.1, 0.0, 0.04, 0.0, 0.48, 0.0, 0.63, 0.03, 0.01, 0.0, 0.27, 0.0],
+    "snare": [0.18, 0.02, 0.02, 0.04, 0.61, 0.01, 0.03, 0.01, 0.18, 0.0, 0.01, 0.0, 0.56, 0.0, 0.09, 0.0],
+    "hat": [0.53, 0.13, 0.25, 0.09, 0.9, 0.03, 0.22, 0.09, 0.59, 0.05, 0.26, 0.01, 0.84, 0.04, 0.17, 0.03],
+    "agreement": {"kick": 0.88, "snare": 0.91, "hat": 0.84}, "bars": 105,
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("groove", ["clear", "diffuse"])
+def test_the_drum_text_notation_and_grid_tell_one_story(open_page: Any, groove: str) -> None:
+    o = open_page("pop")
+    data = AS_I_AM if groove == "clear" else BEYOND_THE_SKY
+    o.js(f"Woodshed.current.parts.groove = {json.dumps(data)}")
+    o.page.get_by_test_id("inst-drums").click()
+    text = o.page.get_by_test_id("desk").inner_text()
+    played = o.page.locator("#grooveGrid .dot.on")
+    if groove == "diffuse":
+        assert "No clear groove" in text and "Kick on" not in text
+        expect(played).to_have_count(0)  # nothing drawn as played
+        expect(o.page.get_by_test_id("drum-staff")).to_have_count(0)  # no notation of a groove not there
+    else:
+        assert "Kick on 1 and the & of 3" in text and "Snare on 2 and 4" in text
+        assert "Hi-hat on 1, 2, 3 and 4" in text
+        expect(played).to_have_count(8)  # what the text names, and nothing else

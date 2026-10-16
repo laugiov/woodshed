@@ -68,9 +68,9 @@
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
-        const steady = (p) => p > 0.5; // as the notation and the drums panel
-        const kick = I.hitsText(g.kick, song.per, steady);
-        const snare = I.hitsText(g.snare, song.per, steady);
+        const hits = I.grooveHits(g); // as the notation and the drums panel
+        const kick = I.hitsText(g.kick, song.per, (p, i) => hits.kick[i]);
+        const snare = I.hitsText(g.snare, song.per, (p, i) => hits.snare[i]);
         if (!kick && !snare) return W.t("a groove that changes from bar to bar");
         if (!snare) return W.nodes(W.t("kick on {kick}, no steady snare"), { kick: h("b", null, kick) });
         if (!kick) return W.nodes(W.t("snare on {snare}, no steady kick"), { snare: h("b", null, snare) });
@@ -514,13 +514,14 @@
     };
     app.hearGroove = () => {
       const g = song.parts.groove;
+      const hits = I.grooveHits(g);
       const sixteenth = 60 / store.get().bpm / 4;
       sounds.play(["drums"], { drums: [36, 38, 42] }, (t) => {
         for (let rep = 0; rep < 2; rep++) {
           g.kick.forEach((_, i) => {
             const at = t + (rep * g.kick.length + i) * sixteenth;
-            if (g.kick[i] > 0.5) sounds.note("drums", 36, at, 0.3, 0.95);
-            if (g.snare[i] > 0.5) sounds.note("drums", 38, at, 0.4, 0.8);
+            if (hits.kick[i]) sounds.note("drums", 36, at, 0.3, 0.95);
+            if (hits.snare[i]) sounds.note("drums", 38, at, 0.4, 0.8);
             if (g.hat[i] > 0.4) sounds.note("drums", 42, at, 0.12, 0.12 + 0.3 * g.hat[i]);
           });
         }
@@ -555,6 +556,7 @@
       const box = $("drumStaff");
       const g = song.parts && song.parts.groove;
       if (!box || !g) return;
+      const hits = I.grooveHits(g);
       if (!window.Vex || !window.Vex.Flow) {
         W.clear(box, h("p", { class: "hint", style: { margin: "6px" } }, W.t("Drawing the notation…")));
         const el = document.createElement("script");
@@ -570,10 +572,10 @@
       const feet = [];
       for (let i = 0; i < 16; i++) {
         const k = [];
-        if (g.hat[i] > 0.5) k.push("g/5/x2");
-        if (g.snare[i] > 0.5) k.push("c/5");
+        if (hits.hat[i]) k.push("g/5/x2");
+        if (hits.snare[i]) k.push("c/5");
         hands.push(k);
-        feet.push(g.kick[i] > 0.5 ? ["f/4"] : []);
+        feet.push(hits.kick[i] ? ["f/4"] : []);
       }
       const voice = (slots, dir) => {
         const notes = [];
