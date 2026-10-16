@@ -201,7 +201,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .doubt sup { font-size: 0.55em; margin-left: 1px; }
 .doubt.timing { color: inherit; text-decoration: underline dotted 1px var(--muted); text-underline-offset: 6px; }
 .doubt.fixed { color: inherit; text-decoration: none; }
-.pop .alt .tag { margin-left: 6px; font: 600 11px var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.pop .alt .an { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.pop .alt .tag { font: 600 9.5px var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .pop .alt.in-use .an { color: var(--accent); }
 .shape-card .barre-tag { color: var(--warn); font-weight: 700; }
 .back-to-song { position: fixed; right: 18px; bottom: calc(var(--dock-h, 96px) + 68px); z-index: 16; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }

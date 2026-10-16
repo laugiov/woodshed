@@ -1046,3 +1046,58 @@ def test_on_a_tablet_the_guitar_shapes_stay_in_sight_above_the_player(open_page:
     o.page.set_viewport_size({"width": 820, "height": 1180})
     o.page.get_by_test_id("inst-bass").click()
     expect(strip).to_be_hidden()  # shapes for the guitar
+
+
+def test_the_doubt_pop_is_a_named_dialog_that_keeps_the_keyboard(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    o.page.get_by_test_id("doubt").first.focus()
+    o.page.keyboard.press("Enter")
+    pop = o.page.get_by_role("dialog", name=re.compile(r"^Bar \d+: which one do you hear\?"))
+    expect(pop).to_be_visible()
+    expect(o.page.get_by_test_id("pick-first")).to_be_focused()  # straight on the first choice
+    buttons = pop.locator("button:not([disabled])")
+    buttons.last.focus()
+    o.page.keyboard.press("Tab")  # the keyboard stays in the dialog
+    expect(buttons.first).to_be_focused()
+    o.page.keyboard.press("Shift+Tab")
+    expect(buttons.last).to_be_focused()
+    # The "analysis" tag sits under its chord, never over the share bar.
+    tag = pop.locator(".alt .tag").first
+    meter = tag.locator("xpath=ancestor::*[contains(@class,'alt')][1]").locator(".meter")
+    t, m = tag.bounding_box(), meter.bounding_box()
+    assert t is not None and m is not None and (t["x"] + t["width"] <= m["x"] or t["y"] >= m["y"] + m["height"])
+
+
+def test_a_doubt_opened_from_the_keyboard_off_screen_sits_by_its_bar(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    o.page.set_viewport_size({"width": 1280, "height": 500})
+    doubt = o.page.get_by_test_id("doubt").first
+    # The chord just under the bottom edge, as after the page followed the song.
+    o.js("(() => { const r = document.querySelector('[data-testid=doubt]').getBoundingClientRect();"
+         " window.scrollBy(0, r.top - innerHeight + 4); })()")  # fmt: skip
+    doubt.focus()
+    o.page.keyboard.press("Enter")
+    expect(o.page.get_by_test_id("doubt-pop")).to_be_visible()
+    d, p = doubt.bounding_box(), o.page.get_by_test_id("doubt-pop").bounding_box()
+    assert d is not None and p is not None
+    assert d["y"] >= 0 and d["y"] + d["height"] <= 501  # the chord brought into sight
+    assert abs(p["y"] - (d["y"] + d["height"])) < 40 or abs(p["y"] + p["height"] - d["y"]) < 40  # beside it
+
+
+def test_the_part_chips_are_one_tab_stop_moved_with_the_arrows(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-named")
+    chips = o.page.get_by_test_id("form-chip")
+    assert chips.count() > 1
+    assert o.js("[...document.querySelectorAll('[data-testid=form-chip]')].filter(c => c.tabIndex >= 0).length") == 1
+    chips.first.focus()
+    o.page.keyboard.press("ArrowRight")
+    expect(chips.nth(1)).to_be_focused()
+    o.page.keyboard.press("End")
+    expect(chips.last).to_be_focused()
+
+
+def test_the_keyboard_never_lands_on_hidden_text(open_page: Any) -> None:
+    o = open_page("pop")
+    for _ in range(60):
+        o.page.keyboard.press("Tab")
+        assert o.js("!!document.activeElement.closest('.missing-files, [hidden]')") is False

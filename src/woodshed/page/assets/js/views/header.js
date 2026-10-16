@@ -261,7 +261,7 @@
       const pop = $("pop");
       clear(
         pop,
-        h("h3", null, W.t("Bar {n}: which one do you hear?", { n: u + 1 })),
+        h("h3", { id: "popTitle" }, W.t("Bar {n}: which one do you hear?", { n: u + 1 })),
         h("p", { "data-testid": "doubt-note" }, note),
         alts.map((alt, i) => {
           const tag = chord.fixed && same(alt, chord) ? W.t("yours") : same(alt, analysed) ? W.t("analysis") : null;
@@ -298,10 +298,27 @@
       );
       pop.hidden = false;
       opener = button;
+      button.scrollIntoView({ block: "nearest" }); // a chord half off screen: the pop sits by it, not at the top
       place(pop, button, true);
-      const f = pop.querySelector("button");
+      const f = pop.querySelector(".pick:not([disabled])") || pop.querySelector("button");
       if (f) f.focus();
     }
+    // A dialog keeps the keyboard: Tab from its last button comes back to its first, and Shift+Tab
+    // the other way; Escape closes it (app.js).
+    $("pop").addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const list = [...$("pop").querySelectorAll("button:not([disabled])")];
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    });
 
     return { toast, closeAll, openMenu, openDoubt };
   };

@@ -98,13 +98,29 @@
     function renderForm(s) {
       const list = app.sections();
       const cur = list.length ? song.sectionIndex(curBar(s), list) : -1;
+      const focused = [...$("form").children].indexOf(document.activeElement);
+      const stop = focused >= 0 ? focused : Math.max(0, cur); // one tab stop: the part playing, or the one in hand
       clear(
         $("form"),
         list.map((sec, k) =>
-          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec.name)),
+          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, tabindex: k === stop ? "0" : "-1", "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec.name)),
         ),
       );
+      if (focused >= 0 && $("form").children[focused]) $("form").children[focused].focus();
     }
+    // The parts: one stop for Tab, the arrows (and Home, End) move between them.
+    $("form").addEventListener("keydown", (e) => {
+      const chips = [...$("form").children];
+      const k = chips.indexOf(document.activeElement);
+      if (k < 0) return;
+      const to = { ArrowRight: k + 1, ArrowDown: k + 1, ArrowLeft: k - 1, ArrowUp: k - 1, Home: 0, End: chips.length - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault();
+      e.stopPropagation(); // the arrows move bars elsewhere on the page
+      const next = chips[Math.max(0, Math.min(chips.length - 1, to))];
+      chips.forEach((c) => c.setAttribute("tabindex", c === next ? "0" : "-1"));
+      next.focus();
+    });
 
     // A sung line on its bars: each bar kept whole (a bar line, numbered, then its words), each
     // chord above the word it lands on, a chord with no word under it over a dash, a push marked.
