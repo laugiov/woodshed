@@ -104,6 +104,8 @@ def test_a_phone_of_the_band_is_told_where_words_are_added(
     monkeypatch.setattr(app.Handler, "_from_this_computer", lambda self: False)
     page.goto(library.url + "Pop.woodshed/index.html")
     page.get_by_test_id("words-open").click()
-    expect(page.get_by_test_id("words-elsewhere")).to_contain_text("computer that runs the library")
+    expect(page.get_by_test_id("words-dialog")).to_be_visible()
+    # Said once the library answers (it is asked when the dialog opens).
+    expect(page.get_by_test_id("words-elsewhere")).to_contain_text("computer that runs the library", timeout=10000)
     page.get_by_test_id("words-close").click()
     expect(page.get_by_test_id("words-dialog")).to_be_hidden()

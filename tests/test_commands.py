@@ -582,10 +582,10 @@ def test_the_summary_counts_only_close_calls(tmp_path: Path, cache: Path) -> Non
 
 
 def _as_built_by_an_older_woodshed(page: Path) -> None:
-    manifest = json.loads((page / "woodshed.json").read_text())
+    manifest = json.loads((page / "woodshed.json").read_text(encoding="utf-8"))
     manifest["settings"]["page"] = "0123456789abcdef"
-    (page / "woodshed.json").write_text(json.dumps(manifest))
-    (page / "assets" / "app.css").write_text("/* the old page */")
+    (page / "woodshed.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (page / "assets" / "app.css").write_text("/* the old page */", encoding="utf-8")
     (page / "assets" / "js" / "views" / "words.js").unlink()  # a script the old page did not have
 
 
@@ -597,8 +597,10 @@ def test_a_page_built_by_an_older_woodshed_gets_the_new_page_code_without_a_new_
     wav = synth.write("pop", tmp_path).wav
     assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
     page = tmp_path / "pop.woodshed"
-    (page / lyrics.LYRICS_JS).write_text("window.WOODSHED_LYRICS = {};\n")  # the page's own files stay
-    data_before = build.DATA_BLOCK.search((page / "index.html").read_text()).group(1)  # type: ignore[union-attr]
+    (page / lyrics.LYRICS_JS).write_text(
+        "window.WOODSHED_LYRICS = {};\n", encoding="utf-8"
+    )  # the page's own files stay
+    data_before = build.DATA_BLOCK.search((page / "index.html").read_text(encoding="utf-8")).group(1)  # type: ignore[union-attr]
     _as_built_by_an_older_woodshed(page)
 
     def no_analysis(*args: Any, **kwargs: Any) -> Any:
@@ -611,10 +613,10 @@ def test_a_page_built_by_an_older_woodshed_gets_the_new_page_code_without_a_new_
     shipped = Path(build.__file__).parent / "page" / "assets"
     assert (page / "assets" / "app.css").read_bytes() == (shipped / "app.css").read_bytes()
     assert (page / "assets" / "js" / "views" / "words.js").is_file()
-    index = (page / "index.html").read_text()
+    index = (page / "index.html").read_text(encoding="utf-8")
     assert "views/words.js" in index and build.DATA_BLOCK.search(index).group(1) == data_before  # type: ignore[union-attr]
-    assert (page / lyrics.LYRICS_JS).read_text() == "window.WOODSHED_LYRICS = {};\n"
-    assert json.loads((page / "woodshed.json").read_text())["settings"]["page"] == build.page_revision()
+    assert (page / lyrics.LYRICS_JS).read_text(encoding="utf-8") == "window.WOODSHED_LYRICS = {};\n"
+    assert json.loads((page / "woodshed.json").read_text(encoding="utf-8"))["settings"]["page"] == build.page_revision()
     assert not [p.name for p in page.iterdir() if p.name.startswith(".")]  # nothing left behind
 
 
@@ -628,12 +630,14 @@ def test_page_data_of_another_format_is_rebuilt_not_given_new_code(tmp_path: Pat
     from woodshed.view import VIEW_VERSION
 
     index = page / "index.html"
-    before = index.read_text()
-    index.write_text(before.replace(f'"view_version":{VIEW_VERSION}', f'"view_version":{VIEW_VERSION - 1}'))
-    assert index.read_text() != before
+    before = index.read_text(encoding="utf-8")
+    index.write_text(
+        before.replace(f'"view_version":{VIEW_VERSION}', f'"view_version":{VIEW_VERSION - 1}'), encoding="utf-8"
+    )
+    assert index.read_text(encoding="utf-8") != before
     assert run.update_page_code(page) is None  # the page's data is not what this page code reads
-    assert (page / "assets" / "app.css").read_text() == "/* the old page */"
-    assert json.loads((page / "woodshed.json").read_text())["settings"]["page"] != build.page_revision()
+    assert (page / "assets" / "app.css").read_text(encoding="utf-8") == "/* the old page */"
+    assert json.loads((page / "woodshed.json").read_text(encoding="utf-8"))["settings"]["page"] != build.page_revision()
 
 
 def test_the_library_updates_its_pages_when_it_starts(tmp_path: Path, cache: Path) -> None:
@@ -659,7 +663,7 @@ def test_a_refresh_cut_short_leaves_the_page_as_it_was(
     assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
     page = tmp_path / "pop.woodshed"
     _as_built_by_an_older_woodshed(page)
-    index = (page / "index.html").read_text()
+    index = (page / "index.html").read_text(encoding="utf-8")
     real = Path.replace
     calls: list[Path] = []
 
@@ -673,8 +677,10 @@ def test_a_refresh_cut_short_leaves_the_page_as_it_was(
     with pytest.raises(WoodshedError, match=r"could not update pop\.woodshed"):
         run.update_page_code(page)
     monkeypatch.setattr(Path, "replace", real)
-    assert (page / "assets" / "app.css").read_text() == "/* the old page */"  # its own code, with its own index
-    assert (page / "index.html").read_text() == index
+    assert (page / "assets" / "app.css").read_text(
+        encoding="utf-8"
+    ) == "/* the old page */"  # its own code, with its own index
+    assert (page / "index.html").read_text(encoding="utf-8") == index
     assert not [p.name for p in page.iterdir() if p.name.startswith(".")]
     assert run.update_page_code(page) is not None  # and the next start updates it
 
@@ -722,5 +728,5 @@ def test_a_ctrl_c_during_a_refresh_leaves_the_page_as_it_was(
     with pytest.raises(KeyboardInterrupt):
         run.update_page_code(page)
     monkeypatch.setattr(Path, "replace", real)
-    assert (page / "assets" / "app.css").read_text() == "/* the old page */"
+    assert (page / "assets" / "app.css").read_text(encoding="utf-8") == "/* the old page */"
     assert not [p.name for p in page.iterdir() if p.name.startswith(".")]
