@@ -184,17 +184,23 @@
     }
     function share(fixes) {
       api("/api/corrections", { page: folder, key: app.fixesKey, fixes }).then((r) => {
-        if (r.ok && typeof r.data.rev === "number") fixesRev = Math.max(fixesRev, r.data.rev);
-        else app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
+        if (!r.ok || typeof r.data.rev !== "number") app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
+        else heardRev(r.data.rev);
       });
       return true;
     }
     app.shareFixes = share;
+    // This device's own change is the next revision: nothing missed. A revision further on means
+    // another device changed the song in between: read it, the stream will not say it again.
+    function heardRev(rev) {
+      if (rev === fixesRev + 1) fixesRev = rev;
+      else if (rev > fixesRev) loadFixes();
+    }
     // The band's key or the leader's note for this song: the answer is what the library keeps.
     app.shareBand = async (change) => {
       const r = await api("/api/band", { page: folder, ...change });
       if (!r.ok || typeof r.data.rev !== "number") return null;
-      fixesRev = Math.max(fixesRev, r.data.rev);
+      heardRev(r.data.rev);
       return r.data.band;
     };
     document.addEventListener("visibilitychange", () => {

@@ -413,6 +413,7 @@ def test_the_band_key_and_note_are_kept_with_the_corrections_for_every_device(se
     [
         {"page": "One.woodshed", "transpose": 7, "key": "G"},
         {"page": "One.woodshed", "transpose": 2},  # a key without its name
+        {"page": "One.woodshed", "key": "D"},  # a name without its key
         {"page": "One.woodshed", "transpose": 2, "key": "<b>"},
         {"page": "One.woodshed", "transpose": True, "key": "D"},
         {"page": "One.woodshed", "note": "x" * 301},
@@ -607,3 +608,76 @@ def test_the_switch_needs_the_token_and_a_yes_or_no(server: app.AppServer) -> No
     assert post(server, "/api/network", {"on": True}, token="wrong")[0] == 403
     assert post(server, "/api/network", {"on": "yes"})[0] == 400
     assert server.doors == []
+
+
+@needs_lan
+def test_through_the_door_no_song_is_added_even_when_uploads_are_open(tmp_path: Path) -> None:
+    library = app.Library(tmp_path / "library", Options(use_stems=False, open_page=False))
+    srv = app.AppServer(library, uploads_from_network=True)  # as a container needs it
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        srv.set_door(True)
+        assert by_door(srv, "POST", "/api/songs?name=a.mp3", b"x", token=True) == 403
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@needs_lan
+def test_through_the_door_a_foreign_host_is_still_refused(server: app.AppServer) -> None:
+    server.set_door(True)
+    conn = http.client.HTTPConnection(LAN[0], server.port, timeout=10)
+    conn.request("GET", "/api/songs", headers={"Host": f"band.example:{server.port}"})  # DNS rebinding
+    assert conn.getresponse().status == 421
+    conn.close()
+
+
+@needs_lan
+def test_a_door_that_cannot_open_everywhere_opens_nowhere(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "lan_addresses", lambda: [LAN[0], "192.0.2.1"])  # the second is not ours
+    status, answer = post(server, "/api/network", {"on": True})
+    assert status == 409 and "cannot be let in" in answer["error"]
+    assert server.doors == []
+    monkeypatch.setattr(app, "lan_addresses", lambda: LAN)
+    assert post(server, "/api/network", {"on": True})[1]["on"] is True  # the port was given back
+
+
+@needs_lan
+def test_stopping_the_app_closes_the_door(tmp_path: Path) -> None:
+    library = app.Library(tmp_path / "library", Options(use_stems=False, open_page=False))
+    srv = app.AppServer(library)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.set_door(True)
+    srv.shutdown()
+    srv.server_close()
+    with pytest.raises(OSError):
+        by_door(srv, "GET", "/api/songs")
+    srv.set_door(True)  # a click arriving while it stops opens nothing
+    assert srv.doors == []
+
+
+@needs_lan
+def test_closing_the_door_leaves_the_computers_own_stream_alone(server: app.AppServer) -> None:
+    follower = Stream(server)  # this computer, not through the door
+    try:
+        follower.next()
+        post(server, "/api/network", {"on": True})
+        post(server, "/api/network", {"on": False})
+        follower.next()  # woken by the door closing, still there
+        post(server, "/api/live", live(lead=True))
+        event = follower.next()
+        assert isinstance(event, dict) and event["leader"] == LEADER
+    finally:
+        follower.close()
+
+
+def test_a_damaged_band_entry_leaves_the_corrections(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    target = server.library.root / app.CORRECTIONS_DIR / "One.woodshed.json"
+    data = json.loads(target.read_text())
+    data["band"] = {"transpose": 99, "key": "<b>"}  # edited by hand
+    target.write_text(json.dumps(data))
+    read = json.loads(request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")[2])
+    assert read["band"] == {} and read["fixes"] == {"3": [9, "m"], "7": [7, ""]}

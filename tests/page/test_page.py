@@ -900,7 +900,7 @@ def test_stage_mode_shows_the_guitar_shapes_of_the_chord_now_and_next(open_page:
     o = open_page("pop")
     o.page.get_by_test_id("inst-guitar").click()
     o.js("Woodshed.app.seekBar(1)")
-    o.page.get_by_test_id("stage-open").click()
+    o.js("Woodshed.app.setStage(true, false)")  # full screen is not the point here, and its exit is async
     shapes = o.page.get_by_test_id("stage-shapes")
     expect(shapes.locator("svg")).to_have_count(2)
     before = shapes.inner_html()
@@ -908,12 +908,12 @@ def test_stage_mode_shows_the_guitar_shapes_of_the_chord_now_and_next(open_page:
     assert shapes.inner_html() != before
     o.page.get_by_test_id("stage-exit").click()
     o.page.set_viewport_size({"width": 844, "height": 390})  # a phone held sideways: no room for them
-    o.js("Woodshed.app.setStage(true, false)")  # headless full screen would take the whole desktop
+    o.js("Woodshed.app.setStage(true, false)")
     expect(shapes).to_have_count(1)
     expect(shapes).to_be_hidden()
     o.page.get_by_test_id("stage-exit").click()
     o.page.get_by_test_id("inst-bass").click()
-    o.page.get_by_test_id("stage-open").click()
+    o.js("Woodshed.app.setStage(true, false)")
     expect(o.page.get_by_test_id("stage-shapes")).to_have_count(0)  # guitar shapes for the guitar only
 
 

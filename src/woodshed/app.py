@@ -15,6 +15,7 @@ network address (closed again, it drops the phones still connected).
 from __future__ import annotations
 
 import contextlib
+import errno
 import ipaddress
 import json
 import math
@@ -26,6 +27,7 @@ import secrets
 import shutil
 import signal
 import socket
+import socketserver
 import threading
 import time
 import traceback
@@ -128,8 +130,6 @@ class Library:
         self.reserved: set[str] = set()
         self.running: Path | None = None
         self.stopping = threading.Event()  # set by interrupted(): the worker takes no new job, records no failure
-        for leftover in self.songs.glob(".*.part"):  # uploads cut short by a stop or a crash
-            leftover.unlink(missing_ok=True)
         # Analyses and words share one queue: one heavy job at a time. Words carry their text.
         self.queue: queue.Queue[tuple[Job, Path, Options, bool, str | None]] = queue.Queue()
         self.lock = threading.Lock()
@@ -158,6 +158,12 @@ class Library:
                 info["doubts"] = left
             out.append(info)
         return sorted(out, key=lambda s: str(s.get("title", "")).lower())
+
+    def clear_cut_uploads(self) -> None:
+        """Uploads cut short by a stop or a crash. Only once this app holds the port: an app already
+        running on the library may be receiving one."""
+        for leftover in self.songs.glob(".*.part"):
+            leftover.unlink(missing_ok=True)
 
     def update_pages(self) -> list[str]:
         """Pages built by an older woodshed get this version's page code; their analysis is kept."""
@@ -721,6 +727,11 @@ def lan_addresses() -> list[str]:
     return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
 
 
+def _home_network(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return ip.is_private and not ip.is_link_local
+
+
 def in_container() -> bool:
     """In the Docker image: its own address is on Docker's bridge, the phones cannot reach it."""
     return os.environ.get("WOODSHED_CONTAINER") == "1"
@@ -942,6 +953,7 @@ class Handler(BaseHTTPRequestHandler):
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
+        limits |= {"/api/band": 4096, "/api/network": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
         if chunked or not 0 < length <= limit:
@@ -1136,11 +1148,12 @@ class AppServer(ThreadingHTTPServer):
 
     def set_door(self, on: bool) -> None:
         """Let the band's phones in, on this computer's network address and the same port, or not."""
-        if self.network:
+        if self.network or self.live.closed:  # on the network from the start, or stopping
             return
         with self.doors_lock:
             if on and not self.doors:
-                found = lan_addresses()
+                # A home or rehearsal network: a VPN's or a tunnel's address is no way in for a phone.
+                found = [a for a in lan_addresses() if _home_network(a)]
                 if not found:
                     raise WoodshedError("no network found: is this computer on the band's Wi-Fi?")
                 try:
@@ -1151,8 +1164,8 @@ class AppServer(ThreadingHTTPServer):
                     why = exc.strerror or exc
                     raise WoodshedError(f"the phones cannot be let in on port {self.port} ({why})") from exc
                 for door in self.doors:
-                    door.started = True  # shutdown() then waits for this loop, which may not be running yet
                     threading.Thread(target=door.serve_forever, name="woodshed-door", daemon=True).start()
+                    door.started = True  # shutdown() then waits for this loop, which may not be running yet
                 print(f"woodshed app: the band's phones can open {' or '.join(self.lan_urls())}", flush=True)
             elif not on and self.doors:
                 self._close_doors()
@@ -1208,11 +1221,16 @@ class Door(AppServer):
         self.started = False
         ThreadingHTTPServer.__init__(self, (address, main.port), Handler)
         self.library, self.live, self.token, self.assets = main.library, main.live, main.token, main.assets
-        self.uploads_from_network = main.uploads_from_network
+        self.uploads_from_network = False  # the phones play, lead and follow; songs come from this computer
         self.port = main.port
         self.names = main.names
         self.network = True
         self.doors = []
+
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind asks the DNS for this address's name: seconds on some routers.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.address, int(self.server_address[1])
 
     def lan_urls(self) -> list[str]:
         return self.main.lan_urls()
@@ -1223,11 +1241,16 @@ class Door(AppServer):
 
 def running_here(port: int) -> bool:
     """Is woodshed already answering on this port (opened twice from the menu or the Dock)?"""
+    import urllib.error
     import urllib.request
 
+    no_proxy = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # this computer, never a proxy
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/token", timeout=1.5) as answer:
+        with no_proxy.open(f"http://127.0.0.1:{port}/api/token", timeout=1.5) as answer:
             return isinstance(json.loads(answer.read(4096)).get("token"), str)
+    except urllib.error.HTTPError as exc:  # another service answered: its answer is closed, not woodshed
+        exc.close()
+        return False
     except (OSError, ValueError, AttributeError):
         return False
 
@@ -1268,16 +1291,21 @@ def serve(
     library: Library | None = None
     server: AppServer | None = None
     try:  # a stop at any point, start included, leaves the songs in progress to resume
-        if port and running_here(port):
-            # Started again while it runs (the menu, the Dock): the running one is shown. Checked
-            # before the library is opened, which clears uploads cut short: these are its own.
+        library = Library(root, opts)
+        try:
+            server = AppServer(library, host, port, uploads_from_network)
+        except OSError as exc:
+            if exc.errno not in (errno.EADDRINUSE, 10048) or not running_here(port):  # 10048: Windows
+                raise
+            # Started again while it runs (the menu, the Dock): the running one is shown, and this
+            # one touches nothing of the library (`finally` below has no library to stop).
+            library = None
             url = f"http://127.0.0.1:{port}/"
             print(f"woodshed app: already running at {url}", flush=True)
             if open_browser:
                 webbrowser.open(url)
             return
-        library = Library(root, opts)
-        server = AppServer(library, host, port, uploads_from_network)
+        library.clear_cut_uploads()
         updated = library.update_pages()
         if updated:
             print(f"woodshed app: {len(updated)} page(s) updated to this version's page", flush=True)

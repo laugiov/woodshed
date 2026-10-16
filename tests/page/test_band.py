@@ -401,3 +401,39 @@ def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server:
     finally:
         for name in ("pop", "waltz"):
             (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)
+
+
+def test_a_note_open_while_another_is_saved_stays_open(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = browser.new_context(locale="en-US").new_page()
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    try:
+        page.goto(server.url)
+        items = page.get_by_test_id("set-item")
+        expect(items).to_have_count(2)
+        items.first.get_by_test_id("set-note").click()
+        page.get_by_test_id("set-note-input").fill("count of 4")
+        items.nth(1).get_by_test_id("set-note").click()  # the first is saved on the way
+        editor = page.get_by_test_id("set-note-input")
+        expect(editor).to_have_count(1)
+        expect(items.nth(1).get_by_test_id("set-note-input")).to_be_focused()
+        editor.fill("capo 2")
+        editor.press("Enter")
+        expect(items.first.get_by_test_id("set-note")).to_have_text("count of 4")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2")
+        assert problems == []
+    finally:
+        for name in ("pop", "waltz"):
+            (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(not app.lan_addresses(), reason="this computer has no network address")
+def test_the_library_poll_leaves_the_set_list_as_it_is(browser: Browser, server: app.AppServer) -> None:
+    page = browser.new_context(locale="en-US").new_page()
+    page.goto(server.url)
+    expect(page.get_by_test_id("set-item")).to_have_count(2)
+    page.get_by_test_id("set-place").first.evaluate("(el) => { el.dataset.kept = 'yes'; }")
+    server.set_door(True)  # the poll sees a change, not in the set
+    expect(page.get_by_test_id("network-switch")).to_have_attribute("aria-checked", "true")
+    expect(page.get_by_test_id("set-place").first).to_have_attribute("data-kept", "yes")  # not drawn again
+    server.set_door(False)

@@ -42,7 +42,7 @@
       } catch (err) {
         toast(W.t("The set list was not saved."));
       }
-      renderSet();
+      renderSet({ again: true });
       if (shown) render(shown);
     });
     return saving;
@@ -61,7 +61,10 @@
     });
   }
   // A set of 40 songs is over an hour: hours and minutes.
-  const setLength = (t) => (t >= 3600 ? W.t("{h} h {m} min", { h: Math.floor(t / 3600), m: Math.round((t % 3600) / 60) }) : fmt(t));
+  const setLength = (t) => {
+    const minutes = Math.round(t / 60);
+    return t >= 3600 ? W.t("{h} h {m} min", { h: Math.floor(minutes / 60), m: minutes % 60 }) : fmt(t);
+  };
   // The leader's note on a song ("capo 2, starts on the chorus"): kept by the library with the song,
   // shown on its page on every device.
   async function saveNote(folder, note) {
@@ -69,7 +72,7 @@
       const r = await fetch("/api/band", { method: "POST", headers: { "X-Woodshed-Token": token, "Content-Type": "application/json" }, body: JSON.stringify({ page: folder, note }) });
       const answer = await r.json();
       if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
-      else if (!r.ok) toast(W.t("The note was not saved: {why}", { why: answer.error }));
+      else if (!r.ok) toast(W.t("The note was not saved: {why}", { why: W.t(answer.error) }));
       else info[folder] = { ...(info[folder] || {}), band: answer.band };
     } catch (err) {
       toast(W.t("The note was not saved."));
@@ -82,20 +85,33 @@
       if (done) return;
       done = true;
       if (keep && input.value.trim() !== note) await saveNote(folder, input.value);
-      editing = null;
-      renderSet(true);
-      const again = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-note"]');
-      if (again) again.focus();
+      // Drawn after the click that ended the editing: the button under the pointer gets that click.
+      setTimeout(() => {
+        if (editing !== folder) return; // another song's note was opened meanwhile: left as it is
+        editing = null;
+        renderSet({ again: true, editor: true });
+        const again = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-note"]');
+        if (again) again.focus();
+      }, 0);
     };
     input.addEventListener("keydown", (e) => {
+      if (e.isComposing) return; // Enter picks a word in an input method, it does not save
       if (e.key === "Enter") finish(true);
       else if (e.key === "Escape") finish(false);
     });
     input.addEventListener("blur", () => finish(true));
     return input;
   }
-  function renderSet(force) {
-    if (editing && !force) return; // drawn again when the note is written: the text stays as typed
+  // Drawn again only when what it shows changes: the 1.5 s poll would close an open menu under the
+  // pointer and take the keyboard's place away.
+  let setShown = "";
+  // `again`: drawn even if nothing changed (a save refused leaves a menu to put back); `editor`: drawn
+  // although a note is being written (opening or closing it).
+  function renderSet({ again = false, editor = false } = {}) {
+    if (editing && !editor) return; // drawn again when the note is written: the text stays as typed
+    const shows = JSON.stringify([setlist, setlist.map((f) => [titles[f], info[f] && [info[f].key, info[f].bpm, info[f].duration, info[f].band]]), editing, W.lang()]);
+    if (shows === setShown && !again) return;
+    setShown = shows;
     const known = setlist.filter((f) => info[f]);
     const total = known.reduce((n, f) => n + (info[f].duration || 0), 0);
     $("setSummary").textContent = setlist.length
@@ -115,7 +131,7 @@
           ? noteEditor(folder, band.note || "")
           : h("button", { type: "button", class: "set-note" + (band.note ? "" : " empty"), "data-testid": "set-note", onclick: () => {
               editing = folder;
-              renderSet(true);
+              renderSet({ again: true, editor: true });
             } }, band.note ? h("span", { translate: "no" }, band.note) : W.t("+ Note"));
         return h(
           "li",
@@ -209,7 +225,11 @@
     const again = document.querySelector('[data-testid="network-switch"]');
     if (again) again.focus(); // the button was drawn again: the keyboard stays on it
   }
+  let netShown = "";
   function renderNet(data) {
+    const shows = JSON.stringify([data.container, data.network, data.addresses, W.lang()]);
+    if (shows === netShown) return;
+    netShown = shows;
     const net = data.network || { on: false, fixed: false, can_switch: false };
     const addresses = data.addresses || [];
     const out = [];

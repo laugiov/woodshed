@@ -662,3 +662,36 @@ def test_started_again_while_it_runs_it_shows_the_running_one(
     assert opened == [f"http://127.0.0.1:{running.port}/"]
     assert "already running" in capsys.readouterr().out
     assert work.exists()  # its work in progress is left alone
+
+
+def test_another_service_on_the_port_is_not_taken_for_woodshed(tmp_path: Path) -> None:
+    import http.server
+
+    other = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+    threading.Thread(target=other.serve_forever, daemon=True).start()
+    try:
+        assert not app.running_here(other.server_address[1])
+        with pytest.raises(OSError):
+            app.serve(
+                tmp_path / "library",
+                Options(use_stems=False, open_page=False),
+                port=other.server_address[1],
+                open_browser=False,
+            )
+    finally:
+        other.shutdown()
+        other.server_close()
+
+
+def test_a_proxy_in_the_environment_does_not_hide_the_running_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")  # nothing there: a proxied request would fail
+    monkeypatch.setenv("NO_PROXY", "")
+    running = app.AppServer(app.Library(tmp_path / "library", Options(use_stems=False, open_page=False)))
+    threading.Thread(target=running.serve_forever, daemon=True).start()
+    try:
+        assert app.running_here(running.port)
+    finally:
+        running.shutdown()
+        running.server_close()
