@@ -1101,3 +1101,20 @@ def test_the_keyboard_never_lands_on_hidden_text(open_page: Any) -> None:
     for _ in range(60):
         o.page.keyboard.press("Tab")
         assert o.js("!!document.activeElement.closest('.missing-files, [hidden]')") is False
+
+
+def test_a_looped_passage_shows_the_bass_tab_of_every_looped_bar(open_page: Any) -> None:
+    o = open_page("waltz")  # twelve bars
+    o.page.get_by_test_id("inst-bass").click()
+    tabs = o.page.get_by_test_id("bass-tab")
+    expect(tabs).to_have_count(1)  # the bar playing
+    o.js("Woodshed.app.store.set({loop: [1, 3], loopOn: true})")
+    expect(tabs).to_have_count(3)  # the whole loop on one screen
+    expect(o.page.get_by_test_id("desk")).to_contain_text("Bars 2\u20134, looped")
+    expect(o.page.get_by_test_id("desk")).to_contain_text("onsets only")  # lengths are not invented
+    last = o.js("Woodshed.current.bars.length - 1")
+    assert last >= 8
+    o.js(f"Woodshed.app.store.set({{loop: [0, {last}], loopOn: true}})")
+    expect(tabs).to_have_count(8)  # a long loop: its first eight bars
+    o.js("Woodshed.app.store.set({loopOn: false})")
+    expect(tabs).to_have_count(1)

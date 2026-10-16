@@ -181,9 +181,8 @@
       ];
     }
 
-    function bass(s) {
-      if (!parts) return note(W.t("No bass track was separated for this song: run woodshed with stems to get this part."));
-      const u = curBar(s);
+    // The tab of one bar, two beats a line: it never scrolls sideways, on a phone or in the side panel.
+    function bassTab(u, s, label) {
       const line = (parts.bass[u] || []).map((e) => (e ? { midi: e[0] + s.transpose, confidence: e[1] } : null));
       const frets = I.bassFrets(line);
       const counts = I.counts(song.per);
@@ -194,7 +193,6 @@
         const text = ("-" + f.fret + "--").slice(0, 3);
         return f.faint ? h("span", { class: "lo", title: W.t("Less certain") }, text) : text;
       };
-      // Two beats a line: the tab never scrolls sideways, on a phone or in the side panel.
       const lines = [];
       for (let i = 0; i < frets.length; i += 8) {
         const end = i + 8 >= frets.length ? "|" : "";
@@ -203,11 +201,35 @@
         names.forEach((n, k) => lines.push("\n" + n + "|", frets.slice(i, i + 8).map((f) => cell(f, k)), end));
       }
       const silent = !line.some(Boolean);
-      const heard = [...new Set(line.filter(Boolean).map((n) => song.noteName(n.midi - s.transpose, s.transpose)))];
       return [
-        h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bar {n}, the line as played {tag}", { n: u + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
+        label ? h("div", { class: "tab-bar" + (u === curBar(s) ? " cur" : "") }, label) : null,
         silent ? h("p", { class: "hint", "data-testid": "bass-silent" }, W.t("No bass heard in this bar.")) : null,
         h("div", { class: "tab", "data-testid": "bass-tab", translate: "no" }, lines),
+      ];
+    }
+
+    function bass(s) {
+      if (!parts) return note(W.t("No bass track was separated for this song: run woodshed with stems to get this part."));
+      const u = curBar(s);
+      const legend = note(W.t("Transcribed from the isolated bass track, at the pitch heard: onsets only, a note lasts until the next one. Faint notes are less certain."));
+      // A loop: the tab of every looped bar (its first eight), so the passage reads on one screen.
+      if (s.loopOn && s.loop) {
+        const [a, b] = s.loop;
+        const last = Math.min(b, a + 7);
+        const bars = [];
+        for (let v = a; v <= last; v++) bars.push(...bassTab(v, s, W.t("Bar {n}", { n: v + 1 })));
+        return [
+          h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bars {from}–{to}, looped {tag}", { from: a + 1, to: last + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
+          bars,
+          h("div", { class: "hear-row" }, h("button", { type: "button", class: "btn", "data-testid": "hear-riff", onclick: () => app.hearRiff(u) }, W.t("▶ Hear bar {n}", { n: u + 1 }))),
+          legend,
+        ];
+      }
+      const line = (parts.bass[u] || []).filter(Boolean);
+      const heard = [...new Set(line.map((e) => song.noteName(e[0], s.transpose)))];
+      return [
+        h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bar {n}, the line as played {tag}", { n: u + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
+        bassTab(u, s, null),
         h("div", { class: "chips-row" }, h("span", { class: "hint" }, W.t("Notes in this bar:")), heard.map((n) => h("span", { class: "pc-chip" }, chordNode(n)))),
         h(
           "div",
@@ -215,7 +237,7 @@
           h("button", { type: "button", class: "btn", "data-testid": "hear-riff", onclick: () => app.hearRiff(u) }, W.t("▶ Hear bar {n}", { n: u + 1 })),
           u + 1 < song.bars.length ? h("button", { type: "button", class: "btn", onclick: () => app.hearRiff(u + 1) }, W.t("▶ Hear bar {n}", { n: u + 2 })) : null,
         ),
-        note(W.t("Transcribed from the isolated bass track. Faint notes are less certain.")),
+        legend,
       ];
     }
 
@@ -400,7 +422,7 @@
       const u = curBar(s);
       const c = song.chordAtBeat(s.beat);
       const chordKey = c.pc + c.quality;
-      const full = ["transpose", "capo", "inst", "pos", "voiceType", "corrections"].some((k) => changed.has(k));
+      const full = ["transpose", "capo", "inst", "pos", "voiceType", "corrections"].some((k) => changed.has(k)) || (s.inst === "bass" && (changed.has("loop") || changed.has("loopOn")));
       const perBar = s.inst === "bass" || s.inst === "piano";
       const perChord = s.inst === "guitar" || s.inst === "piano";
       if (full || (perBar && u !== lastBar) || (perChord && chordKey !== lastChord)) render(s);

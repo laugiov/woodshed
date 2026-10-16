@@ -317,8 +317,9 @@
     "Less certain": "Moins sûre",
     "No bass heard in this bar.": "Pas de basse entendue dans cette mesure.",
     "▶ Hear bar {n}": "▶ Écouter la mesure {n}",
-    "Transcribed from the isolated bass track. Faint notes are less certain.":
-      "Transcrit d'après la piste de basse séparée. Les notes pâles sont moins sûres.",
+    "Transcribed from the isolated bass track, at the pitch heard: onsets only, a note lasts until the next one. Faint notes are less certain.":
+      "Transcrit d'après la piste de basse séparée, à la hauteur entendue : les attaques seulement, une note dure jusqu'à la suivante. Les notes pâles sont moins sûres.",
+    "Bars {from}–{to}, looped {tag}": "Mesures {from} à {to}, en boucle {tag}",
     "Now: {chord} in root position. Orange outline: the next chord, {next}.":
       "Maintenant : {chord} en position fondamentale. Contour orange : l'accord suivant, {next}.",
     none: "aucun",
