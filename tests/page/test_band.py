@@ -432,8 +432,11 @@ def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server:
         expect(page.get_by_test_id("set-summary")).to_be_visible()  # the total at the top
         title = items.first.locator("a").evaluate("(a) => parseFloat(getComputedStyle(a).fontSize)")
         assert title >= 24  # 18 pt
-        key = items.first.locator(".set-facts span").first.evaluate("(s) => getComputedStyle(s).fontWeight")
+        key = items.first.locator(".set-facts .sk").evaluate("(s) => getComputedStyle(s).fontWeight")
         assert int(key) >= 700
+        # Facts on the title's row: a song without a note takes one line, some 25 songs an A4 page.
+        row = items.first.evaluate("(li) => li.getBoundingClientRect().height")
+        assert row <= 42
         expect(page.get_by_test_id("library")).to_be_hidden()
         expect(page.get_by_test_id("band-network")).to_be_hidden()
         expect(page.get_by_test_id("set-place").first).to_be_hidden()

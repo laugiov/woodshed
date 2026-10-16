@@ -42,11 +42,15 @@
   .home [data-testid="set-panel"] { border: 0; padding: 0; }
   .home .set-head .label, .home #setSummary { font-size: 16pt; color: #000; }
   .home .setlist { gap: 0; }
-  .home .setlist li { break-inside: avoid; border-bottom: 1px solid #999; border-radius: 0; padding: 5pt 0; grid-template-columns: 2.2em minmax(0, 1fr); }
+  .home .setlist li { break-inside: avoid; border-bottom: 1px solid #999; border-radius: 0; padding: 3pt 0; grid-template-columns: 2.2em minmax(0, 1fr); align-items: baseline; line-height: 1.2; }
   .home .set-n { color: #000; font-size: 18pt; }
-  .home .setlist a { color: #000; text-decoration: none; font-weight: 700; font-size: 18pt; }
-  .home .set-facts { color: #000; font-size: 13pt; gap: 4pt 16pt; }
-  .home .set-facts span:nth-child(-n+2) { font-weight: 700; }
+  .home .setlist a { color: #000; text-decoration: none; font-weight: 700; font-size: 18pt; line-height: 1.2; }
+  /* Key, tempo and length on the title's row: some 25 songs a page. */
+  .home .set-song { grid-template-columns: minmax(0, 1fr) auto; column-gap: 14pt; align-items: baseline; }
+  .home .set-song > a { grid-column: 1; grid-row: 1; }
+  .home .set-facts { grid-column: 2; grid-row: 1; color: #000; font-size: 13pt; gap: 4pt 14pt; flex-wrap: nowrap; }
+  .home .set-note { grid-column: 1 / -1; }
+  .home .set-facts .sk, .home .set-facts .sb { font-weight: 700; }
   .home .set-facts .band-key { color: #000; }
   .home .set-note { color: #000; font-style: italic; font-size: 13pt; }
 }

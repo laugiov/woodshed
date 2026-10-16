@@ -124,9 +124,9 @@
         const s = info[folder] || {};
         const band = s.band || {};
         const facts = [];
-        if (s.key) facts.push(h("span", { class: band.key ? "band-key" : "" }, chordNode(band.key || s.key), band.key ? " " + W.t("(the band's key)") : ""));
-        if (s.bpm) facts.push(h("span", null, s.bpm + " BPM"));
-        if (s.duration) facts.push(h("span", null, fmt(s.duration)));
+        if (s.key) facts.push(h("span", { class: "sk" + (band.key ? " band-key" : "") }, chordNode(band.key || s.key), band.key ? " " + W.t("(the band's key)") : ""));
+        if (s.bpm) facts.push(h("span", { class: "sb" }, s.bpm + " BPM"));
+        if (s.duration) facts.push(h("span", { class: "sl" }, fmt(s.duration)));
         const noteEl = editing === folder
           ? noteEditor(folder, band.note || "")
           : h("button", { type: "button", class: "set-note" + (band.note ? "" : " empty"), "data-testid": "set-note", onclick: () => {
