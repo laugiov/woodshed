@@ -135,7 +135,43 @@ library gives every page the new interface when it starts, without analysing any
 
 > **Alpha.** woodshed works on real songs today, but expect rough edges.
 
-No GPU needed, and no Python to install first. Pick one of the three ways below.
+No GPU needed, and no Python to install first. On a Mac or a Windows PC, the easiest way is to
+download one file and double-click it.
+
+### Download and double-click: Mac and Windows
+
+1. From the [latest release](https://github.com/laugiov/woodshed/releases/latest) (under
+   **Assets**), download the installer for your computer:
+   - **Mac**: `woodshed-installer-macos.zip`. Double-click it to get **Install woodshed**.
+   - **Windows**: `woodshed-installer-windows.cmd`. If your browser asks, choose **Keep**.
+2. Double-click it. A window says what it does, then installs woodshed for you only: about 1.5 GB
+   to download, a few minutes. No password, no administrator rights.
+3. When it says **Done**, woodshed starts and opens your library in the browser. Drop a song on
+   the page and play.
+
+**The first time only**, your computer warns you about the installer, because this free project
+does not pay Apple or Microsoft to sign it:
+
+- **Mac**: macOS says it cannot check the file. Click **Done**, open **System Settings**, then
+  **Privacy & Security**, scroll down and click **Open Anyway** next to "Install woodshed". On
+  macOS 14 or older, you can instead right-click the file, choose **Open**, then **Open** again.
+- **Windows**: if a blue "Windows protected your PC" box appears, click **More info**, then
+  **Run anyway**.
+
+**Next time**, start woodshed like any other app: **woodshed** in Applications, Launchpad or
+Spotlight on a Mac, in the Start menu on Windows. A small window opens next to your browser: keep
+it open while you play, close it to stop woodshed. Your songs are in the `woodshed` folder of your
+home folder.
+
+MP3, WAV, FLAC and Ogg files work as they are. AAC (M4A) and video files need
+[ffmpeg](https://ffmpeg.org/download.html): the Windows installer adds it when it can, and on a Mac
+`brew install ffmpeg` does it (with [Homebrew](https://brew.sh)).
+
+**To update**, run the installer again. **To uninstall**, open Terminal (Mac) or PowerShell
+(Windows) and type `uv tool uninstall woodshed`, then remove the shortcut: on a Mac, drag
+**woodshed** from the Applications folder of your home folder to the Trash; on Windows, delete
+`woodshed` from the Start menu folder (right-click it, **Open file location**). Your songs stay
+where they are.
 
 ### With Docker: Windows, macOS or Linux
 
@@ -169,7 +205,9 @@ you).
 Without Compose: `docker run -d -p 127.0.0.1:8000:8000 --user "$(id -u):$(id -g)" -v "$PWD/woodshed:/library" -v woodshed-cache:/cache ghcr.io/laugiov/woodshed`
 (in PowerShell, `${PWD}` instead of `$PWD`, and no `--user`).
 
-### On Linux or macOS
+### In a terminal: Linux, macOS or Windows
+
+On Linux or macOS:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/install.sh | sh
@@ -177,27 +215,26 @@ curl -LsSf https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/insta
 
 The script installs [uv](https://docs.astral.sh/uv/) if needed, then woodshed with its own Python
 and the CPU build of PyTorch, in your home folder: no sudo, nothing system-wide (uv adds its
-folder to your PATH). On Linux it adds
-woodshed to the applications menu. It tells you if [ffmpeg](https://ffmpeg.org/download.html) is
-missing (to read MP3, AAC and video files; WAV and FLAC work without it).
+folder to your PATH). It adds woodshed to the applications menu on Linux, and the woodshed app to
+`~/Applications` on macOS. It tells you how to add [ffmpeg](https://ffmpeg.org/download.html) if it
+is missing (only for AAC (M4A) and video files: MP3, WAV, FLAC and Ogg work without it).
 
-### On Windows
-
-In PowerShell:
+On Windows, in PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/laugiov/woodshed/main/scripts/install.ps1 | iex"
 ```
 
-The same as above for your user, no administrator rights; ffmpeg comes with winget when it is
-available, and woodshed gets a Start menu shortcut.
+The same for your user, no administrator rights; ffmpeg comes with winget when it is available,
+and woodshed gets a Start menu shortcut. The double-click installers run these same scripts.
 
 Uninstall: `uv tool uninstall woodshed`. Read the scripts before running them if you like:
-[install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1).
+[install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1), and the double-click
+installers in [scripts/installers](scripts/installers).
 
 ### By hand
 
-With Python 3.10 or newer, [pipx](https://pipx.pypa.io/) and ffmpeg:
+With Python 3.10 or newer and [pipx](https://pipx.pypa.io/) (and ffmpeg for AAC (M4A) and video files):
 
 ```bash
 pipx install "woodshed[stems] @ git+https://github.com/laugiov/woodshed" \
