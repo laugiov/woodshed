@@ -179,6 +179,7 @@
       const theirs = r.data.fixes || {};
       const merged = { ...mine, ...theirs }; // the band's choice wins; this device's own are added
       app.useFixes(merged);
+      app.useBand(r.data.band || {});
       if (Object.keys(mine).some((k) => !(k in theirs))) share(app.fixes()); // made before, on this device
     }
     function share(fixes) {
@@ -189,6 +190,13 @@
       return true;
     }
     app.shareFixes = share;
+    // The band's key or the leader's note for this song: the answer is what the library keeps.
+    app.shareBand = async (change) => {
+      const r = await api("/api/band", { page: folder, ...change });
+      if (!r.ok || typeof r.data.rev !== "number") return null;
+      fixesRev = Math.max(fixesRev, r.data.rev);
+      return r.data.band;
+    };
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") loadFixes();
     });

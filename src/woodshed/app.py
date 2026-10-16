@@ -67,6 +67,8 @@ DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a
 QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
+NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
+KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
 TYPES = {
     ".flac": "audio/flac",
     ".woff2": "font/woff2",
@@ -148,6 +150,9 @@ class Library:
             info["complete"] = data.get("complete") is True
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
+            band = self._stored(manifest.parent.name)["band"]
+            if band:
+                info["band"] = band
             left = self._left_to_check(manifest.parent)
             if left is not None:  # the band's corrections done: what is still to check by ear
                 info["doubts"] = left
@@ -248,7 +253,7 @@ class Library:
 
     def _stored(self, folder: str) -> dict[str, Any]:
         """What the library holds for a page; an entry damaged by hand is skipped, the others kept."""
-        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}}
+        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}}
         try:
             data = json.loads(self._corrections_file(folder).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -257,6 +262,8 @@ class Library:
             return out
         rev = data.get("rev")
         out["rev"] = rev if type(rev) is int and rev >= 0 else 0
+        with contextlib.suppress(ValueError):
+            out["band"] = _checked_band(data.get("band") or {})
         entries = data.get("by_key")
         for key, entry in entries.items() if isinstance(entries, dict) else []:
             try:
@@ -272,7 +279,7 @@ class Library:
             raise ValueError("key: the analysis the corrections belong to")
         stored = self._stored(folder)
         rev = max(stored["rev"], self.revisions.get(folder, 0))
-        return {"key": key, "fixes": stored["by_key"].get(key, {}), "rev": rev}
+        return {"key": key, "fixes": stored["by_key"].get(key, {}), "rev": rev, "band": stored["band"]}
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
@@ -291,18 +298,48 @@ class Library:
             for old in sorted(stored["at"], key=stored["at"].get)[: max(0, len(stored["at"]) - CORRECTIONS_KEYS)]:
                 stored["by_key"].pop(old, None)  # the analyses of long ago
                 stored["at"].pop(old, None)
-            rev = max(stored["rev"], self.revisions.get(folder, 0)) + 1  # kept in the file: grows across restarts
-            body = {"rev": rev, "by_key": {k: {"fixes": v, "at": stored["at"][k]} for k, v in stored["by_key"].items()}}
-            target = self._corrections_file(folder)
-            target.parent.mkdir(exist_ok=True)
-            tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}")
-            try:
-                tmp.write_text(json.dumps(body, indent=1) + "\n", encoding="utf-8")
-                tmp.replace(target)
-            finally:
-                tmp.unlink(missing_ok=True)
-            self.revisions[folder] = rev
-            return {"key": key, "fixes": merged, "rev": rev}
+            rev = self._write(folder, stored)
+            return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"]}
+
+    def set_band(self, data: Any) -> dict[str, Any]:
+        """The band's own choices for a song, from any device: the key it plays in, the leader's note."""
+        if not isinstance(data, dict):
+            raise ValueError("band: a JSON object")
+        folder = self._page(data.get("page"))
+        change = _checked_band({k: data[k] for k in ("transpose", "key", "note") if k in data})
+        if ("transpose" in change) != ("key" in change):
+            raise ValueError("transpose and key go together")
+        with self.lock:
+            stored = self._stored(folder)
+            band = {**stored["band"], **change}
+            if band.get("transpose") == 0:  # the recorded key again: nothing to say
+                band.pop("transpose", None)
+                band.pop("key", None)
+            if not band.get("note"):
+                band.pop("note", None)
+            stored["band"] = band
+            rev = self._write(folder, stored)
+            return {"band": band, "rev": rev}
+
+    def _write(self, folder: str, stored: dict[str, Any]) -> int:
+        """Under the lock: the page's corrections and band choices, with the next revision."""
+        rev: int = max(stored["rev"], self.revisions.get(folder, 0)) + 1  # kept in the file: grows across restarts
+        body: dict[str, Any] = {
+            "rev": rev,
+            "by_key": {k: {"fixes": v, "at": stored["at"][k]} for k, v in stored["by_key"].items()},
+        }
+        if stored["band"]:
+            body["band"] = stored["band"]
+        target = self._corrections_file(folder)
+        target.parent.mkdir(exist_ok=True)
+        tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}")
+        try:
+            tmp.write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            tmp.replace(target)
+        finally:
+            tmp.unlink(missing_ok=True)
+        self.revisions[folder] = rev
+        return rev
 
     def state(self) -> dict[str, Any]:
         with self.lock:
@@ -547,6 +584,28 @@ def analysis_key(song: dict[str, Any]) -> str:
     for i in range(0, len(units), 2):  # charCodeAt: UTF-16 code units
         h = ((h ^ int.from_bytes(units[i : i + 2], "little")) * 0x01000193) & 0xFFFFFFFF
     return format(h, "x")
+
+
+def _checked_band(data: Any) -> dict[str, Any]:
+    """{"transpose", "key", "note"}, each optional: the band's key for a song and the leader's note."""
+    if not isinstance(data, dict):
+        raise ValueError("band: a JSON object")
+    out: dict[str, Any] = {}
+    if "transpose" in data:
+        t = data["transpose"]
+        if type(t) is not int or not -6 <= t <= 6:
+            raise ValueError("transpose: -6 to 6 semitones")
+        out["transpose"] = t
+    if "key" in data:
+        if not isinstance(data["key"], str) or not KEY_NAME.fullmatch(data["key"]):
+            raise ValueError("key: a key name such as Eb or F#m")
+        out["key"] = data["key"]
+    if "note" in data:
+        note = data["note"]
+        if not isinstance(note, str) or len(note) > NOTE_MAX:
+            raise ValueError(f"note: text, {NOTE_MAX} characters at most")
+        out["note"] = " ".join(note.split())  # one line in the set list
+    return out
 
 
 def _checked_corrections(data: Any) -> dict[str, Any]:
@@ -818,7 +877,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
-        if url.path in ("/api/live", "/api/setlist", "/api/corrections"):
+        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/band"):
             self._small_json_post(url.path)
             return
         if url.path == "/api/network":
@@ -882,9 +941,8 @@ class Handler(BaseHTTPRequestHandler):
     def _small_json_post(self, path: str) -> None:
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
-        limit = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}.get(
-            path, SETLIST_BYTES
-        )
+        limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
+        limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
         if chunked or not 0 < length <= limit:
             if not chunked and limit < length <= DRAIN_MAX:
@@ -910,6 +968,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/corrections":
                 saved = self.server.library.set_corrections(data)
                 self.server.live.corrected(data["page"], saved["rev"])
+                self._json(HTTPStatus.OK, saved)
+            elif path == "/api/band":
+                saved = self.server.library.set_band(data)
+                self.server.live.corrected(data["page"], saved["rev"])  # every device reads the song again
                 self._json(HTTPStatus.OK, saved)
             elif path == "/api/lyrics":
                 self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.add_words(data)))

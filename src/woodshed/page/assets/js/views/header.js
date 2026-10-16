@@ -35,6 +35,7 @@
           ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
           : h("span", { class: "okfact" }, W.t("Nothing to check by ear")),
         meta.analysis.chords_reliable ? null : h("span", { class: "warnfact", "data-testid": "unreliable" }, W.t("Little harmony found: chords may be wrong")),
+        s.bandNote ? h("span", { class: "band-note", "data-testid": "band-note" }, W.nodes(W.t("Note: {note}"), { note: h("span", { translate: "no" }, s.bandNote) })) : null,
       );
     }
 
@@ -86,7 +87,7 @@
     }
 
     store.on((s, changed) => {
-      if (changed.has("transpose") || changed.has("corrections")) renderFacts(s);
+      if (changed.has("transpose") || changed.has("corrections") || changed.has("bandNote")) renderFacts(s);
       if (changed.has("inst")) renderInstruments(s);
       if (changed.has("inst") || changed.has("step")) renderPath(s);
     });

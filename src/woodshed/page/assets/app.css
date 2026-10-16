@@ -19,6 +19,7 @@
 .home .options { color: var(--muted); }
 .home .options label { display: inline-flex; gap: 6px; align-items: center; margin: 8px 18px 0 0; }
 .home .options input[type=number] { width: 6em; }
+.band-note { color: var(--warn); font-weight: 600; }
 .net-switch.on { background: var(--accent-soft); border-color: var(--accent); }
 .net-on { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; margin-top: 12px; }
 .net-on p { margin: 0 0 6px; }

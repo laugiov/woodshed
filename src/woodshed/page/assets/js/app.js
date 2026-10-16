@@ -44,6 +44,8 @@
       view: "concert", step: 1, loop: null, loopOn: false, trainer: false, countIn: false, bpm: songBpm,
       voiceType: null, stage: false, track: "mix", corrections: 0, click: false, chordSound: "guitar",
       sheet: null, // "grid" or "lyrics"; null: as suits the instrument
+      bandKey: null, // the key the band plays this song in (semitones), once the library said; null: no library
+      bandNote: "", // the leader's note on this song
     });
     app.store = store;
 
@@ -239,6 +241,26 @@
       const transpose = Math.max(-6, Math.min(6, t));
       store.set({ transpose, capo: song.capoFor(transpose) });
       app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: W.prettyText(song.keyName(transpose)) }));
+    };
+    // The band's key for this song (served by woodshed app): every device opens in it, and a change
+    // made on one device reaches the others. A device already in that key just takes note of it.
+    app.useBand = (band) => {
+      const t = typeof band.transpose === "number" ? band.transpose : 0;
+      const s = store.get();
+      const fresh = s.bandKey === null ? t !== 0 : t !== s.bandKey;
+      store.set({ bandKey: t, bandNote: band.note || "" });
+      if (!fresh || t === s.transpose) return;
+      store.set({ transpose: t, capo: song.capoFor(t) });
+      app.toast(t
+        ? W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) })
+        : W.t("The band plays this song in the recorded key again."));
+    };
+    app.keepBandKey = async () => {
+      const t = store.get().transpose;
+      const saved = app.shareBand && (await app.shareBand({ transpose: t, key: song.keyName(t) }));
+      if (!saved) return app.toast(W.t("Not saved: the app did not answer."));
+      app.useBand(saved);
+      app.toast(W.t("Saved: the band plays this song in {key}, on every device.", { key: W.prettyText(song.keyName(t)) }));
     };
     app.setStep = function setStep(n, quiet) {
       const s = store.get();

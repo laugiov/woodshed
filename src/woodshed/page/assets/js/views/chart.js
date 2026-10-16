@@ -287,7 +287,7 @@
       const mode = app.sheetMode(s);
       // Drawn again only when what it shows changes: a redraw under a click (the band's corrections
       // arriving) would swallow it.
-      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, W.lang()].join("|");
+      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, W.lang()].join("|");
       if (el.dataset.shows === shows) return;
       el.dataset.shows = shows;
       const sheetCtl = app.words
@@ -313,8 +313,24 @@
             h("button", { type: "button", class: s.view === "concert" ? "on" : "", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
             h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })),
           ),
+          keyNote(s).slice(s.transpose ? 0 : 1), // the capo says where the chords sound already
         );
-      } else clear(el, sheetCtl, wordsBtn, h("span", { class: "hint" }, W.t("Real chords, concert pitch")));
+      } else clear(el, sheetCtl, wordsBtn, keyNote(s));
+    }
+
+    // In another key than the recording, the page says so while it lasts; served by woodshed app,
+    // the key can be kept for the band.
+    function keyNote(s) {
+      const key = (t) => W.prettyText(song.keyName(t));
+      const out = [s.transpose
+        ? h("span", { class: "hint key-note", "data-testid": "key-note" }, W.t("Chords in {key}: the recording plays in {original}.", { key: key(s.transpose), original: key(0) }))
+        : h("span", { class: "hint" }, W.t("Real chords, concert pitch"))];
+      if (s.bandKey === null || !app.shareBand) return out;
+      if (s.transpose !== s.bandKey) {
+        out.push(h("button", { type: "button", class: "btn", "data-testid": "band-key-keep", onclick: () => app.keepBandKey() }, W.t("Keep {key} for the band", { key: key(s.transpose) })));
+        if (s.bandKey) out.push(h("button", { type: "button", class: "btn", "data-testid": "band-key-back", onclick: () => app.transposeTo(s.bandKey) }, W.t("The band's key: {key}", { key: key(s.bandKey) })));
+      } else if (s.bandKey) out.push(h("span", { class: "okfact", "data-testid": "band-key" }, W.t("The band's key")));
+      return out;
     }
 
     function barEl(u, s) {
@@ -432,7 +448,7 @@
     store.on((s, changed) => {
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
-      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet"].some((k) => changed.has(k));
+      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey"].some((k) => changed.has(k));
       // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
       if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);
       else if (changed.has("beat") || changed.has("loop") || changed.has("loopOn")) paintBars(s);

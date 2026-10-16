@@ -187,7 +187,7 @@ def test_one_device_corrects_the_chart_of_every_device(browser: Browser, pickup_
         assert keys.evaluate(CHART) == after
         assert problems == []
     finally:
-        (server.library.root / "pickup.woodshed" / "corrections.json").unlink(missing_ok=True)
+        (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
 
 
 def test_from_disk_there_is_no_band(open_page: Any) -> None:
@@ -328,3 +328,31 @@ def test_a_reload_does_not_take_the_lead_back(browser: Browser, server: app.AppS
     assert first.evaluate("Woodshed.band.mode()") == "alone"
     assert second.evaluate("Woodshed.band.mode()") == "lead"
     assert problems == []
+
+
+def test_the_band_key_chosen_on_one_device_reaches_the_others(browser: Browser, server: app.AppServer) -> None:
+    try:
+        problems: list[str] = []
+        url = server.url + "pop.woodshed/index.html"
+        singer = device(browser, url, problems)
+        guitarist = device(browser, url, problems)
+        until(singer, "Woodshed.app.store.get().bandKey === 0")  # the library answered: the recorded key
+        expect(singer.get_by_test_id("band-key-keep")).to_have_count(0)  # nothing to keep yet
+        singer.evaluate("Woodshed.app.transposeTo(3)")
+        expect(singer.get_by_test_id("key-note")).to_contain_text("the recording plays in")  # said while it lasts
+        singer.get_by_test_id("band-key-keep").click()
+        expect(singer.get_by_test_id("band-key")).to_be_visible()
+        until(guitarist, "Woodshed.app.store.get().transpose === 3")  # the open page follows, no reload
+        expect(guitarist.get_by_test_id("toast")).to_contain_text("The band plays this song in")
+        expect(guitarist.get_by_test_id("band-key")).to_be_visible()
+        later = device(browser, url, problems)  # a page opened afterwards starts in the band's key
+        until(later, "Woodshed.app.store.get().transpose === 3")
+        later.evaluate("Woodshed.app.transposeTo(0)")  # a device may try another key: the band's stays
+        expect(later.get_by_test_id("band-key-back")).to_be_visible()
+        assert server.library.corrections("pop.woodshed", "x1")["band"]["transpose"] == 3
+        server.library.set_band({"page": "pop.woodshed", "note": "capo 2, starts on the chorus"})
+        server.live.corrected("pop.woodshed", server.library.revisions["pop.woodshed"])
+        expect(guitarist.get_by_test_id("band-note")).to_contain_text("capo 2, starts on the chorus")
+        assert problems == []
+    finally:  # the library is the module's: the next tests open pop in its recorded key
+        (server.library.root / app.CORRECTIONS_DIR / "pop.woodshed.json").unlink(missing_ok=True)

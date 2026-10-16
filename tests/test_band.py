@@ -327,7 +327,7 @@ def fixes(page: str = "One.woodshed", **extra: Any) -> dict[str, Any]:
 
 def test_corrections_are_kept_by_the_library_for_every_device(server: app.AppServer) -> None:
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
-    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0}
+    assert status == 200 and json.loads(body) == {"key": "a1b2c3", "fixes": {}, "rev": 0, "band": {}}
     status, answer = post(server, "/api/corrections", fixes())
     assert status == 200 and answer["fixes"] == {"3": [9, "m"], "7": [7, ""]} and answer["rev"] > 0
     status, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
@@ -386,6 +386,59 @@ def test_corrections_need_the_token(server: app.AppServer) -> None:
     assert status == 403
     status, _, _ = request(server, "GET", "/api/corrections?page=../etc&key=a1")
     assert status == 400
+
+
+# The band's choices for a song: the key it plays in (for the singer) and the leader's note.
+
+
+def test_the_band_key_and_note_are_kept_with_the_corrections_for_every_device(server: app.AppServer) -> None:
+    post(server, "/api/corrections", fixes())
+    status, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": 3, "key": "Eb"})
+    assert status == 200 and saved["band"] == {"transpose": 3, "key": "Eb"}
+    _, _, body = request(server, "GET", "/api/corrections?page=One.woodshed&key=a1b2c3")
+    read = json.loads(body)
+    assert read["band"] == {"transpose": 3, "key": "Eb"} and read["fixes"] == {"3": [9, "m"], "7": [7, ""]}
+    assert read["rev"] == saved["rev"]
+    _, saved = post(server, "/api/band", {"page": "One.woodshed", "note": "  capo 2,\n starts on the chorus "})
+    assert saved["band"] == {"transpose": 3, "key": "Eb", "note": "capo 2, starts on the chorus"}
+    post(server, "/api/corrections", fixes(fixes={"9": [4, "m"]}))  # a correction keeps the band's choices
+    songs = {s["folder"]: s for s in json.loads(request(server, "GET", "/api/songs")[2])["songs"]}
+    assert songs["One.woodshed"]["band"] == saved["band"] and "band" not in songs["Two.woodshed"]
+    _, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": 0, "key": "C", "note": ""})
+    assert saved["band"] == {}  # the recorded key again, no note: nothing left to say
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"page": "One.woodshed", "transpose": 7, "key": "G"},
+        {"page": "One.woodshed", "transpose": 2},  # a key without its name
+        {"page": "One.woodshed", "transpose": 2, "key": "<b>"},
+        {"page": "One.woodshed", "transpose": True, "key": "D"},
+        {"page": "One.woodshed", "note": "x" * 301},
+        {"page": "../One.woodshed", "note": "x"},
+        ["One.woodshed"],
+    ],
+)
+def test_band_choices_are_checked(server: app.AppServer, data: Any) -> None:
+    status, _ = post(server, "/api/band", data)
+    assert status == 400
+    assert not list((server.library.root / app.CORRECTIONS_DIR).glob("*"))
+
+
+def test_band_choices_need_the_token(server: app.AppServer) -> None:
+    assert post(server, "/api/band", {"page": "One.woodshed", "note": "x"}, token="wrong")[0] == 403
+
+
+def test_followers_hear_that_the_band_key_changed(server: app.AppServer) -> None:
+    follower = Stream(server)
+    try:
+        follower.next()
+        _, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": -2, "key": "Bb"})
+        event = follower.next()
+        assert isinstance(event, dict) and event["fixes"] == {"One.woodshed": saved["rev"]}
+    finally:
+        follower.close()
 
 
 def test_followers_hear_that_the_chart_was_corrected(server: app.AppServer) -> None:
