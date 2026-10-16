@@ -1,0 +1,55 @@
+name: Installers
+
+# The double-click installers musicians download, attached to the GitHub release of each version tag:
+# woodshed-installer-macos.zip (the .command file, zipped so that it stays executable) and
+# woodshed-installer-windows.cmd. Run by hand, it builds them as a workflow artifact, and attaches
+# them to the release of the tag given, if any.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag whose release gets the installers (empty: the files are only kept as an artifact)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  installers:
+    name: Build and attach
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # create the release and upload its files
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Package
+        run: |
+          mkdir dist
+          (cd scripts/installers && zip -X ../../dist/woodshed-installer-macos.zip "Install woodshed.command")
+          cp "scripts/installers/Install woodshed.cmd" dist/woodshed-installer-windows.cmd
+          # Finder runs the file only if it is executable; cmd.exe wants Windows line endings.
+          zipinfo dist/woodshed-installer-macos.zip | grep -q '^-rwxr-xr-x.*Install woodshed.command$'
+          test "$(grep -c $'\r$' dist/woodshed-installer-windows.cmd)" = "$(wc -l < dist/woodshed-installer-windows.cmd)"
+          ls -l dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: woodshed-installers
+          path: dist/*
+          if-no-files-found: error
+      - name: Attach to the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
+          gh release upload "$TAG" dist/woodshed-installer-macos.zip dist/woodshed-installer-windows.cmd --clobber

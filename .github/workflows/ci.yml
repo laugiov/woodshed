@@ -27,7 +27,7 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen mypy src tests scripts
-      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml .github/workflows/install.yml .github/workflows/docker.yml
+      - run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color .github/workflows/ci.yml .github/workflows/install.yml .github/workflows/docker.yml .github/workflows/installers.yml
 
   tests:
     name: Tests, ${{ matrix.os }}, Python ${{ matrix.python }}

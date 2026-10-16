@@ -1,15 +1,15 @@
 name: Install
 
 # The ways a musician installs woodshed, tried on real machines: the install scripts on Linux,
-# macOS and Windows (from this checkout), then a page built from the demo song; and the Docker image
-# on x86 and ARM.
+# macOS and Windows (from this checkout), then a page built from the demo song; the double-click
+# installers on macOS and Windows; and the Docker image on x86 and ARM.
 
 on:
   push:
     branches: [main]
-    paths: ["scripts/install.*", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+    paths: ["scripts/install.*", "scripts/installers/**", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
   pull_request:
-    paths: ["scripts/install.*", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+    paths: ["scripts/install.*", "scripts/installers/**", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,21 @@ jobs:
         run: |
           "$(uv tool dir --bin)/woodshed" "demo/As I Am.mp3" --no-stems --no-open -o out
           test -f "out/As I Am.woodshed/index.html"
+      - name: The double-click installer, as Finder runs it, and the app it makes
+        if: runner.os == 'macOS'
+        env:
+          WOODSHED_NO_OPEN: "1"
+        run: |
+          test -x "scripts/installers/Install woodshed.command"
+          rm -rf ~/Applications/woodshed.app
+          WOODSHED_SOURCE="$PWD" bash "scripts/installers/Install woodshed.command"
+          app=~/Applications/woodshed.app/Contents
+          plutil -lint "$app/Info.plist"
+          test -x "$app/MacOS/woodshed"
+          test -x "$app/Resources/woodshed.command"
+          sh -n "$app/Resources/woodshed.command"
+          bin="$(uv tool dir --bin)"
+          grep -qF "\"$bin/woodshed\" app" "$app/Resources/woodshed.command"
 
   windows:
     name: Install script, windows-latest
@@ -61,6 +76,20 @@ jobs:
           if (-not (Test-Path "out/As I Am.woodshed/index.html")) { throw "no page" }
           $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
           if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
+      - name: The double-click installer, and the Start menu shortcut it leaves
+        shell: pwsh
+        env:
+          WOODSHED_NO_OPEN: "1"
+          WOODSHED_NO_PAUSE: "1"
+        run: |
+          $env:WOODSHED_SOURCE = (Get-Location).Path
+          $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
+          Remove-Item $link
+          & "./scripts/installers/Install woodshed.cmd"
+          if ($LASTEXITCODE -ne 0) { throw "the installer failed" }
+          if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if (-not (Test-Path $target)) { throw "the shortcut points to nothing: $target" }
 
   docker:
     name: Docker image, ${{ matrix.runner }}
