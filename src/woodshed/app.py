@@ -682,20 +682,17 @@ class Library:
                 if done.stems_to_come:
                     job.status = "separating"
                     done = second_pass(done, report)
+                if job.kind == "bars" and self.on_bars is not None:
+                    self.on_bars(job.page)  # before "done": the page that asked reloads with the count already told
                 job.status, job.message = "done", "Ready"
                 note.unlink(missing_ok=True)
-                if job.kind == "bars" and self.on_bars is not None:
-                    self.on_bars(job.page)
             except (WoodshedError, OSError) as exc:
                 job.status, job.message = "failed", str(exc)
                 with self.lock:  # one order with interrupted(): a stop never leaves a failure behind
                     if self.stopping.is_set():  # Ctrl-C also stops ffmpeg: not the song's fault
                         continue
-                    if job.kind == "bars":  # the page is still there, as it was: nothing to keep
-                        note.unlink(missing_ok=True)
-                        job.message = job.message.replace(str(cache_dir()), "the cache").replace(
-                            str(self.root), "the library"
-                        )
+                    if job.kind == "bars":
+                        self._bars_failed(note, job)
                         continue
                     self._keep_failure(note, job)
                     if uploaded and job.page is None:  # nothing came of it: the file does not keep its name taken
@@ -704,7 +701,9 @@ class Library:
             except Exception as exc:  # a bug must not stop the queue
                 job.status, job.message = "failed", f"unexpected error: {exc}"
                 with self.lock:
-                    if not self.stopping.is_set():
+                    if job.kind == "bars":
+                        self._bars_failed(note, job)
+                    elif not self.stopping.is_set():
                         self._keep_failure(note, job)
                 traceback.print_exc()
             finally:
@@ -745,6 +744,12 @@ class Library:
         finally:
             job.ended = time.time()
             self.queue.task_done()
+
+    def _bars_failed(self, note: Path, job: Job) -> None:
+        """The bar lines did not move: the page is as it was, nothing to try again at the next start, and
+        the reason told to the phones without this computer's paths."""
+        note.unlink(missing_ok=True)
+        job.message = job.message.replace(str(cache_dir()), "the cache").replace(str(self.root), "the library")
 
     @staticmethod
     def _keep_failure(note: Path, job: Job) -> None:

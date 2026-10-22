@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import traceback
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from tests import synth
 from tests.test_app import request
 from woodshed import analysis, app, cli, stems
 from woodshed.build import DATA_BLOCK
+from woodshed.cache import cache_dir
+from woodshed.errors import WoodshedError
 from woodshed.model import Song
 from woodshed.run import MANIFEST, Options, Reporter, first_pass
 
@@ -157,3 +160,34 @@ def test_the_bar_lines_endpoint_needs_the_token_and_starts_a_job(library: app.Ap
     status, _, answer = request(library, "POST", "/api/bars", body, headers)
     assert status == 202 and json.loads(answer)["kind"] == "bars"
     wait(library.library, library.library.jobs[json.loads(answer)["id"]])
+
+
+def test_a_phone_cannot_move_the_bar_lines(library: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app.Handler, "_from_this_computer", lambda self: False)
+    body = json.dumps({"page": "pop.woodshed", "bar_phase": 1}).encode()
+    headers = {app.TOKEN_HEADER: library.token, "Content-Type": "application/json"}
+    status, _, answer = request(library, "POST", "/api/bars", body, headers)
+    assert status == 403 and b"computer that runs the app" in answer
+    assert library.library.jobs == {}
+
+
+@pytest.mark.parametrize("error", [WoodshedError, RuntimeError])
+def test_bar_lines_that_did_not_move_leave_the_page_as_it_was(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch, error: type[Exception]
+) -> None:
+    lib = library.library
+    page = lib.root / "pop.woodshed"
+    before = {p.name: p.read_bytes() for p in (page / "index.html", page / MANIFEST)}
+
+    def broken(*args: Any, **kwargs: Any) -> None:
+        raise error(f"cannot read {lib.root / 'songs' / 'pop.wav'} with {cache_dir() / 'stems'}")
+
+    monkeypatch.setattr(app, "first_pass", broken)
+    monkeypatch.setattr(traceback, "print_exc", lambda: None)
+    job = lib.move_bars({"page": "pop.woodshed", "bar_phase": 1})
+    wait(lib, job)
+    assert job.status == "failed"
+    assert str(lib.root) not in job.message and str(cache_dir()) not in job.message  # no path told to the phones
+    assert {p.name: p.read_bytes() for p in (page / "index.html", page / MANIFEST)} == before
+    assert not app.Library.attempt(lib.songs / "pop.wav").exists()  # nothing to skip at the next start
+    assert "moved" not in library.live.payload()

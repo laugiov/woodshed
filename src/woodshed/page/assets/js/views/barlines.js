@@ -18,6 +18,7 @@
     let polling = 0;
     let chosen = 1; // the beat of bar 1 the band counts "one" on (1: as it is)
     let reloading = false;
+    let asked = false; // this device asked for the move (from the edit strip: its editing waits for nothing)
     const stop = () => {
       clearInterval(polling);
       polling = 0;
@@ -49,12 +50,14 @@
       } catch (err) {
         /* no storage: the new bars show, without the note */
       }
-      if (store.get().playing) {
-        const text = W.t("The bar lines moved. They appear when you stop playing.");
+      // Never pulled away from the music, nor, on another device, from the chart being edited.
+      const busy = (s) => s.playing || (s.editing && !asked);
+      if (busy(store.get())) {
+        const text = W.t("The bar lines moved. They appear when you stop playing or editing.");
         if (status && dialog.open) say(status, text);
         else app.toast(text);
         const off = store.on((s) => {
-          if (!s.playing) {
+          if (!busy(s)) {
             off();
             location.reload();
           }
@@ -119,6 +122,7 @@
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error ? W.t(data.error) : W.t("the library refused it ({status})", { status: r.status }));
+        asked = true;
         say(status, W.t("Analysing the song again with the new bar lines…"));
         cancel.textContent = W.t("Close"); // the job goes on without the dialog
         follow(data.id, status, go);

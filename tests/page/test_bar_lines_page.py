@@ -84,6 +84,7 @@ def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, libra
     per = page.evaluate("Woodshed.current.per")
     first = page.evaluate("Woodshed.current.song.first_beat")
     page.evaluate("Woodshed.app.typeBars([2], [[4, 'Dsus4']])")  # typed before the move, on beats
+    other.evaluate("Woodshed.app.store.set({ editing: true })")  # the other device is editing the chart
     key = str(first + 2 * per)
     page.get_by_test_id("edit-chart").click()
     page.get_by_test_id("bar-lines").click()
@@ -100,5 +101,13 @@ def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, libra
     expect(page.get_by_test_id("toast")).to_contain_text("The bar lines moved")
     assert page.evaluate(f"!!Woodshed.app.typedBars.get('{key}')")  # kept on its beats
     assert page.evaluate("Woodshed.current.bars.some((b) => b.chords.some((c) => c.typed && c.quality === 'sus4'))")
+    # The typed bar now straddles two bars: both carry part of it.
+    assert page.evaluate("Woodshed.current.bars.filter((b) => b.edited).length") == 2
+    other.wait_for_timeout(1500)
+    assert other.evaluate(
+        f"Woodshed.current.song.first_beat % Woodshed.current.per === {first % per}"
+    )  # not pulled away
+    expect(other.get_by_test_id("toast")).to_contain_text("when you stop playing or editing")
+    other.get_by_test_id("edit-done").click()
     across_reload(other, moved)
     assert problems == []
