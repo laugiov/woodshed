@@ -59,6 +59,11 @@ ANDROID = (
 )
 
 
+def settled(page: Page) -> None:
+    """Past the delay the page waits before saying anything (W.AWAKE_SETTLE_MS), with room to say it."""
+    page.wait_for_timeout(page.evaluate("Woodshed.AWAKE_SETTLE_MS") + 500)
+
+
 def device(browser: Browser, url: str, script: str, problems: list[str], **context: Any) -> Page:
     size: ViewportSize = {"width": 390, "height": 844} if context.get("is_mobile") else {"width": 1280, "height": 800}
     page = browser.new_context(viewport=size, locale="en-US", **context).new_page()
@@ -154,7 +159,7 @@ def test_the_follower_is_told_how_to_keep_the_screen_on_only_when_it_may_lock(
     expect(line).to_be_hidden()
     page.goto(url)  # the next song, or the page opened again
     until(page, "window.Woodshed && window.Woodshed.ready === true && Woodshed.band.mode() === 'follow'")
-    page.wait_for_timeout(2000)
+    settled(page)
     expect(line).to_be_hidden()  # closed once: not again on this device
     assert problems == []
 
@@ -173,7 +178,7 @@ def test_leading_without_a_lock_says_it_once_as_a_toast(browser: Browser, server
     page.get_by_test_id("band-alone").click()
     page.evaluate("document.getElementById('toast').hidden = true")
     page.get_by_test_id("band-lead").click()
-    page.wait_for_timeout(2500)
+    settled(page)
     expect(page.get_by_test_id("toast")).to_be_hidden()  # once per device
     assert problems == []
 
@@ -194,7 +199,7 @@ def test_a_follower_back_from_a_locked_screen_is_told_until_the_lock_holds_again
     page = device(browser, server.url + "pop.woodshed/index.html?follow=1", FAKE_LOCK, problems)
     until(page, "Woodshed.band.mode() === 'follow' && __locks.held === 1")
     line = page.get_by_test_id("awake-line")
-    page.wait_for_timeout(1800)
+    settled(page)
     expect(line).to_be_hidden()  # a working lock: nothing to say
     page.evaluate("__locks.refuse = true")  # the phone locked; back, the system refuses the lock
     page.evaluate(HIDE, True)

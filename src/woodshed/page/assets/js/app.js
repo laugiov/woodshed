@@ -848,25 +848,29 @@
     // phone may lock: under the Follow banner a line worded for its system, else a toast once.
     const awakeLine = $("awakeLine");
     const stored = (key) => {
+      if (kept.has(key)) return "1";
       try {
         return localStorage.getItem(key);
       } catch (err) {
         return null;
       }
     };
+    const kept = new Set(); // this visit: what was closed or said, even where storage is blocked
     const keep = (key) => {
+      kept.add(key);
       try {
         localStorage.setItem(key, "1");
       } catch (err) {
         /* this visit only */
       }
     };
+    W.AWAKE_SETTLE_MS = 1500; // what the page waits before saying the screen may lock (tests read it)
     let cameBack = false; // the page was hidden while a mode was on: the screen probably locked
     let sayTimer = 0;
     const awake = W.createAwake(() => {
       if (awake && awake.locked() && !document.hidden) cameBack = false; // the Wake Lock again: nothing to fear
       clearTimeout(sayTimer);
-      sayTimer = setTimeout(sayAwake, 1500); // a lock or a video takes a moment: no line that flickers
+      sayTimer = setTimeout(sayAwake, W.AWAKE_SETTLE_MS); // a lock or a video takes a moment: no line that flickers
     });
     const bandMode = () => (W.band ? W.band.mode() : "alone");
     function screenAdvice() {

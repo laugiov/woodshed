@@ -1569,21 +1569,36 @@ class AppServer(ThreadingHTTPServer):
             sock = self.tls.context.wrap_socket(sock, server_side=True, do_handshake_on_connect=False)
         return sock, address
 
+    def finish_request(self, request: Any, client_address: Any) -> None:
+        if isinstance(request, ssl.SSLSocket):
+            # The handshake first, on this request's thread: only a refused one is a device that does not
+            # trust the certificate (a phone leaving mid-request is not).
+            request.settimeout(Handler.timeout)
+            try:
+                request.do_handshake()
+            except ssl.SSLError as exc:
+                if not isinstance(exc, (ssl.SSLEOFError, ssl.SSLZeroReturnError)):
+                    self._untrusted()
+                return
+            except OSError:
+                return  # gone before it said anything
+        super().finish_request(request, client_address)
+
+    def _untrusted(self) -> None:
+        main = self.main
+        if not main.untrusted_told:  # said once: the organiser has a phone to set up, not a log to read
+            main.untrusted_told = True
+            print(
+                "woodshed app: a device does not trust the certificate yet, or opened an http:// address: "
+                "install the certificate's root on it (README: Phones on the music stand)",
+                file=sys.stderr,
+                flush=True,
+            )
+
     def handle_error(self, request: Any, client_address: Any) -> None:
-        error = sys.exc_info()[1]
-        if isinstance(error, ssl.SSLError):
-            main = self.main
-            if not main.untrusted_told:  # said once: the organiser has a phone to set up, not a log to read
-                main.untrusted_told = True
-                print(
-                    "woodshed app: a device does not trust the certificate yet, or opened an http:// address: "
-                    "install the certificate's root on it (README: Phones on the music stand)",
-                    file=sys.stderr,
-                    flush=True,
-                )
+        # A phone gone mid-request (reset, aborted on Windows, broken pipe, a TLS session cut): no traceback.
+        if isinstance(sys.exc_info()[1], (ssl.SSLError, ConnectionError, TimeoutError)):
             return
-        if isinstance(error, (ConnectionError, TimeoutError)):  # reset, aborted (Windows), broken pipe
-            return  # a phone gone mid-request
         super().handle_error(request, client_address)
 
     def lan_urls(self) -> list[str]:
