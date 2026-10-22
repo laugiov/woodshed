@@ -522,7 +522,6 @@
     "this page has no settings to analyse it again with": "cette page n'a pas les réglages pour être réanalysée",
     "Command copied.": "Commande copiée.",
     "Copy": "Copier",
-    "Close": "Fermer",
     "Moving the bar lines": "Déplacement des barres",
     "Bar lines not moved, the page is as it was: {why}": "Barres non déplacées, la page est inchangée : {why}",
     "the bar lines are moved from the computer that runs the app": "les barres se déplacent depuis l'ordinateur où tourne l'appli",

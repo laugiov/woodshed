@@ -82,6 +82,13 @@ def test_every_text_the_page_code_says_has_its_french() -> None:
     assert missing == []
 
 
+def test_no_text_has_two_frenchs() -> None:
+    """A key given twice: the later French silently replaces the earlier, wherever the text is used."""
+    source = (PAGE / "assets" / "js" / "core" / "i18n-fr.js").read_text(encoding="utf-8")
+    keys = [k.strip('"') for k in re.findall(r'^\s*("(?:[^"\\]|\\.)*"|[A-Za-z_]\w*):', source, re.M)]
+    assert sorted({k for k in keys if keys.count(k) > 1}) == []
+
+
 def test_every_fixed_text_of_the_pages_has_its_french() -> None:
     from html.parser import HTMLParser
 
