@@ -250,7 +250,9 @@
       // longer the one in use; step 3 plays no track of its own and stays.
       const s = store.get();
       const stem = STEM_OF[s.inst];
-      const plays = { 1: "mix", 2: "solo-" + stem, 4: "minus-" + stem }[s.step];
+      const has = (t) => song.tracks.some((x) => x.id === t);
+      const own = { 1: "mix", 2: "solo-" + stem, 4: "minus-" + stem }[s.step];
+      const plays = own && (has(own) ? own : "mix"); // without the instruments' tracks, steps 2 and 4 play the mix
       if (plays && plays !== id && store.get().track === id) store.set({ step: null });
       return ok;
     };

@@ -167,6 +167,10 @@ def test_a_page_without_the_instruments_tracks_says_where_they_come_from(open_pa
     expect(part).to_contain_text("Your part's track comes with the separated instruments")
     expect(part.get_by_role("button")).to_have_count(0)
     expect(part.get_by_role("link")).to_have_count(0)
+    for step in (2, 4):  # the mix is what these steps play here: the card stays marked
+        o.js("(n) => Woodshed.app.setStep(n, true)", step)
+        o.page.wait_for_timeout(300)
+        expect(o.page.get_by_test_id(f"step-{step}")).to_have_class("step on")
 
 
 @pytest.fixture
@@ -207,6 +211,7 @@ def test_each_device_keeps_its_own_part_in_the_band(browser: Browser, band_serve
     until(leader, "Woodshed.app.store.get().track === 'minus-drums'")
     leader.wait_for_timeout(500)
     assert follower.evaluate("Woodshed.app.store.get().track") == "solo-bass"
+    assert leader.evaluate("Woodshed.app.store.get().track") == "minus-drums"  # neither moved the other
     assert problems == []
 
 
