@@ -453,7 +453,7 @@ flowchart LR
 ### Library and jobs
 
 - A library is a folder. Uploads land in `songs/`. Each song gets a page folder next to it.
-- The home page lists pages by reading their `woodshed.json` manifests.
+- The home page lists pages by reading their `woodshed.json` manifests. Each song is a row (`home.js` `row()`): the key in a tile (the band's key when there is one), the title with a trailing "(…)" as a subtitle, tempo and length, and tags for parts, words and chords left to check. The whole row is the song's link (a stretched `::after`), its own buttons above it. The set list and the band's phones are a side column on a wide screen; under 960 px the set comes first, then the songs, then the phones. Files dropped anywhere on the page are uploaded; an empty library shows the drop area as its welcome.
 - `Library.add` puts a job on a queue. **One worker thread** takes one job at a time, so only one analysis runs at once. It runs the same `first_pass` and `second_pass` as the command line.
 - A job goes through `queued`, `analysing`, `separating`, `done` or `failed`. The home page polls its progress.
 - Words pasted on a song page are a job of the same queue (`kind: "words"`, status `placing`): one heavy job at a time, and never two jobs on one song at once. They are allowed from the computer that runs the app, like uploads, and are 32 KB at most. A words job is not resumed after a stop: paste them again.

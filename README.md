@@ -129,11 +129,12 @@ library every device of the band sees them.
 
 ### Your library, your exports
 
-<img src="docs/images/library.png" alt="The library: songs with key, tempo, length and status, and the set list" width="100%">
+<img src="docs/images/library.png" alt="The library: each song with its key, tempo, length and what its page has, and tonight's set list beside the songs" width="100%">
 
-`woodshed app` opens your library in the browser. Drop audio or video files on it and each one
-becomes a practice page: first with the full mix after a few seconds, then with every instrument's
-track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
+`woodshed app` opens your library in the browser. Drop audio or video files anywhere on it and each
+one becomes a practice page: first with the full mix after a few seconds, then with every
+instrument's track. Each song shows its key (the band's key when you chose one), tempo, length and
+what its page has; tonight's set list sits beside your songs, and above them on a phone. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
 **MusicXML** (MuseScore), a
 chord timeline (`.lab`) or **JSON**, or print a compact chart for the music stand: about two A4 pages
 for a song with its words, each part kept on one page when it fits, the song's guitar shapes on top when Guitar
