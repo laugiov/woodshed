@@ -46,6 +46,7 @@
       sheet: null, // "grid" or "lyrics"; null: as suits the instrument
       bandKey: null, // the key the band plays this song in (semitones), once the library said; null: no library
       bandNote: "", // the leader's note on this song
+      wordsElsewhere: false, // a phone of the band: words are added from the computer
     });
     app.store = store;
 

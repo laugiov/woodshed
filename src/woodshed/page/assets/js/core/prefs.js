@@ -72,11 +72,21 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       label(button);
-      button.addEventListener("click", toggle);
+      // A click or a tap leaves no focus behind: the next Space (a pedal) plays the song; the
+      // keyboard keeps it, so Space presses the button again.
+      button.addEventListener("click", (e) => {
+        toggle();
+        if (e.detail > 0) button.blur();
+      });
     });
     document.querySelectorAll("[data-lang-toggle]").forEach((group) => {
       marks(group);
-      group.querySelectorAll("[data-lang]").forEach((b) => b.addEventListener("click", () => setLang(b.getAttribute("data-lang"))));
+      group.querySelectorAll("[data-lang]").forEach((b) =>
+        b.addEventListener("click", (e) => {
+          setLang(b.getAttribute("data-lang"));
+          if (e.detail > 0) b.blur();
+        }),
+      );
     });
   });
 })();

@@ -1274,3 +1274,21 @@ def test_a_looped_passage_says_its_bars_without_bass_in_one_line(open_page: Any)
     o.js("Woodshed.app.store.set({loop: [0, 3], loopOn: true})")
     expect(o.page.get_by_test_id("bass-tab")).to_have_count(3)  # bars 1, 3 and 4
     expect(o.page.get_by_test_id("bass-silent")).to_have_text("Bar 2: no bass heard.")
+
+
+def test_a_pedal_plays_after_a_tap_on_the_theme_or_language_button(open_page: Any) -> None:
+    o = open_page("pop")
+    theme = o.js("document.documentElement.dataset.theme || ''")
+    o.page.get_by_test_id("theme").first.click()  # a mouse click (or a tap) leaves no focus on it
+    changed = o.js("document.documentElement.dataset.theme || ''")
+    o.page.keyboard.press(" ")  # the pedal
+    until(o, "Woodshed.debug().playing === true")
+    assert o.js("document.documentElement.dataset.theme || ''") == changed != theme  # not toggled back
+
+
+def test_on_paper_the_caveat_on_the_chords_is_printed(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("Woodshed.current.song.analysis.chords_reliable = false")
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
+    o.page.emulate_media(media="print")
+    expect(o.page.get_by_test_id("unreliable")).to_be_visible()  # about the chart: kept on paper

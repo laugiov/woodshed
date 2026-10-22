@@ -374,6 +374,7 @@
     "No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here.":
       "Pas de groove net : ni grosse caisse ni caisse claire ne revient dans la plupart des mesures, donc rien n'est écrit. Fie-toi à ton oreille ici.",
     "Hi-hat on {hits}.": "Charley sur {hits}.",
+    "Solid dot: played in more than half the bars": "Point plein : joué dans plus de la moitié des mesures",
     "Solid dot: played in more than half the bars; faint: now and then": "Point plein : joué dans plus de la moitié des mesures ; pâle : de temps en temps",
     "Fills are not detected yet.": "Les breaks ne sont pas encore détectés.",
     "No vocal track was separated for this song: run woodshed with stems to get this part.":

@@ -320,7 +320,7 @@
         h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Main groove {tag}"), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
         song.per === 4 && hits.clear ? h("div", { class: "staffbox", id: "drumStaff", "data-testid": "drum-staff", "aria-label": W.t("Drum notation of the main groove") }) : null,
         rhythmGrid([[W.t("Hi-hat"), g.hat, hits.hat], [W.t("Snare"), g.snare, hits.snare], [W.t("Kick"), g.kick, hits.kick]], null, song.per, "grooveGrid", !hits.clear),
-        h("div", { class: "legend-row" }, h("span", null, W.t("Solid dot: played in more than half the bars; faint: now and then")), song.per === 4 && hits.clear ? h("span", null, W.t("Notation: hits played in more than half the bars")) : null),
+        h("div", { class: "legend-row" }, h("span", null, hits.clear ? W.t("Solid dot: played in more than half the bars; faint: now and then") : W.t("Solid dot: played in more than half the bars")), song.per === 4 && hits.clear ? h("span", null, W.t("Notation: hits played in more than half the bars")) : null),
         h(
           "div",
           { class: "hear-row" },

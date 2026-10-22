@@ -574,7 +574,8 @@ body.following #playBtn { opacity: 0.45; }
   .line-label .t, .lline .t { font-size: 8.5px; }
   .bar { min-height: 0; padding: 0 5px 12px; align-items: flex-start; }
   .bar .num, .bar .rn { font-size: 7.5px; bottom: 1px; } /* under the chords, never over them */
-  .warnfact, .okfact { display: none !important; } /* the screen's badges: nothing to click on paper */
+  [data-testid="spots"], .okfact { display: none !important; } /* the screen's badges: nothing to click on paper */
+  [data-testid="unreliable"] { color: #000 !important; background: none !important; border: 0 !important; } /* a caveat on the chart: printed */
   .sheet .cur, .sheet .inloop, .sheet .cur .nb { background: none !important; box-shadow: none !important; }
   .bar .ch, .ch { font-size: 14px; }
   .lline { grid-template-columns: 34px minmax(0, 1fr); padding: 0 2px; gap: 4px; }
