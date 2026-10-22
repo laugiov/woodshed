@@ -79,7 +79,7 @@ Change the key and everything follows: the chart, the shapes, the tab, the keybo
 words (**+ Add the words**), pick your voice type and **Transpose to** the key it suggests, then
 **Keep it for the band**: every device opens the song in your key, and the page reminds you that
 the recording stays in its own. Tap a line's time to sing from there; stage mode shows the words
-big, your line lit, and the next part coming. The ChordPro export follows the key you keep.
+big, your line lit, and the next part coming. The ChordPro export is in the key the page shows, the band's key included.
 
 ### A method, not just a chart
 
@@ -377,8 +377,8 @@ woodshed is MIT. The models it downloads come with their own licences:
 **If your band is paid to play, leave the words feature aside** unless you are sure your use is
 non-commercial: it is the only part that needs the MMS weights, and
 [their licence](https://creativecommons.org/licenses/by-nc/4.0/) allows non-commercial use only
-(this is not legal advice). Everything else in woodshed is MIT and free for any use, paid gigs
-included.
+(this is not legal advice). Everything else in woodshed is under permissive licences (MIT, and SIL
+OFL for the fonts) and free for any use, paid gigs included.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,
 and Atkinson Hyperlegible, Barlow Condensed, JetBrains Mono, Noto Music and Bravura fonts (SIL OFL).
@@ -391,11 +391,11 @@ you don't have the rights to.
 
 - Alpha: the core (chart, sections, lyrics, parts, band mode) works, and the page is tested in
   Chromium and Firefox on every push and pull request. Installation will get simpler.
-- How accurate it is, as measured when the engine was built (October 2026; no larger benchmark
-  yet): on "Let It Be" against the Isophonics reference, chords 84.5 %
-  right (major/minor), beats and downbeats found at 0.97 (F-measure); on a funk cover, the drum
-  groove's kick and snare matched 9 bars out of 10, and the bass notes' octave was checked on two
-  real recordings. The bass tab note by note is not measured yet: it is marked experimental in the
+- How accurate it is, as measured on the prototype woodshed grew from (October 2026; no larger
+  benchmark yet): on "Let It Be" (the album version, its first 2:55) against the Isophonics
+  reference, chords 84.5 % right (major/minor), beats and downbeats found at 0.97 (F-measure); on a
+  funk cover, the drum groove's kick and snare matched 9 bars out of 10. The bass notes' octave was
+  checked on the separated tracks of real recordings. The bass tab note by note is not measured yet: it is marked experimental in the
   page, as the drum groove, and both say when the read is unsure ("no clear groove", "no bass heard
   in this bar"). Check them by ear.
 - Chords are triads by default; `--sevenths` adds 7 and m7 chords, less reliably.

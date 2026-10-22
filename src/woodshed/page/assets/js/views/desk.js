@@ -138,11 +138,12 @@
           h("span", { class: "play-hint", style: { display: "block" } }, W.t("▶ hear")),
         );
       });
-      // One line, from what the cards would show at each capo: how many chords need a barre, and the
-      // capo with the fewest (the lowest of equals), with a button to put it on.
+      // One line: the capo the page chooses when it transposes (theory.suggest_capo: chords weighted
+      // by how long they last, a high capo only when clearly easier), with the barre chords it saves,
+      // and a button to put it on.
       const barresAt = (k) => chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - k, c.quality)).length;
-      const counts = [0, 1, 2, 3, 4, 5, 6, 7].map(barresAt);
-      const best = counts.indexOf(Math.min(...counts));
+      const best = song.capoFor(t);
+      const counts = { [best]: barresAt(best), 0: barresAt(0) };
       let useBest = null;
       if (s.pos === "open" && s.capo !== best) {
         useBest = h("button", { type: "button", class: "btn", "data-testid": "use-best-capo", onclick: () => store.set({ capo: best }) }, best ? W.t("Use capo {n}", { n: best }) : W.t("Take the capo off"));
@@ -150,12 +151,16 @@
       const tip =
         s.pos === "open"
           ? best
-            ? counts[best]
-              ? W.t("Best capo: {c}, {b} barre chords instead of {n}.", { c: best, b: counts[best], n: counts[0] })
-              : W.t("Best capo: {c}, every shape open (without a capo, barre chords: {n}).", { c: best, n: counts[0] })
-            : counts[0]
-              ? W.t("Barre chords: {n}, and no capo gives fewer.", { n: counts[0] })
-              : W.t("Open shapes, no capo needed.")
+            ? !counts[best]
+              ? W.t("Best capo: {c}, every shape open (without a capo, barre chords: {n}).", { c: best, n: counts[0] })
+              : counts[best] === 1
+                ? W.t("Best capo: {c}, 1 barre chord instead of {n}.", { c: best, n: counts[0] })
+                : W.t("Best capo: {c}, {b} barre chords instead of {n}.", { c: best, b: counts[best], n: counts[0] })
+            : !counts[0]
+              ? W.t("Open shapes, no capo needed.")
+              : counts[0] === 1
+                ? W.t("One barre chord, and no capo makes the song clearly easier.")
+                : W.t("Barre chords: {n}, and no capo makes the song clearly easier.", { n: counts[0] })
           : s.pos === "funk"
             ? W.t("Three-note shapes chosen so your hand barely moves from one chord to the next.")
             : W.t("Full barre chords, no capo, concert pitch.");
@@ -214,14 +219,14 @@
       if (!parts) return note(W.t("No bass track was separated for this song: run woodshed with stems to get this part."));
       const u = curBar(s);
       const legend = note(W.t("Transcribed from the isolated bass track, at the pitch heard: onsets only, a note lasts until the next one. Faint notes are less certain."));
-      // A loop: the tab of every looped bar (its first eight), so the passage reads on one screen.
+      // A loop: the tab of every looped bar (up to sixteen: a whole chorus), the passage on one screen.
       if (s.loopOn && s.loop) {
         const [a, b] = s.loop;
-        const last = Math.min(b, a + 7);
+        const last = Math.min(b, a + 15);
         const bars = [];
         for (let v = a; v <= last; v++) bars.push(...bassTab(v, s, W.t("Bar {n}", { n: v + 1 })));
         return [
-          h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bars {from}–{to}, looped {tag}", { from: a + 1, to: last + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
+          h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(last < b ? W.t("Bars {from}–{to}, the first sixteen of the loop {tag}", { from: a + 1, to: last + 1 }) : W.t("Bars {from}–{to}, looped {tag}", { from: a + 1, to: last + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
           bars,
           h("div", { class: "hear-row" }, h("button", { type: "button", class: "btn", "data-testid": "hear-riff", onclick: () => app.hearRiff(u) }, W.t("▶ Hear bar {n}", { n: u + 1 }))),
           legend,

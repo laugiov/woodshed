@@ -119,7 +119,7 @@
           h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, tabindex: k === stop ? "0" : "-1", "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec.name)),
         ),
       );
-      if (focused >= 0 && $("form").children[focused]) $("form").children[focused].focus();
+      if (focused >= 0 && $("form").children[focused]) $("form").children[focused].focus({ preventScroll: true }); // the page follows the song
     }
     // The parts: one stop for Tab, the arrows (and Home, End) move between them.
     $("form").addEventListener("keydown", (e) => {
@@ -230,9 +230,11 @@
       // Bars no line holds: inside a sung part they are said ("no words here"), after the last sung
       // line once ("the text may stop before the song"): never an unexplained grid among the words.
       const lastSung = rows.reduce((m, r) => Math.max(m, r.bars[r.bars.length - 1].bar), -1);
+      const firstSung = rows.reduce((m, r) => Math.min(m, r.bars[0].bar), Infinity);
       const sung = new Set(rows.map((r) => (sections.length ? song.sectionIndex(r.firstBar, sections) : -1)));
       let endSaid = false;
       const freeNote = (x) => {
+        if (x.at < firstSung) return null; // an intro, before anything is sung
         if (x.at > lastSung) {
           if (endSaid) return null;
           endSaid = true;

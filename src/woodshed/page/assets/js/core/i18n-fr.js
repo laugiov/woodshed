@@ -303,7 +303,9 @@
     "▶ hear": "▶ écouter",
     "Best capo: {c}, {b} barre chords instead of {n}.": "Meilleur capo : {c}, {b} accords barrés au lieu de {n}.",
     "Best capo: {c}, every shape open (without a capo, barre chords: {n}).": "Meilleur capo : {c}, toutes les positions ouvertes (sans capo, accords barrés : {n}).",
-    "Barre chords: {n}, and no capo gives fewer.": "Accords barrés : {n}, et aucun capo n'en donne moins.",
+    "Barre chords: {n}, and no capo makes the song clearly easier.": "Accords barrés : {n}, et aucun capo ne rend le morceau nettement plus facile.",
+    "One barre chord, and no capo makes the song clearly easier.": "Un accord barré, et aucun capo ne rend le morceau nettement plus facile.",
+    "Best capo: {c}, 1 barre chord instead of {n}.": "Meilleur capo : {c}, 1 accord barré au lieu de {n}.",
     "Use capo {n}": "Mettre le capo {n}",
     "Take the capo off": "Retirer le capo",
     "Open shapes, no capo needed.": "Positions ouvertes, pas besoin de capo.",
@@ -331,6 +333,7 @@
     "▶ Hear bar {n}": "▶ Écouter la mesure {n}",
     "Transcribed from the isolated bass track, at the pitch heard: onsets only, a note lasts until the next one. Faint notes are less certain.":
       "Transcrit d'après la piste de basse séparée, à la hauteur entendue : les attaques seulement, une note dure jusqu'à la suivante. Les notes pâles sont moins sûres.",
+    "Bars {from}–{to}, the first sixteen of the loop {tag}": "Mesures {from} à {to}, les seize premières de la boucle {tag}",
     "Bars {from}–{to}, looped {tag}": "Mesures {from} à {to}, en boucle {tag}",
     "Now: {chord} in root position. Orange outline: the next chord, {next}.":
       "Maintenant : {chord} en position fondamentale. Contour orange : l'accord suivant, {next}.",

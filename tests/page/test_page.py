@@ -1085,7 +1085,7 @@ def test_a_doubt_opened_from_the_keyboard_off_screen_sits_by_its_bar(open_page: 
     # The chord just under the bottom edge, as after the page followed the song.
     o.js("(() => { const r = document.querySelector('[data-testid=doubt]').getBoundingClientRect();"
          " window.scrollBy(0, r.top - innerHeight + 4); })()")  # fmt: skip
-    doubt.focus()
+    doubt.evaluate("(b) => b.focus({ preventScroll: true })")  # focus alone does not bring it into sight
     o.page.keyboard.press("Enter")
     expect(o.page.get_by_test_id("doubt-pop")).to_be_visible()
     d, p = doubt.bounding_box(), o.page.get_by_test_id("doubt-pop").bounding_box()
@@ -1100,8 +1100,13 @@ def test_the_part_chips_are_one_tab_stop_moved_with_the_arrows(open_page: Any) -
     assert chips.count() > 1
     assert o.js("[...document.querySelectorAll('[data-testid=form-chip]')].filter(c => c.tabIndex >= 0).length") == 1
     chips.first.focus()
+    beat = o.js("Woodshed.app.store.get().beat")
     o.page.keyboard.press("ArrowRight")
     expect(chips.nth(1)).to_be_focused()
+    assert o.js("Woodshed.app.store.get().beat") == beat  # the arrows move between parts, not bars
+    o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")  # drawn again
+    expect(chips.nth(1)).to_be_focused()
+    assert o.js("[...document.querySelectorAll('[data-testid=form-chip]')].filter(c => c.tabIndex >= 0).length") == 1
     o.page.keyboard.press("End")
     expect(chips.last).to_be_focused()
 
@@ -1157,15 +1162,18 @@ def test_the_drum_text_says_a_pattern_as_a_drummer_does(open_page: Any, groove: 
     assert said in o.page.get_by_test_id("desk").inner_text()
 
 
-def test_the_guitar_panel_names_the_best_capo_and_puts_it_on(open_page: Any) -> None:
-    o = open_page("pop")  # C G Am F: the F is a barre without a capo; capo 5 gives G D Em C
+def test_the_guitar_panel_names_the_capo_the_page_chooses_and_puts_it_on(open_page: Any) -> None:
+    o = open_page("pop")  # C G Am F: the F is a barre, and no capo makes the song clearly easier
     o.page.get_by_test_id("inst-guitar").click()
     desk = o.page.get_by_test_id("desk")
-    expect(desk).to_contain_text("Best capo: 5, every shape open (without a capo, barre chords: 1).")
-    o.page.get_by_test_id("use-best-capo").click()
-    assert o.js("Woodshed.app.store.get().capo") == 5
-    expect(o.page.get_by_test_id("use-best-capo")).to_have_count(0)  # on: nothing more to offer
-    expect(desk).not_to_contain_text("no capo makes")  # no tip saying the opposite
+    expect(desk).to_contain_text("One barre chord, and no capo makes the song clearly easier.")
+    expect(o.page.get_by_test_id("use-best-capo")).to_have_count(0)
+    o.js("Woodshed.app.store.set({capo: 3})")  # a capo put on by hand
+    o.page.get_by_test_id("use-best-capo").click()  # "Take the capo off"
+    assert o.js("Woodshed.app.store.get().capo") == 0
+    for t in (2, -3, 5):  # whatever key: the panel agrees with the capo the transposition chose
+        o.js(f"Woodshed.app.transposeTo({t})")
+        expect(o.page.get_by_test_id("use-best-capo")).to_have_count(0)
 
 
 def test_on_a_tablet_a_singer_opens_on_the_words_not_a_big_chord(open_page: Any) -> None:
@@ -1191,7 +1199,26 @@ def test_stage_mode_says_what_comes_and_what_the_buttons_do(open_page: Any) -> N
         "title", "Tap: back to the start of this part. Twice: the part before."
     )
     expect(o.page.get_by_test_id("stage-coming")).to_contain_text("Next: ")  # stopped: the next part named
-    o.page.get_by_test_id("theme").first.evaluate("(b) => b")  # exists
+    o.page.get_by_test_id("stage-exit").click()
+    o.page.get_by_test_id("inst-guitar").click()
+    o.js("Woodshed.app.seekBar(1)")
+    o.js("Woodshed.app.setStage(true, false)")
+    expect(o.page.locator(".st-shapes .next small")).to_have_text("next")  # the dimmer shape says what it is
+
+
+def test_on_a_touch_screen_the_small_buttons_are_finger_sized(browser: Any, pages_root: str) -> None:
+    from tests.page.conftest import built
+
+    context = browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True, locale="en-US")
+    page = context.new_page()
+    page.goto((built("pop", True, pages_root) / "index.html").as_uri())
+    for _ in range(100):
+        if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
+            break
+        page.wait_for_timeout(25)
+    box = page.get_by_test_id("theme").first.bounding_box()
+    assert box is not None and box["height"] >= 44 and box["width"] >= 44
+    context.close()
 
 
 def test_the_fit_key_button_names_the_key(open_page: Any) -> None:

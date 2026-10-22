@@ -126,7 +126,7 @@ def summary(song: Song, page: Path) -> dict[str, Any]:
         "key": theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m"),
         "bpm": math.floor(song.bpm + 0.5),
         "meter": f"{song.beats_per_bar}/4",
-        "duration": round(song.duration),
+        "duration": math.floor(round(song.duration, 2) + 0.5),  # as the page rounds it (halves up)
         "doubts": doubts,
         "stems": song.analysis.stems,
     }

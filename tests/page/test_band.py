@@ -520,10 +520,38 @@ def test_a_removal_made_offline_reaches_the_band_when_the_app_answers_again(
 
 def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
-    page = device(browser, server.url + "pop.woodshed/index.html", problems)
+    phone = {"viewport": {"width": 390, "height": 844}, "has_touch": True, "is_mobile": True, "locale": "en-US"}
+    context = browser.new_context(**phone)
+    page = context.new_page()  # a phone: no hover, so the buttons' titles are never seen
+    # Firefox's automation layer warns about its own layout calls (chrome://juggler): not the page.
+    page.on(
+        "console",
+        lambda m: problems.append(m.text) if m.type in ("error", "warning") and "juggler" not in m.text else None,
+    )
+    page.goto(server.url + "pop.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
     hint = page.get_by_test_id("band-hint")
     expect(hint).to_have_text("This device plays on its own.")  # visible text, not a tooltip only
     page.get_by_test_id("band-lead").click()
     expect(hint).to_have_text("This device plays for the whole band: the song, the place, the loop.")
     page.get_by_test_id("band-alone").click()
+    sheet = page.evaluate("document.getElementById('sheet').getBoundingClientRect().top")
+    assert sheet < 844 - 120  # the chart still starts on the first screen
     assert problems == []
+
+
+@pytest.mark.parametrize("can_upload", [True, False])
+def test_add_the_words_is_offered_only_where_words_can_be_placed(
+    browser: Browser, server: app.AppServer, can_upload: bool
+) -> None:
+    page = browser.new_context(locale="en-US").new_page()
+
+    def answer(route: Any) -> None:  # a song with its parts and no words; this device, or a phone
+        data = json.loads(route.fetch().text())
+        data["songs"] = [{**s, "complete": True, "stems": True, "words": False} for s in data["songs"]]
+        route.fulfill(json=dict(data, can_upload=can_upload))
+
+    page.route("**/api/songs", answer)
+    page.goto(server.url)
+    expect(page.get_by_test_id("song-row").first).to_be_visible()
+    expect(page.get_by_test_id("add-words")).to_have_count(2 if can_upload else 0)
