@@ -396,7 +396,7 @@
       const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, s.editing, W.lang()].join("|");
       if (el.dataset.shows === shows) return;
       el.dataset.shows = shows;
-      const sheetCtl = app.words
+      const sheetCtl = app.words && !s.editing // editing: the grid only
         ? h(
             "div",
             { class: "seg-ctl", role: "group", "aria-label": W.t("Chart with") },
@@ -410,7 +410,7 @@
         : null;
       // The band's own chart: not while the full analysis is still coming (it may change the beats).
       const editBtn = song.view.pending
-        ? null
+        ? h("button", { type: "button", class: "btn", disabled: "", "data-testid": "edit-chart", title: W.t("Edit when the parts are ready: the full analysis may move the beats.") }, W.t("Edit the chart"))
         : h("button", {
             type: "button", class: "btn" + (s.editing ? " on" : ""), "aria-pressed": String(!!s.editing), "data-testid": "edit-chart",
             onclick: () => store.set({ editing: !store.get().editing }),

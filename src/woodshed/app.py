@@ -78,7 +78,7 @@ EDITS_PARTS_MAX = 200
 EDIT_CHORDS_MAX = 64  # chords in one typed bar
 LABEL_MAX = 24
 PART_NAME_MAX = 40  # code points
-BEAT_INDEX = re.compile(r"-?[0-9]{1,6}")
+BEAT_INDEX = re.compile(r"0|-?[1-9][0-9]{0,5}")  # one spelling a beat: no 007, no -0
 UNSAFE = re.compile("[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]")  # control and direction overrides
 KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
 TYPES = {
@@ -145,8 +145,7 @@ class Library:
         self.lock = threading.Lock()
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
-        self.doubt_ids: dict[str, tuple[int, tuple[str, set[str]] | None]] = {}  # folder -> (stamp, (key, ids))
-        self.doubt_beats: dict[str, tuple[int, tuple[str, dict[str, set[int]]] | None]] = {}  # as doubt_ids
+        self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -199,34 +198,42 @@ class Library:
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
         return updated
 
-    def _chords_to_check(self, page: Path) -> tuple[str, set[str]] | None:
-        """A page's analysis key (as the page computes it) and the ids of its chords to check by
-        ear, read once per build of the page."""
+    def _page_song(self, page: Path) -> dict[str, Any] | None:
+        """A page's song data, read once per build of the page (its doubts are counted every poll)."""
         index = page / "index.html"
         try:
             stamp = index.stat().st_mtime_ns
         except OSError:
             return None
-        cached = self.doubt_ids.get(page.name)
+        cached = self.page_songs.get(page.name)
         if cached is not None and cached[0] == stamp:
             return cached[1]
-        found_ids: tuple[str, set[str]] | None
+        song: dict[str, Any] | None
         try:
             found = DATA_BLOCK.search(index.read_text(encoding="utf-8"))
             if found is None:
                 raise ValueError("not a woodshed page")
             song = json.loads(found.group(1))["song"]
+            if not isinstance(song, dict):
+                raise ValueError("not a song")
+        except (OSError, ValueError, KeyError, TypeError):
+            song = None
+        self.page_songs[page.name] = (stamp, song)
+        return song
+
+    def _chords_to_check(self, page: Path) -> tuple[str, set[str]] | None:
+        """A page's analysis key (as the page computes it) and the ids of its chords to check by ear."""
+        song = self._page_song(page)
+        try:
             ids = {
                 str(c["doubt"]["id"])
-                for b in song["bars"]
+                for b in song["bars"]  # type: ignore[index]
                 for c in b["chords"]
                 if c.get("doubt") and c["doubt"].get("kind") == "chord"
             }
-            found_ids = (analysis_key(song), ids)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            found_ids = None
-        self.doubt_ids[page.name] = (stamp, found_ids)
-        return found_ids
+            return analysis_key(song), ids  # type: ignore[arg-type]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return None
 
     def _left_to_check(self, page: Path) -> int | None:
         """Chords to check minus those the band corrected, in this analysis of the page (an older
@@ -248,33 +255,19 @@ class Library:
     def _doubt_beats(self, page: Path) -> tuple[str, dict[str, set[int]]] | None:
         """A page's beat grid key and, per chord to check, the beats it covers (as song.beats counts them):
         a typed bar over any of them settles it."""
-        index = page / "index.html"
+        song = self._page_song(page)
         try:
-            stamp = index.stat().st_mtime_ns
-        except OSError:
-            return None
-        cached = self.doubt_beats.get(page.name)
-        if cached is not None and cached[0] == stamp:
-            return cached[1]
-        found: tuple[str, dict[str, set[int]]] | None
-        try:
-            block = DATA_BLOCK.search(index.read_text(encoding="utf-8"))
-            if block is None:
-                raise ValueError("not a woodshed page")
-            song = json.loads(block.group(1))["song"]
-            per, first = song["beats_per_bar"], song["first_beat"]
+            per, first = song["beats_per_bar"], song["first_beat"]  # type: ignore[index]
             beats_of: dict[str, set[int]] = {}
-            for u, bar in enumerate(song["bars"]):
+            for u, bar in enumerate(song["bars"]):  # type: ignore[index]
                 at = first + u * per
                 for c in bar["chords"]:
                     if c.get("doubt") and c["doubt"].get("kind") == "chord":
                         beats_of[str(c["doubt"]["id"])] = set(range(at, at + c["beats"]))
                     at += c["beats"]
-            found = (beats_key(song), beats_of)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            found = None
-        self.doubt_beats[page.name] = (stamp, found)
-        return found
+            return beats_key(song), beats_of  # type: ignore[arg-type]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return None
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
@@ -789,7 +782,8 @@ def _checked_edits(data: Any, removals: bool = False) -> dict[str, Any]:
             raise ValueError("bars: chords as [beats, label]")
         if not isinstance(t, (int, float)) or isinstance(t, bool) or not 0 <= t < 86400:
             raise ValueError("bars: the time of the bar")
-        kept = []
+        kept: list[list[Any]] = []
+        total = 0
         for chord in chords:
             n, label = chord if isinstance(chord, list) and len(chord) == 2 else (None, None)
             if type(n) is not int or not 0 < n <= EDIT_CHORDS_MAX:
@@ -801,6 +795,9 @@ def _checked_edits(data: Any, removals: bool = False) -> dict[str, Any]:
             ):
                 raise ValueError("bars: chords as written on a chart")
             kept.append([n, label])
+            total += n
+        if total > EDIT_CHORDS_MAX:
+            raise ValueError("bars: one bar's beats at most")
         out["bars"][at] = {"chords": kept, "t": float(t)}
     for at, part in parts.items():
         if not BEAT_INDEX.fullmatch(at):

@@ -205,7 +205,9 @@
       } }, action.label) : null);
       t.hidden = false;
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => (t.hidden = true), action ? 8000 : 2600);
+      // Kept while the keyboard is on its button (Undo).
+      const hide = () => (t.contains(document.activeElement) ? (toastTimer = setTimeout(hide, 2000)) : (t.hidden = true));
+      toastTimer = setTimeout(hide, action ? 8000 : 2600);
     }
 
     let opener = null;

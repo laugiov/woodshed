@@ -245,6 +245,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") loadFixes();
     });
+    window.addEventListener("online", () => loadFixes()); // back on the network: what waited is shared
 
     function heard(state) {
       if (state.fixes && typeof state.fixes[folder] === "number" && state.fixes[folder] > fixesRev) loadFixes();

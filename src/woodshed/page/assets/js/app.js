@@ -356,12 +356,12 @@
     // The band's typed bars and part names (core/edits.js), kept by the beat they start on under a key of
     // the beats alone: a new analysis on the same beats (the bar lines moved) keeps them. As app.beats_key.
     const editsKey = fnv1a(JSON.stringify(meta.beats.map((t) => Math.floor(t * 1000 + 0.5))));
-    const BEAT = /^-?[0-9]{1,6}$/;
+    const BEAT = /^(0|-?[1-9][0-9]{0,5})$/; // one spelling a beat, as app.py BEAT_INDEX
     const typedBars = W.keyed("woodshed:edits:" + editsKey + ":bars", (k, v) =>
       BEAT.test(k) && !!v && Array.isArray(v.chords) && v.chords.length > 0 &&
       v.chords.every((c) => Array.isArray(c) && Number.isInteger(c[0]) && c[0] > 0 && typeof c[1] === "string" && !W.chords.parse(c[1]).refused));
     const typedParts = W.keyed("woodshed:edits:" + editsKey + ":parts", (k, v) =>
-      BEAT.test(k) && !!v && (v.join === true || (typeof v.name === "string" && v.name.trim().length > 0 && v.name.length <= 40)));
+      BEAT.test(k) && !!v && (v.join === true || (typeof v.name === "string" && v.name.trim().length > 0 && [...v.name].length <= 40)));
     typedBars.restore();
     typedParts.restore();
     // Beats are counted from the first bar's beat one in the page, from the first tracked beat in the store.
@@ -546,7 +546,12 @@
     // Back to the analysis for bar u: every typed span that starts on one of its beats.
     app.untypeBar = (u) => {
       const first = meta.first_beat + u * song.per;
-      const keys = Object.keys(typedBars.values()).filter((k) => Number(k) >= first && Number(k) < first + song.per);
+      // Every typed span over a beat of this bar (one typed before the bar lines moved may start in the bar before).
+      const spans = typedBars.values();
+      const keys = Object.keys(spans).filter((k) => {
+        const len = spans[k].chords.reduce((n, [b]) => n + b, 0);
+        return Number(k) < first + song.per && Number(k) + len > first;
+      });
       for (const k of keys) typedBars.take(k);
       if (!app.shareEdits) typedBars.heard(keys); // opened from disk: this browser was all there was
       return editsChanged({ bars: Object.fromEntries(keys.map((k) => [k, null])) });
@@ -564,10 +569,12 @@
       }
       const none = (o) => Object.fromEntries(Object.keys(o).map((k) => [k, null]));
       editsChanged({ bars: none(bars), parts: none(parts) });
+      // Undo puts back only what nobody typed again meanwhile (the band's newer change stays).
       return () => {
-        for (const [k, v] of Object.entries(bars)) typedBars.set(k, v);
-        for (const [k, v] of Object.entries(parts)) typedParts.set(k, v);
-        editsChanged({ bars, parts });
+        const back = { bars: {}, parts: {} };
+        for (const [k, v] of Object.entries(bars)) if (typedBars.get(k) === undefined) typedBars.set(k, (back.bars[k] = v));
+        for (const [k, v] of Object.entries(parts)) if (typedParts.get(k) === undefined) typedParts.set(k, (back.parts[k] = v));
+        editsChanged(back);
       };
     };
     // `quiet`: the first read when the page opens, nothing to announce.
@@ -583,7 +590,8 @@
           .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
           .map((k) => Math.floor((Number(k) - meta.first_beat) / song.per) + 1)
           .sort((a, b) => a - b);
-        if (!quiet && moved.length) app.toast(W.t("Bar {n} changed on another device.", { n: moved[0] }));
+        if (!quiet && moved.length === 1) app.toast(W.t("Bar {n} changed on another device.", { n: moved[0] }));
+        else if (!quiet && moved.length) app.toast(W.t("{n} bars changed on another device.", { n: moved.length }));
         else if (!quiet && parts.changed) app.toast(W.t("The parts changed on another device."));
       }
       return { bars: bars.share, parts: parts.share };
@@ -685,6 +693,23 @@
         transport.pause();
         store.set({ playing: false });
       }, (song.beatTime((u + 1) * song.per) - song.beatTime(u * song.per)) * 1000 * (song.song.bpm / store.get().bpm) + 100);
+    };
+    // This bar of the recording in a loop, while the bar editor's button is held; then as it was.
+    let loopBefore = null;
+    app.loopBar = (u) => {
+      if (following()) return leaderMoves();
+      const s = store.get();
+      loopBefore = { loop: s.loop, loopOn: s.loopOn };
+      app.cancelTimers();
+      setLoop([u, u], true);
+      app.seekBar(u);
+      if (!store.get().playing) app.togglePlay();
+    };
+    app.stopBarLoop = () => {
+      if (!loopBefore) return;
+      if (store.get().playing) app.togglePlay();
+      setLoop(loopBefore.loop, loopBefore.loopOn);
+      loopBefore = null;
     };
     // A candidate chord, strummed softly on each beat over this bar of the recording.
     app.audition = (u, alt) => {
@@ -881,6 +906,7 @@
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
       if (e.target.closest && e.target.closest("dialog[open]")) return; // a dialog's keys are its own (Escape closes it)
+      if (e.target.closest && e.target.closest("#barEd")) return; // the bar editor's too (its buttons, its field)
       if (e.key === "Escape") {
         popups.closeAll(true);
         if (store.get().stage) setStage(false);
@@ -1048,7 +1074,7 @@
     // Firefox presses a focused button when Space is released: Space played or paused already.
     document.addEventListener("keyup", (e) => {
       const button = e.key === " " && e.target.closest && e.target.closest("button");
-      if (button && !button.closest(".menu, #pop, dialog, .prefs")) e.preventDefault();
+      if (button && !button.closest(".menu, #pop, #barEd, dialog, .prefs")) e.preventDefault();
     });
     function renderStagePlay(s) {
       $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones

@@ -135,6 +135,8 @@ def test_on_a_phone_the_editor_is_a_sheet_with_the_signs_a_phone_keyboard_lacks(
         open_bar(page, 1)
         box = page.get_by_test_id("bar-editor").bounding_box()
         assert box and abs(box["x"]) < 1 and abs(box["width"] - 390) < 2  # the full width, at the bottom
+        bar = page.locator('.bar[data-bar="1"]').first.bounding_box()
+        assert bar and bar["y"] >= 0 and bar["y"] + bar["height"] <= box["y"]  # the bar in sight, above the sheet
         keys = page.locator(".ed .keys button")
         expect(keys).to_have_count(6)
         keys.first.click()  # ♯ typed into the field
@@ -173,3 +175,76 @@ def test_a_long_numeral_never_covers_the_bar_number(browser: Any, pages_root: st
         assert num and rn and rn["x"] >= num["x"] + num["width"]  # side by side, never over it
     finally:
         context.close()
+
+
+def test_on_a_transposed_page_the_bar_is_typed_in_the_key_on_screen(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("Woodshed.app.transposeTo(2)")  # the band plays it a tone up
+    before = o.js(f"({BAR})(1)")
+    page = editing(o)
+    open_bar(page, 1)
+    page.get_by_test_id("bar-field").press("Enter")  # saved as shown: the bar does not move
+    assert o.js(f"({BAR})(1)") == before
+    open_bar(page, 1)
+    page.get_by_test_id("bar-field").fill("A")  # A on screen, a tone up: G in the recording
+    page.get_by_test_id("bar-save").click()
+    assert o.js(f"({BAR})(1)") == "7||x4"
+    expect(page.locator('.bar[data-bar="1"]').first).to_contain_text("A")
+
+
+def test_the_editor_s_buttons_keep_their_keys(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    open_bar(page, 1)
+    page.get_by_test_id("bar-save").focus()
+    page.keyboard.press("Space")  # presses Save, does not play the song
+    assert o.js("Woodshed.debug().playing") is False
+    expect(page.get_by_test_id("bar-editor")).to_be_hidden()
+    expect(page.locator('.bar[data-bar="1"]').first).to_be_focused()  # the keyboard back on the bar
+
+
+def test_stage_mode_closes_the_editor(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    open_bar(page, 1)
+    o.js("Woodshed.app.setStage(true)")
+    expect(page.get_by_test_id("bar-editor")).to_be_hidden()
+
+
+def test_a_typed_span_over_a_bar_line_goes_back_from_either_bar(open_page: Any) -> None:
+    o = open_page("pop")
+    first, per = o.js("[Woodshed.current.song.first_beat, Woodshed.current.per]")
+    o.js(f"Woodshed.app.typedBars.set('{first + per + 2}', {{chords: [[4, 'E']], t: 1}})")  # as after a bar-line move
+    o.js("Woodshed.app.typeBars([], [])")  # draws the chart again
+    assert o.js("[Woodshed.current.bars[1].edited, Woodshed.current.bars[2].edited]") == [True, True]
+    o.js("Woodshed.app.untypeBar(2)")
+    assert o.js("[Woodshed.current.bars[1].edited, Woodshed.current.bars[2].edited]") == [False, False]
+
+
+def test_undo_puts_back_only_what_nobody_typed_again(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    o.js("Woodshed.app.typeBars([1], [[4, 'Dsus4']]); Woodshed.app.typeBars([2], [[4, 'Em7']])")
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_test_id("untype-all").click()
+    o.js("Woodshed.app.typeBars([2], [[4, 'E']])")  # a newer change, as from the band
+    page.get_by_test_id("toast-action").click()  # Undo
+    assert o.js(f"({BAR})(1)") == "2|sus4|x4" and o.js(f"({BAR})(2)") == "4||x4"
+
+
+def test_this_bar_held_down_loops_it_until_released(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    open_bar(page, 1)
+    box = page.get_by_test_id("bar-play").bounding_box()
+    assert box
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.wait_for_timeout(700)
+    assert o.js("[Woodshed.app.store.get().loop, Woodshed.app.store.get().loopOn]") == [[1, 1], True]
+    page.mouse.up()
+    assert o.js("[Woodshed.app.store.get().loop, Woodshed.app.store.get().loopOn, Woodshed.debug().playing]") == [
+        None,
+        False,
+        False,
+    ]
