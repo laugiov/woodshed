@@ -907,7 +907,11 @@ def test_following_comes_back_when_the_bar_playing_is_where_the_page_would_put_i
     o.page.mouse.wheel(0, -120)  # reading the bars before: the bar playing drops low on the screen
     back = o.page.get_by_test_id("back-to-song")
     expect(back).to_be_visible(timeout=4000)
-    o.page.mouse.wheel(0, 90)  # back where the page keeps the bar playing
+    # Back where the page keeps the bar playing, wherever it is now (a loaded machine plays on).
+    o.js(
+        "(() => { const b = document.querySelector('.bar.cur');"
+        " scrollBy(0, b.getBoundingClientRect().top - innerHeight * 0.35); })()"
+    )
     expect(back).to_be_hidden(timeout=4000)  # following again, by itself
 
 
