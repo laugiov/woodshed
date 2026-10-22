@@ -17,7 +17,11 @@
   function data(song) {
     const out = JSON.parse(JSON.stringify(song.song));
     out.bars = song.bars.map((bar, u) => ({
-      ...out.bars[u],
+      start: out.bars[u].start,
+      end: out.bars[u].end,
+      group: out.bars[u].group,
+      occurrence: out.bars[u].occurrence,
+      column: out.bars[u].column,
       chords: bar.chords.map((c) => ({
         pc: c.pc,
         quality: c.quality,
