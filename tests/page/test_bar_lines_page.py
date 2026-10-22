@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import io
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from playwright.sync_api import Browser, expect
+from playwright.sync_api import Browser, Page, expect
+from playwright.sync_api import Error as PlaywrightError
 
 from tests import synth
 from tests.page.test_band import until
@@ -44,6 +46,20 @@ def test_from_disk_the_sheet_gives_the_command(open_page: Any) -> None:
     expect(dialog).to_be_hidden()
 
 
+def across_reload(page: Page, expression: str, timeout: float = 60) -> None:
+    """`until`, through the reload the page makes by itself (a check cut by it is asked again)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            if page.evaluate(expression):
+                return
+        except PlaywrightError as exc:
+            if "destroyed" not in str(exc) and "navigat" not in str(exc):
+                raise
+        assert time.monotonic() < deadline, f"still false after {timeout} s: {expression}"
+        page.wait_for_timeout(100)
+
+
 @pytest.fixture
 def library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[app.AppServer]:
     monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
@@ -76,15 +92,13 @@ def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, libra
     page.get_by_test_id("bars-move").click()
     expect(page.get_by_test_id("bars-cancel")).to_have_text("Close")
     page.get_by_test_id("bars-cancel").click()  # the job goes on without the dialog
-    page.wait_for_url("**/pop.woodshed/index.html", wait_until="load", timeout=60_000)
-    until(
-        page,
+    moved = (
         "window.Woodshed && window.Woodshed.ready === true"
-        f" && Woodshed.current.song.first_beat % Woodshed.current.per !== {first % per}",
-        60,
+        f" && Woodshed.current.song.first_beat % Woodshed.current.per !== {first % per}"
     )
+    across_reload(page, moved)
     expect(page.get_by_test_id("toast")).to_contain_text("The bar lines moved")
     assert page.evaluate(f"!!Woodshed.app.typedBars.get('{key}')")  # kept on its beats
     assert page.evaluate("Woodshed.current.bars.some((b) => b.chords.some((c) => c.typed && c.quality === 'sus4'))")
-    until(other, f"window.Woodshed && Woodshed.current.song.first_beat % Woodshed.current.per !== {first % per}", 60)
+    across_reload(other, moved)
     assert problems == []
