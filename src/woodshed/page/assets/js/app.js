@@ -47,6 +47,7 @@
       bandKey: null, // the key the band plays this song in (semitones), once the library said; null: no library
       bandNote: "", // the leader's note on this song
       wordsElsewhere: false, // a phone of the band: words are added from the computer
+      editing: false, // the chart's bars open the bar editor (views/editor.js)
     });
     app.store = store;
 
@@ -128,7 +129,7 @@
     // The words, when they were placed on the voice (woodshed lyrics): read with the chart as it is.
     app.words = W.lyrics(song, window.WOODSHED_LYRICS);
     // What the chart shows: the words for those who sing or play chords, the grid for bass and drums.
-    app.sheetMode = (s) => (!app.words ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
+    app.sheetMode = (s) => (!app.words || s.editing ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
 
     // The sung line lit now: the last one begun, held a bar after its end for a long note, unless a
     // new part has started since (a jump to the next part does not light the line before it).
@@ -516,6 +517,24 @@
       return editsChanged({ bars: Object.fromEntries(keys.map((k) => [k, null])) });
     };
     // The band's copy of the typed bars and parts (views/band.js): what this device still has to share.
+    // Everything typed taken back at once; the function returned puts it all back (the toast's Undo).
+    app.untypeAll = () => {
+      const bars = typedBars.values();
+      const parts = typedParts.values();
+      typedBars.clear();
+      typedParts.clear();
+      if (!app.shareEdits) {
+        typedBars.heard(Object.keys(bars));
+        typedParts.heard(Object.keys(parts));
+      }
+      const none = (o) => Object.fromEntries(Object.keys(o).map((k) => [k, null]));
+      editsChanged({ bars: none(bars), parts: none(parts) });
+      return () => {
+        for (const [k, v] of Object.entries(bars)) typedBars.set(k, v);
+        for (const [k, v] of Object.entries(parts)) typedParts.set(k, v);
+        editsChanged({ bars, parts });
+      };
+    };
     // `quiet`: the first read when the page opens, nothing to announce.
     app.useEdits = (edits, quiet) => {
       const before = typedBars.values();
@@ -619,6 +638,19 @@
         }
       });
     };
+    // This bar of the recording, once (the bar editor checks typed chords against it).
+    app.playBar = (u) => {
+      if (following()) return leaderMoves();
+      transport.pause();
+      app.seekBar(u);
+      transport.play();
+      store.set({ playing: true });
+      app.cancelTimers();
+      oneShot = setTimeout(() => {
+        transport.pause();
+        store.set({ playing: false });
+      }, (song.beatTime((u + 1) * song.per) - song.beatTime(u * song.per)) * 1000 * (song.song.bpm / store.get().bpm) + 100);
+    };
     // A candidate chord, strummed softly on each beat over this bar of the recording.
     app.audition = (u, alt) => {
       if (following()) return leaderMoves(); // it plays the recording under the candidate
@@ -718,6 +750,9 @@
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
     app.chart = chart; // its bars, for the tests and the console
+    const editor = W.views.editor(app, chart);
+    views.push(editor);
+    app.editor = editor;
     // The instrument on the page itself: a phone's layout follows it (the singer: words first).
     const mark = (s) => {
       document.body.dataset.inst = s.inst;
@@ -743,6 +778,7 @@
     let drag = null;
     const BARS = ".bar:not(.empty), .lline .nb[data-bar]"; // the grid's bars, the sung bars of the Lyrics view
     document.addEventListener("pointerdown", (e) => {
+      if (store.get().editing && e.target.closest("#sheet")) return; // a bar opens its editor (the click)
       if (e.target.closest(".doubt")) return;
       const el = e.target.closest(BARS);
       if (!el) return;
@@ -772,6 +808,14 @@
     });
     document.addEventListener("pointercancel", () => (drag = null)); // a touch that became a scroll
     document.addEventListener("click", (e) => {
+      // Editing the chart: a bar, or the chord to check in it, opens the bar editor.
+      const typedAt = store.get().editing && e.target.closest("#sheet") && e.target.closest(BARS);
+      if (typedAt) {
+        e.stopPropagation();
+        popups.closeAll();
+        editor.openBar(chart.barFromEl(typedAt), typedAt);
+        return;
+      }
       const d = e.target.closest(".doubt");
       if (d) {
         e.stopPropagation();
@@ -810,7 +854,8 @@
       const bar = e.target.closest && e.target.closest(".bar");
       if (bar && e.target === bar && e.key === "Enter") {
         e.preventDefault();
-        app.seekBar(chart.barFromEl(bar));
+        if (store.get().editing) editor.openBar(chart.barFromEl(bar), bar);
+        else app.seekBar(chart.barFromEl(bar));
         return;
       }
       if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;

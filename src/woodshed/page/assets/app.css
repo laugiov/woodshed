@@ -774,3 +774,53 @@ body.following #playBtn { opacity: 0.45; }
 /* Touch screens: the language and theme buttons are 44 px, so the brand row keeps room for them
    (after the .brandrow rule above, which it overrides). */
 @media (pointer: coarse) { .brandrow { min-height: 46px; padding-right: 160px; } }
+
+/* Editing the chart (views/editor.js): the strip, the bars as editors, the bar editor. */
+.edit-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel)); font-size: 14px; }
+.edit-strip .what { font-weight: 700; color: var(--ink); }
+.edit-strip .how { color: var(--muted); flex: 1; min-width: 12em; }
+.edit-strip .acts { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn.ghost-link { background: none; border-color: transparent; color: var(--muted); text-decoration: underline; padding-inline: 4px; }
+.editing .bar:not(.empty) { outline: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: -3px; cursor: text; }
+.editing .bar:not(.empty):hover { background: var(--accent-soft); }
+.bar.edited::after { content: "✎"; position: absolute; top: 3px; right: 5px; font-size: 11px; color: var(--accent); }
+.ed-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, 0.35); }
+.ed { position: fixed; z-index: 40; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28); padding: 14px; display: grid; gap: 10px; color: var(--ink); }
+.ed h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ed h3 small { color: var(--muted); font-weight: 400; font-size: 13px; }
+.ed .row { display: flex; gap: 8px; align-items: stretch; }
+.ed .field { flex: 1; min-width: 0; font-family: var(--font-chord); font-weight: 600; font-size: 26px; letter-spacing: 0.02em; padding: 6px 10px; border: 1.5px solid var(--accent); border-radius: 8px; background: var(--sheet); color: var(--ink); }
+.ed .field[aria-invalid="true"] { border-color: var(--warn); }
+.ed .hear-bar { white-space: nowrap; }
+.ed .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.ed .keys button { min-height: 44px; border: 1px solid var(--line); background: var(--sheet); border-radius: 8px; font-family: var(--font-chord); font-weight: 700; font-size: 18px; color: var(--ink); cursor: pointer; }
+.ed .read { font-size: 13.5px; color: var(--muted); margin: 0; min-height: 1.4em; }
+.ed .read b { color: var(--ink); }
+.ed .read.warn { color: var(--warn); }
+.ed .chips, .ed .cands { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ed .chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-chord); font-weight: 700; font-size: 18px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); cursor: pointer; }
+.ed .chip i { font-style: normal; font-size: 12px; color: var(--accent); }
+.ed .cands { font-size: 13px; color: var(--muted); }
+.ed .cand { border: 1px dashed var(--warn); background: none; color: var(--ink); border-radius: 999px; padding: 3px 10px; font-family: var(--font-chord); font-weight: 700; font-size: 16px; cursor: pointer; }
+.ed .cand small { font: 500 11px var(--font-body); color: var(--muted); }
+.ed label.also { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; }
+.ed .tip { font-size: 13px; color: var(--muted); margin: 0; border-top: 1px solid var(--line); padding-top: 8px; }
+.ed .acts { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; position: sticky; bottom: -14px; background: var(--panel); padding: 8px 0 2px; }
+.ed .acts .right { display: flex; gap: 8px; flex-wrap: wrap; }
+.ed .back { color: var(--muted); background: none; border: 0; text-decoration: underline; font-size: 13px; padding: 0; cursor: pointer; }
+.ed-tail { position: fixed; z-index: 41; width: 14px; height: 14px; background: var(--panel); border-left: 1px solid var(--accent); border-top: 1px solid var(--accent); transform: rotate(45deg); }
+.ed-tail.up { transform: rotate(225deg); }
+.toast .undo { margin-left: 10px; color: inherit; background: none; border: 1px solid currentColor; border-radius: 6px; padding: 2px 8px; font: inherit; cursor: pointer; }
+@media (max-width: 600px) {
+  .ed { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100%; border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .ed-tail { display: none; }
+  .ed .btn, .ed .chip, .ed .cand { min-height: 44px; }
+  .ed .field { font-size: 24px; }
+  .ed .row { flex-wrap: wrap; }
+  .ed .acts .right { width: 100%; }
+  .ed .acts .right .btn { flex: 1; }
+  .edit-strip .how { flex-basis: 100%; order: 3; font-size: 13px; }
+  .edit-strip .acts { order: 4; width: 100%; justify-content: space-between; }
+  .edit-strip .btn { min-height: 44px; }
+}
+@media print { .edit-strip, .ed, .ed-scrim, .ed-tail { display: none !important; } }

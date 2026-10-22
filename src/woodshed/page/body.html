@@ -39,6 +39,7 @@
         </div>
         <nav class="form" id="form" aria-label="Song form: click a part to go there" data-testid="form"></nav>
         <div class="chart-bar"><div class="label">Chart</div><div id="viewCtl"></div></div>
+        <div class="edit-strip" id="editStrip" hidden data-testid="edit-strip"></div>
         <div class="print-shapes" id="printShapes" hidden data-testid="print-shapes"></div>
         <div class="sheet" id="sheet" data-testid="sheet"></div>
         <p class="hint" style="margin: 10px 2px 0">Click a bar to jump, a part's name to go there. Drag across bars to loop them. Orange chords are the ones to check by ear.</p>
@@ -120,6 +121,8 @@
 </div>
 
 <div class="pop" id="pop" hidden role="dialog" aria-modal="true" aria-labelledby="popTitle" data-testid="doubt-pop"></div>
+<div class="ed-scrim" id="edScrim" hidden></div>
+<div class="ed" id="barEd" hidden role="dialog" aria-modal="true" aria-labelledby="barEdTitle" data-testid="bar-editor"></div>
 <div class="sr-only" aria-live="polite" id="srChord" translate="no"></div>
 <div class="toast" id="toast" hidden data-testid="toast"></div>
 <div class="stage" id="stage" hidden data-testid="stage">

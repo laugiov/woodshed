@@ -196,12 +196,16 @@
     const { song } = app;
     let toastTimer = 0;
 
-    function toast(message) {
+    // `action`: {label, run}, a button in the toast (Undo), kept longer on screen.
+    function toast(message, action) {
       const t = $("toast");
-      t.textContent = message;
+      clear(t, message, action ? h("button", { type: "button", class: "undo", "data-testid": "toast-action", onclick: () => {
+        t.hidden = true;
+        action.run();
+      } }, action.label) : null);
       t.hidden = false;
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => (t.hidden = true), 2600);
+      toastTimer = setTimeout(() => (t.hidden = true), action ? 8000 : 2600);
     }
 
     let opener = null;

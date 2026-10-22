@@ -343,7 +343,10 @@
         cells.push(
           h(
             "div",
-            { class: "bar", "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
+            {
+              class: "bar" + (b.edited ? " edited" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
+              "aria-label": b.edited ? W.t("{bar}, typed by the band", { bar: barLabel(b, u, s) }) : barLabel(b, u, s),
+            },
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
             h("span", { class: "rn", translate: "no" }, b.chords.map((c) => song.roman(c)).join(" ")),
@@ -369,7 +372,7 @@
       const mode = app.sheetMode(s);
       // Drawn again only when what it shows changes: a redraw under a click (the band's corrections
       // arriving) would swallow it.
-      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, W.lang()].join("|");
+      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, s.editing, W.lang()].join("|");
       if (el.dataset.shows === shows) return;
       el.dataset.shows = shows;
       const sheetCtl = app.words
@@ -384,11 +387,19 @@
       const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals") && !s.wordsElsewhere
         ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? W.t("Edit the words") : W.t("Add the words"))
         : null;
+      // The band's own chart: not while the full analysis is still coming (it may change the beats).
+      const editBtn = song.view.pending
+        ? null
+        : h("button", {
+            type: "button", class: "btn" + (s.editing ? " on" : ""), "aria-pressed": String(!!s.editing), "data-testid": "edit-chart",
+            onclick: () => store.set({ editing: !store.get().editing }),
+          }, W.t("Edit the chart"));
       if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
         clear(
           el,
           sheetCtl,
           wordsBtn,
+          editBtn,
           h(
             "div",
             { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
@@ -397,7 +408,7 @@
           ),
           keyNote(s).slice(s.transpose ? 0 : 1), // the capo says where the chords sound already
         );
-      } else clear(el, sheetCtl, wordsBtn, keyNote(s));
+      } else clear(el, sheetCtl, wordsBtn, editBtn, keyNote(s));
     }
 
     // In another key than the recording, the page says so while it lasts; served by woodshed app,
@@ -530,7 +541,7 @@
     store.on((s, changed) => {
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
-      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere"].some((k) => changed.has(k));
+      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere", "editing"].some((k) => changed.has(k));
       // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
       if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);
       else if (changed.has("beat") || changed.has("loop") || changed.has("loopOn")) paintBars(s);

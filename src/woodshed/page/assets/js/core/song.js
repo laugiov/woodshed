@@ -96,7 +96,30 @@
       return bassOf(c) === null ? out : out + "/" + W.chords.degree(c.bass - c.pc);
     }
     const keyName = (transpose) => t(transpose).key;
-    const capoFor = (transpose) => t(transpose).capo;
+    // The capo worth suggesting (theory.suggest_capo): the analysis's, in the view, until the band types
+    // chords; then counted again on the chart as it is.
+    function shapeCost(pc, quality) {
+      const name = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][((pc % 12) + 12) % 12] + quality;
+      if (view.shapes.open[name] || (!W.chords.analysed(quality) && W.CHORD_TABLE.open[name])) return 1;
+      return view.shapes.easy_barres[name] ? 2 : 3;
+    }
+    function suggestCapo(transpose) {
+      const chords = bars.flatMap((b) => b.chords).filter((c) => c.pc >= 0);
+      const cost = (capo) => chords.reduce((n, c) => n + shapeCost(c.pc + transpose - capo, c.quality) * c.beats, 0) * (1 + 0.05 * Math.max(0, capo - 4));
+      const base = cost(0);
+      let best = 0;
+      let bestCost = base;
+      for (let capo = 1; capo < 8; capo++) {
+        const c = cost(capo);
+        if (c < bestCost) {
+          best = capo;
+          bestCost = c;
+        }
+      }
+      return bestCost <= 0.75 * base ? best : 0;
+    }
+    const typed = () => bars.some((b) => b.chords.some((c) => c.typed));
+    const capoFor = (transpose) => (typed() ? suggestCapo(transpose) : t(transpose).capo);
 
     // Bars of the line holding bar u, in the same pass.
     function occurrenceRange(u) {
@@ -147,7 +170,7 @@
 
     return {
       data, song, view, per, bars, totalBeats, beatTime, beatAt, chordAtBeat, same, upcoming,
-      noteName, chordName, roman, keyName, capoFor, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
+      noteName, chordName, roman, keyName, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
       tracks: view.tracks,
       parts: song.parts,
     };
