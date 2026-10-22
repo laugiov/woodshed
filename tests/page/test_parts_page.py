@@ -111,3 +111,13 @@ def test_the_parts_go_back_to_the_analysis_with_a_confirm_and_an_undo(open_page:
     assert o.js(PARTS) == before
     page.get_by_test_id("toast-action").click()  # Undo
     assert [4, "Chorus", True] in o.js(PARTS)
+
+
+def test_renaming_a_part_to_its_own_name_types_nothing(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    page.locator('.bar[data-bar="0"]').first.click()
+    page.get_by_test_id("part-start").click()
+    page.get_by_test_id("part-start-name").press("Enter")  # the name as shown, untouched
+    assert o.js("Object.keys(Woodshed.app.typedParts.values()).length") == 0
+    assert o.js("Woodshed.edits.roleOf('Introduction')") == "intro"

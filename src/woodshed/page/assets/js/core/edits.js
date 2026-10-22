@@ -113,7 +113,7 @@
   // The first word only: "Solo over the chorus" is a solo.
   const ROLES = [
     [/^pr[eé][- ]?(chorus|refrain)\b/i, "prechorus"], [/^(chorus|refrain)\b/i, "chorus"], [/^(verse|couplet)\b/i, "verse"],
-    [/^(bridge|pont)\b/i, "bridge"], [/^intro\b/i, "intro"], [/^(outro|coda)\b/i, "outro"], [/^(solo|instrumental)\b/i, "instrumental"],
+    [/^(bridge|pont)\b/i, "bridge"], [/^intro\w*\b/i, "intro"], [/^(outro|coda)\b/i, "outro"], [/^(solo|instrumental)\b/i, "instrumental"],
   ];
   const roleOf = (name) => (ROLES.find(([re]) => re.test(name)) || [null, "part"])[1];
 

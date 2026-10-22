@@ -364,6 +364,7 @@
           return;
         }
         if (!name.value.trim()) return name.focus();
+        if (starts && name.value.trim() === W.partName(part)) return close(true); // unchanged: nothing typed
         app.namePart(u, name.value);
         close(true);
         app.toast(starts ? W.t("The part at bar {n} is renamed.", { n: u + 1 }) : W.t("A part starts at bar {n}.", { n: u + 1 }));
