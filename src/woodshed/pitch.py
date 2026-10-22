@@ -140,14 +140,20 @@ def render(
         if rendered_peak * gain > CEILING:
             gain = CEILING / rendered_peak
         info = sf.info(str(wav))
+        frames = sf.info(str(src)).frames  # the source's length to the sample: the beats stay where they are
         with (
             sf.SoundFile(wav) as f,
             sf.SoundFile(part, "w", info.samplerate, info.channels, "PCM_24", format="FLAC") as out,
         ):
+            written = 0
             for block in f.blocks(blocksize=BLOCK, dtype="float32", always_2d=True):
                 if should_stop():
                     raise Cancelled("stopped")
+                block = block[: frames - written]
                 out.write(block * gain)
+                written += len(block)
+            if written < frames:
+                out.write(np.zeros((frames - written, info.channels), dtype="float32"))
         if fingerprint(src) != before:
             raise Cancelled("the page changed while its track was rendered")
         os.replace(part, dst)
@@ -156,6 +162,13 @@ def render(
         for leftover in (wav, part, log):
             with contextlib.suppress(OSError):
                 leftover.unlink()
+
+
+def _same(src: Path, before: tuple[int, int]) -> bool:
+    try:
+        return fingerprint(src) == before
+    except OSError:
+        return False
 
 
 def prune(audio_dir: Path, keep: set[str]) -> list[str]:
@@ -181,7 +194,9 @@ def clean_leftovers(root: Path) -> None:
 # The renders of a library: one at a time, the track a page waits for first.
 WAITED, ROLE, PREFETCH = 0, 1, 2  # priorities
 MAX_QUEUED = 16
-RECENT = 600.0  # seconds: a key asked or served this recently is never pruned
+RECENT = 600.0  # seconds: an old key's prefetch asked this recently is kept when the band changes key
+PLAYING = 60.0  # seconds: a key served this recently is playing somewhere: never pruned under it
+FORCE_EVERY = 60.0  # seconds between two re-renders of one file asked by a page (`force`)
 OTHER_KEYS = 2  # kept per page besides the band's key
 SPEED = 5.5  # seconds of audio rendered per second until measured (3:43 in 40 s on a laptop core)
 
@@ -218,6 +233,10 @@ class Renders:
         self.speed = SPEED
         self.stopping = False
         self.cancelled: set[str] = set()  # pages whose running render must stop
+        self.forced: dict[tuple[str, str, str], float] = {}
+        self.played: dict[
+            tuple[str, str], float
+        ] = {}  # (page, key dir) -> last served  # (page, key dir, track) -> last re-render asked
         clean_leftovers(root)
         threading.Thread(target=self._work, name="woodshed-renders", daemon=True).start()
 
@@ -229,10 +248,22 @@ class Renders:
         audio_dir = self.root / page / "audio"
         src, dst = audio_dir / f"{track}.flac", audio_dir / KEY_DIR / key_dir(semitones) / f"{track}.flac"
         key = key_dir(semitones)
+        try:  # read before taking the lock: the pages' polls need it
+            seconds = sf.info(str(src)).duration
+            before = fingerprint(src)
+        except (RuntimeError, OSError):
+            raise WoodshedError("this track cannot be read") from None
+        # The float WAV in the middle is about four times the FLAC.
+        room = shutil.disk_usage(self.root).free >= before[0] * 5 + self.free_margin
         with self.cond:
-            self.used[(page, key)] = time.monotonic()
+            now = time.monotonic()
+            self.used[(page, key)] = now
             self.failed.pop((page, key, track), None)
-            if force and dst.is_file() and not (self.running and self.running.page == page):
+            # Again, for a file a browser could not play; once a minute at most: a phone looping on it
+            # would delete the file the band is playing.
+            again = force and now - self.forced.get((page, key, track), -FORCE_EVERY) >= FORCE_EVERY
+            if again and dst.is_file() and not (self.running and self.running.page == page):
+                self.forced[(page, key, track)] = now
                 with contextlib.suppress(OSError):
                     dst.unlink()
             if dst.is_file():
@@ -249,22 +280,18 @@ class Renders:
                     return "queued"
             if len(self.queue) >= MAX_QUEUED:
                 raise Full("too many renders asked: try again in a minute")
-            try:
-                seconds = sf.info(str(src)).duration
-            except (RuntimeError, OSError):
-                raise WoodshedError("this track cannot be read") from None
-            # The float WAV in the middle is about four times the FLAC.
-            if shutil.disk_usage(self.root).free < src.stat().st_size * 5 + self.free_margin:
+            if not room:
                 raise WoodshedError("not enough free disk to render this track")
-            self.queue.append(Render(page, track, semitones, priority, fingerprint(src), seconds))
-            self._prune(page, keep_also=key)
+            self.queue.append(Render(page, track, semitones, priority, before, seconds))
+            keep = self._keep(page, key)
             self.cond.notify_all()
-            return "queued"
+        prune(audio_dir, keep)  # outside the lock: folders removed while the pages poll
+        return "queued"
 
     def touch(self, page: str, key: str) -> None:
-        """A rendered file served: its key is in use."""
+        """A rendered file served: its key is playing somewhere."""
         with self.cond:
-            self.used[(page, key)] = time.monotonic()
+            self.played[(page, key)] = time.monotonic()
 
     def set_band_key(self, page: str, semitones: int, tracks: list[str]) -> None:
         """The band saved a key: its mix and voice tracks are prefetched; the old key's unasked prefetch goes."""
@@ -289,8 +316,11 @@ class Renders:
         """The page is rebuilt (an analysis, the bar lines): its renders are of the old files."""
         with self.cond:
             self.queue = [r for r in self.queue if r.page != page]
+            self.failed = {k: v for k, v in self.failed.items() if k[0] != page}
             if self.running and self.running.page == page:
                 self.cancelled.add(page)
+            # The render stops before the page's folder is replaced (Windows will not remove an open file).
+            self.cond.wait_for(lambda: not (self.running and self.running.page == page), timeout=10)
 
     def state(self, page: str) -> dict[str, Any]:
         """For the page: each key's tracks, ready, queued, running or failed, and when each key's queue ends."""
@@ -333,8 +363,9 @@ class Renders:
 
     # The work.
 
-    def _prune(self, page: str, keep_also: str) -> None:
-        """Under the lock: the band's key, the most recent other keys and any key in use stay."""
+    def _keep(self, page: str, keep_also: str) -> set[str]:
+        """Under the lock: the keys of a page that stay, the band's key, the two most recently asked
+        others, any key queued or rendering and any key a device played in the last minute."""
         now = time.monotonic()
         busy = {key_dir(r.semitones) for r in self.queue if r.page == page}
         if self.running and self.running.page == page:
@@ -345,8 +376,8 @@ class Renders:
             reverse=True,
         )
         keep = {keep_also, self.band.get(page, "")} | busy | set(recent[:OTHER_KEYS])
-        keep |= {k for (p, k), at in self.used.items() if p == page and now - at < RECENT}
-        prune(self.root / page / "audio", keep)
+        keep |= {k for (p, k), at in self.played.items() if p == page and now - at < PLAYING}
+        return keep
 
     def _next(self) -> Render | None:
         with self.cond:
@@ -379,6 +410,8 @@ class Renders:
             except Cancelled:
                 pass
             except (WoodshedError, OSError) as exc:
+                if job.page in self.cancelled or not _same(audio_dir / f"{job.track}.flac", job.before):
+                    continue  # the page was rebuilt under it: nothing failed, nothing to say
                 reason = str(exc).replace(str(self.root), "the library").replace(str(Path.home()), "~")
                 with self.cond:
                     self.failed[(job.page, key_dir(job.semitones), job.track)] = reason

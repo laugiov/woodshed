@@ -217,7 +217,8 @@ def test_a_busy_library_is_asked_again(browser: Browser, server: app.AppServer) 
     page.route("**/api/pitch", handle)
     page.evaluate("Woodshed.app.setInstrument('voice'); Woodshed.app.transposeTo(2)")
     until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 30)
-    assert problems == [p for p in problems if "429" in p]
+    assert busy["left"] == 0  # refused twice, asked again, rendered
+    assert [p for p in problems if "429" not in p] == []
 
 
 def test_while_it_is_prepared_the_page_says_so_and_the_stand_too(
@@ -232,7 +233,6 @@ def test_while_it_is_prepared_the_page_says_so_and_the_stand_too(
     assert line.get_attribute("aria-live") == "polite"
     expect(line).to_have_text("2 semitones up.", timeout=20_000)
     page.get_by_test_id("stage-open").click()
-    page.evaluate("Woodshed.app.store.set({ beat: 8 })")
     expect(page.locator("#stTop")).to_contain_text("♪ +2")
     assert problems == []
 

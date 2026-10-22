@@ -75,6 +75,11 @@
         if (!r.ok) throw new Error(String(r.status));
         lib = await r.json();
         reason = lib.off ? "off" : lib.can ? null : "filter";
+        // A render the library no longer knows (a page rebuilt, the app restarted): asked again.
+        for (const k of [...asked]) {
+          const [key, id] = k.split("|");
+          if (!stateOf(key, id)) asked.delete(k);
+        }
       } catch (err) {
         lib = null;
         reason = "library"; // a page served elsewhere, or a library that does not render keys

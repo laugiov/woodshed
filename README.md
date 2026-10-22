@@ -96,8 +96,8 @@ without stopping. The tracks stay in tune, as long and at their level (a track a
 loudest is made a little quieter rather than clipped); the drums alone play as recorded. It needs
 ffmpeg with its Rubber Band filter (Ubuntu's, Debian's, Homebrew's, the Docker image's, and the full
 Windows build from `winget install Gyan.FFmpeg`); `woodshed app --no-pitch` turns it off. A page
-opened from disk plays the recording in its own key. Each page keeps the band's key and the two
-most recent others; the downloads stay the original files.
+opened from disk plays the recording in its own key. Each page keeps the band's key, the two
+most recently asked others and any key a device played in the last minute; the downloads stay the original files.
 
 ### A method, not just a chart
 

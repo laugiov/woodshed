@@ -200,6 +200,13 @@
         }
         from.pause();
         from.preload = "none";
+        const original = tracks.find((t) => t.id === id).file;
+        if (from.getAttribute("data-file") !== original) {
+          // A rendered file left behind: not kept (the original stays for the way back).
+          delete els[id + "|" + from.getAttribute("data-file")];
+          from.removeAttribute("src");
+          from.remove();
+        }
         return true;
       });
       return switching;

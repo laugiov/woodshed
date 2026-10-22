@@ -108,7 +108,7 @@ def test_a_track_asked_is_rendered_and_said_ready(renders: pitch.Renders) -> Non
 def test_the_track_a_page_waits_for_goes_first(
     renders: pitch.Renders, fake_ffmpeg: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FAKE_FFMPEG_SECONDS", "0.3")
+    monkeypatch.setenv("FAKE_FFMPEG_SECONDS", "1")
     renders.ask("One.woodshed", "mix", 1, pitch.PREFETCH)
     until(lambda: renders.running is not None)  # rendering: the others wait
     renders.ask("One.woodshed", "solo-vocals", 1, pitch.PREFETCH)
@@ -187,7 +187,7 @@ def test_a_failed_render_says_why_without_this_computer_s_paths(
 def test_old_keys_go_the_band_key_and_the_recent_ones_stay(
     renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(pitch, "RECENT", 0.0)
+    monkeypatch.setattr(pitch, "PLAYING", 0.0)
     renders.set_band_key("One.woodshed", -2, ["mix"])
     for semitones in (1, 2, 3, 4):
         renders.ask("One.woodshed", "mix", semitones)
@@ -258,3 +258,38 @@ def test_a_file_the_browser_cannot_play_is_rendered_again_when_asked(renders: pi
     assert renders.ask("One.woodshed", "mix", 2) == "ready"
     assert renders.ask("One.woodshed", "mix", 2, force=True) == "queued"
     until(lambda: dst.is_file() and dst.read_bytes()[:4] == b"fLaC")
+
+
+def test_a_key_a_phone_is_playing_is_never_pruned(renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch) -> None:
+    for semitones in (1, 2, 3):
+        if semitones == 3:
+            renders.touch("One.woodshed", "up1")  # a phone plays the oldest key now
+        renders.ask("One.woodshed", "mix", semitones)
+        done = rendered(renders, "One.woodshed", pitch.key_dir(semitones), "mix")
+        until(done.is_file)
+    renders.ask("One.woodshed", "mix", 4)
+    until(rendered(renders, "One.woodshed", "up4", "mix").is_file)
+    kept = sorted(p.name for p in (renders.root / "One.woodshed" / "audio" / pitch.KEY_DIR).iterdir())
+    assert kept == ["up1", "up3", "up4"]  # up2 goes; up1 is playing
+
+
+def test_a_re_render_asked_by_a_page_is_once_a_minute_at_most(renders: pitch.Renders) -> None:
+    dst = rendered(renders, "One.woodshed", "up2", "mix")
+    dst.parent.mkdir(parents=True)
+    dst.write_bytes(b"broken")
+    assert renders.ask("One.woodshed", "mix", 2, force=True) == "queued"
+    until(lambda: dst.is_file() and dst.read_bytes()[:4] == b"fLaC")
+    assert renders.ask("One.woodshed", "mix", 2, force=True) == "ready"  # not deleted again under the band
+
+
+def test_a_page_rebuilt_mid_render_says_no_failure(renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_FFMPEG_SECONDS", "1")
+    renders.ask("One.woodshed", "mix", 2)
+    until(lambda: renders.running is not None)
+    src = renders.root / "One.woodshed" / "audio" / "mix.flac"
+    src.write_bytes(src.read_bytes())  # the page rebuilt: a new file
+    os.utime(src, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+    until(lambda: renders.running is None, 15)
+    assert renders.state("One.woodshed")["failed"] == {}
+    renders.cancel_page("One.woodshed")
+    assert renders.state("One.woodshed")["failed"] == {}

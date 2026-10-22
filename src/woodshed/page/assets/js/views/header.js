@@ -187,7 +187,7 @@
       clear(box, out);
     }
     store.on((s, changed) => {
-      const keys = ["beat", "playing", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections"];
+      const keys = ["beat", "playing", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections", "pitchStatus"];
       if (changed.has("stage") || (s.stage && keys.some((key) => changed.has(key)))) render(s);
     });
     return { render };
