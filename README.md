@@ -85,8 +85,19 @@ separated track. The tracks carry the page's common gain, not the original file'
 **For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
 words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,
 then, in the library, **Keep E♭ for the band** (the button names your key): every device opens the
-song in it, and the page reminds you that the recording stays in its own. Tap a line's time to sing from there; stage mode shows the words
-big, your line lit, and the next part coming. The ChordPro export is in the key the page shows, the band's key included.
+song in it. Tap a line's time to sing from there; stage mode shows the words big, your line lit, and
+the next part coming. The ChordPro export is in the key the page shows, the band's key included.
+
+**The recording in your key.** Served by `woodshed app`, a transposed page offers **Play the
+recording 2 semitones up** (on by default for the voice, and for everyone in the band's saved key).
+The library renders each track in that key, one at a time, about 10 s per minute of song, the track
+you play first: the original plays meanwhile and the page swaps to the new one at the same place,
+without stopping. The tracks stay in tune, as long and at their level (a track already at the
+loudest is made a little quieter rather than clipped); the drums alone play as recorded. It needs
+ffmpeg with its Rubber Band filter (Ubuntu's, Debian's, Homebrew's, the Docker image's, and the full
+Windows build from `winget install Gyan.FFmpeg`); `woodshed app --no-pitch` turns it off. A page
+opened from disk plays the recording in its own key. Each page keeps the band's key and the two
+most recent others; the downloads stay the original files.
 
 ### A method, not just a chart
 
@@ -441,6 +452,8 @@ OFL for the fonts) and free for any use, paid gigs included.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,
 and Atkinson Hyperlegible, Barlow Condensed, JetBrains Mono, Noto Music and Bravura fonts (SIL OFL).
+The recording in another key is rendered by your own ffmpeg with its Rubber Band filter (GPL), run as a
+separate program: woodshed neither ships nor links it.
 
 **Your songs and lyrics are yours to handle.** woodshed works on the files you give it, on your
 computer. Respect the rights on the recordings and lyrics you use, and don't publish pages of songs
