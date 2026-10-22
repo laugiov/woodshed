@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-open", action="store_true", help="do not open the page in the browser")
     parser.add_argument("--title", help="page title (one song only)")
     parser.add_argument("--bpm", type=float, help="the tempo you hear: settles half or double time")
+    parser.add_argument(
+        "--offset",
+        type=int,
+        metavar="N",
+        help="beats before the first bar line (0 to beats-per-bar - 1); automatic if absent",
+    )
     _meter(parser)
     parser.add_argument("--debug", action="store_true", help="show the full error trace")
     return parser
@@ -173,11 +179,13 @@ def run_pages(argv: Sequence[str]) -> int:
         parser.error("--title needs a single song")
     if args.bpm is not None and not 30 <= args.bpm <= 300:
         parser.error("--bpm must be between 30 and 300")
+    if args.offset is not None and not 0 <= args.offset < args.beats_per_bar:
+        parser.error("--offset must be between 0 and beats-per-bar - 1")
     from woodshed.run import Options, Reporter, run_folder, run_songs
 
     opts = Options(
         out=args.out, use_stems=not args.no_stems, offline=args.offline, open_page=not args.no_open, title=args.title,
-        beats_per_bar=args.beats_per_bar, sevenths=args.sevenths, bpm=args.bpm,
+        beats_per_bar=args.beats_per_bar, sevenths=args.sevenths, bpm=args.bpm, offset=args.offset,
     )  # fmt: skip
 
     def work() -> int:
