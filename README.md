@@ -107,6 +107,17 @@ marked on the chart: press one, hear each candidate chord played over that bar o
 and keep the one your ear agrees with. Your corrections go into the exports, and through the
 library every device of the band sees them.
 
+<img src="docs/images/edit-chart.png" alt="Editing the chart: a bar typed as on a chord sheet, read back in words, with the chords heard by the analysis one tap away" width="100%">
+
+**Edit the chart** when the chart is wrong, or right in a vocabulary the analysis does not have.
+Click a bar and type its chords as on a chord sheet: `G . Am .` (a dot holds the chord), `D/F#`,
+`Asus4`, `Cmaj7`, `Bdim`, `%` for the bar before. woodshed reads it back in words ("D/F♯ for 2
+beats, F♯ in the bass, then G for 2"), lets you hear each chord and the bar of the record, and
+offers to type it on every repeat of that line. Rename the parts as your band calls them, join two,
+or start one on any bar. Shapes, keys, the stage view and every export follow, and each typed bar
+or part can go back to the analysis, or the whole chart at once (with an undo). Through the library
+the band's phones get it live.
+
 ### Built for the rehearsal room
 
 <img src="docs/images/band.png" alt="Band mode: one computer leads, a phone follows the same bar" width="100%">

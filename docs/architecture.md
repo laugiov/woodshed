@@ -407,6 +407,15 @@ While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the ba
 
 Your chord picks are saved in the browser's `localStorage` (`app.js`). When the page is served by the library app, they are also sent to a shared store (section 11).
 
+### Editing the chart
+
+The band can type any bar's chords and name, join or start parts (`views/editor.js`, Edit mode). What it types never enters the page's data block, so the page code refreshes as before:
+
+- **Typed bars** are kept by the global index of their first beat (as `song.beats` counts them) with their chords as `[beats, label]`, labels in sharp names and concert pitch (the editor works in the key on screen and converts). `core/edits.js` reads a bar written as on a chord sheet (`parseBar`: one token a beat with `.` or `/` holding, fewer chords than beats split evenly with the first holding the remainder, `%` the bar before) and lays the typed spans on the beats after the doubt picks (`apply`): a typed chord carries `typed`, a touched bar `edited`, and a doubt any of whose beats is typed over is settled (the library counts the same way).
+- **Typed parts** are kept by beat too: `{name}` renames or starts a part there, `{join}` joins it to the one before (`applyParts`); a typed name shows as typed in every language (`custom`). The chart's lines are drawn again from the parts with `core/structure.js` `regroup`, the twin of `structure._group` (a part always starts a line); the harmony summary keeps the analysis's lines.
+- **Keys**: both are kept under a key of the beats alone (`fnv1a` of the beats in whole milliseconds, `app.beats_key` in Python), so a new analysis on the same beats keeps them (moving the bar lines does not change the beats).
+- **Storage and sync**: `core/keyed.js` is a store by key with the picks' rules (latest wins, a take-back remembered with what it took back, offline changes shared on return). From disk it lives in `localStorage`; served, `POST /api/edits` merges per entry into `.corrections/<page>.json` (`edits` by beats key, up to 8 keys, 1000 bars, 200 parts, labels parsed by `chords.parse`, names cleaned of control and direction characters), shares the revision with the picks and pushes it on the live stream.
+
 ---
 
 ## 10. Exports
