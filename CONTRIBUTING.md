@@ -16,9 +16,10 @@ as the demo song in [`demo/`](demo/LICENSE.md).
 
 You need [uv](https://docs.astral.sh/uv/). ffmpeg is only needed for AAC (M4A) and video files: MP3,
 WAV, FLAC and Ogg are read without it.
-The singer's key (the recording in another key) renders with ffmpeg's Rubber Band filter: Ubuntu's,
-Debian's and Homebrew's ffmpeg have it. Without it its tests are skipped; `WOODSHED_REQUIRE_PITCH=1`
-makes them fail instead, as the CI does on Linux and macOS.
+The singer's key (the recording in another key) renders with ffmpeg's Rubber Band filter: Ubuntu's
+and Debian's ffmpeg have it; Homebrew's plain `ffmpeg` does not
+(`brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-rubberband` does). Without it its tests are skipped;
+`WOODSHED_REQUIRE_PITCH=1` makes them fail instead, as the CI does on Linux.
 
 ```bash
 git clone https://github.com/laugiov/woodshed && cd woodshed

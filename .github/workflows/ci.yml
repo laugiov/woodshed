@@ -60,8 +60,9 @@ jobs:
         uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
       - run: uv run --frozen --group dev pytest -m "not page" --cov --cov-report=term-missing:skip-covered -q
         env:
-          # The singer's key needs ffmpeg's Rubber Band filter: Ubuntu's and Homebrew's ffmpeg have it.
-          WOODSHED_REQUIRE_PITCH: ${{ runner.os != 'Windows' && '1' || '' }}
+          # The singer's key needs ffmpeg's Rubber Band filter: Ubuntu's ffmpeg has it, Homebrew's plain one
+          # does not (macOS and Windows skip those tests).
+          WOODSHED_REQUIRE_PITCH: ${{ runner.os == 'Linux' && '1' || '' }}
 
   page:
     name: Practice page in Chromium and Firefox
