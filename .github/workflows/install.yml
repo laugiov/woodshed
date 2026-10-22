@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: ffmpeg, as the script tells users to add it
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg; else sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg; else for try in 1 2 3; do timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -q && timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y -q ffmpeg && break; [ $try = 3 ] && exit 1; sleep 10; done; fi
       - name: Install woodshed with the script (on macOS from an archive, as users get it)
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then

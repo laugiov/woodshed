@@ -51,8 +51,9 @@ jobs:
       # ffmpeg as users get it: the distribution's on Linux (the action's static 7.0.2 build crashes on
       # AAC in MPEG-TS), Homebrew's on macOS (Apple silicon runners: the action is x64 only), the
       # action's build on Windows.
+      # A slow mirror hangs apt for the whole job: each try is cut short and tried again.
       - if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+        run: for try in 1 2 3; do timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -q && timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y -q ffmpeg && break; [ $try = 3 ] && exit 1; sleep 10; done
       - if: runner.os == 'macOS'
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg
       - if: runner.os == 'Windows'
@@ -73,7 +74,7 @@ jobs:
       # ffmpeg, and a sound server with a null output: without an audio device Firefox refuses to
       # play the tracks ("OnMediaSinkAudioError").
       - run: |
-          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg pulseaudio
+          for try in 1 2 3; do timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -q && timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y -q ffmpeg pulseaudio && break; [ $try = 3 ] && exit 1; sleep 10; done
           pulseaudio --start --exit-idle-time=-1
           pactl load-module module-null-sink sink_name=silence
           pactl set-default-sink silence
@@ -113,7 +114,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-      - run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - run: for try in 1 2 3; do timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -q && timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y -q ffmpeg && break; [ $try = 3 ] && exit 1; sleep 10; done
       # Saved only after the real tests pass, so only with both models complete. Bump the key
       # when a model changes.
       - id: models
