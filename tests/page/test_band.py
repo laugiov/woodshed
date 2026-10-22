@@ -573,8 +573,9 @@ def test_a_note_saved_while_another_is_pressed_still_opens_that_one(browser: Bro
         box = second.bounding_box()
         assert box
         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-        page.mouse.down()  # the first note loses the focus and is saved
-        page.wait_for_timeout(800)  # its answer is back while the button is held
+        with page.expect_response("**/api/band"):
+            page.mouse.down()  # the first note loses the focus and is saved
+        page.wait_for_timeout(100)  # its answer is back and handled while the button is held
         page.mouse.up()
         expect(items.nth(1).get_by_test_id("set-note-input")).to_be_focused()
         expect(items.first.get_by_test_id("set-note")).to_have_text("count of 4")

@@ -89,7 +89,7 @@
   let pressing = false;
   let afterPress = null;
   document.addEventListener("pointerdown", (e) => {
-    pressing = !!e.target.closest('[data-testid="setlist"]');
+    pressing = e.button === 0 && !!e.target.closest('[data-testid="setlist"]'); // a right click opens a menu, no click
   });
   const pressOver = () =>
     setTimeout(() => {
@@ -100,6 +100,7 @@
     }, 0); // after the click the release makes
   document.addEventListener("pointerup", pressOver);
   document.addEventListener("pointercancel", pressOver);
+  document.addEventListener("contextmenu", pressOver);
   function noteEditor(folder, note) {
     const input = h("input", { type: "text", class: "set-note-input", maxlength: "300", value: note, "aria-label": W.t("Note for {song}", { song: titles[folder] || folder }), "data-testid": "set-note-input" });
     let done = false;
@@ -113,7 +114,8 @@
         editing = null;
         renderSet({ again: true, editor: true });
         const again = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-note"]');
-        if (again) again.focus();
+        // The keyboard back on the note, unless another control took it meanwhile.
+        if (again && (!document.activeElement || document.activeElement === document.body)) again.focus();
       };
       setTimeout(() => {
         if (pressing) afterPress = redraw; // the save came back while a button is held down
