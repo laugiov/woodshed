@@ -83,3 +83,18 @@ def test_a_bar_typed_offline_is_shared_when_the_device_comes_back(
         until(bass, f"{BAR1} === {json.dumps(TYPED)}")
     finally:
         (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)
+
+
+def test_a_part_named_on_one_device_is_named_on_every_device(browser: Browser, pickup_server: app.AppServer) -> None:  # noqa: F811
+    problems: list[str] = []
+    server = pickup_server
+    url = server.url + "pickup.woodshed/index.html"
+    try:
+        guitar = device(browser, url, problems)
+        singer = device(browser, url, problems)
+        guitar.evaluate("Woodshed.app.namePart(0, 'Intro riff')")
+        until(singer, "Woodshed.app.sections()[0].name === 'Intro riff' && Woodshed.app.sections()[0].custom === true")
+        expect(singer.get_by_test_id("toast")).to_contain_text("The parts changed on another device")
+        assert problems == []
+    finally:
+        (server.library.root / app.CORRECTIONS_DIR / "pickup.woodshed.json").unlink(missing_ok=True)

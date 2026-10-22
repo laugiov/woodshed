@@ -517,7 +517,7 @@
       const partOf = (family) => {
         const g = app.analysisGroups.find((gr) => gr.family === family);
         const sec = g && app.sectionOf(g.occurrences[0][0]);
-        return sec ? W.partName(sec.name.replace(/ \d+$/, "")) : family;
+        return sec ? (sec.custom ? sec.name : W.partName(sec.name.replace(/ \d+$/, ""))) : family;
       };
       const used = new Map();
       const labelOf = (label) => {

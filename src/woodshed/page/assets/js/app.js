@@ -522,11 +522,18 @@
       typedParts.set(beatOfBar(u), { join: true });
       return editsChanged({ parts: { [beatOfBar(u)]: { join: true } } });
     };
+    // The parts back to the analysis; the function returned puts back what nobody typed again meanwhile.
     app.untypeParts = () => {
-      const keys = Object.keys(typedParts.values());
+      const parts = typedParts.values();
+      const keys = Object.keys(parts);
       for (const k of keys) typedParts.take(k);
       if (!app.shareEdits) typedParts.heard(keys);
-      return editsChanged({ parts: Object.fromEntries(keys.map((k) => [k, null])) });
+      editsChanged({ parts: Object.fromEntries(keys.map((k) => [k, null])) });
+      return () => {
+        const back = {};
+        for (const [k, v] of Object.entries(parts)) if (typedParts.get(k) === undefined) typedParts.set(k, (back[k] = v));
+        editsChanged({ parts: back });
+      };
     };
     // The chords typed on bar u, as [[beats, label]], or null.
     app.typedBar = (u) => {
@@ -820,7 +827,7 @@
     };
     mark(store.get());
     store.on((s, changed) => {
-      if (changed.has("inst") || changed.has("sheet")) mark(s);
+      if (changed.has("inst") || changed.has("sheet") || changed.has("editing")) mark(s);
     });
     const dock = views[3];
     for (const v of views) v.render(store.get());

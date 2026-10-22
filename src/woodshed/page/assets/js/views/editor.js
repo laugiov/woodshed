@@ -158,8 +158,22 @@
       box.style.bottom = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + "px" : "0px";
       box.style.maxHeight = (vv ? vv.height : window.innerHeight) - 16 + "px";
     }
+    // The keyboard rising pushes the sheet up: the bar is kept above it.
+    function keepBarInSight() {
+      const el = open === null ? null : chart.barEl(open);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const top = $("barEd").getBoundingClientRect().top;
+      if (r.bottom > top - 8 || r.top < 0) window.scrollBy({ top: r.bottom - (top - 16) });
+    }
     if (window.visualViewport) {
-      for (const ev of ["resize", "scroll"]) window.visualViewport.addEventListener(ev, () => open !== null && PHONE.matches && keepAboveKeyboard());
+      for (const ev of ["resize", "scroll"]) {
+        window.visualViewport.addEventListener(ev, () => {
+          if (open === null || !PHONE.matches) return;
+          keepAboveKeyboard();
+          if (ev === "resize") keepBarInSight();
+        });
+      }
     }
     // On a computer the dialog stays by its bar while the page scrolls or the window changes.
     let following = 0;
@@ -236,12 +250,20 @@
           field.focus();
           return;
         }
-        const bars = [u, ...(also && also.checked ? others : [])];
-        const shared = app.typeBars(bars, parsed.chords.map(([n, l]) => [n, moved(l, -T())])); // kept in concert pitch
-        const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
-        app.toast(bars.length > 1 ? W.t("Saved: bar {n} and its {m} repeats. {where}", { n: u + 1, m: bars.length - 1, where }) : W.t("Saved: bar {n}. {where}", { n: u + 1, where }));
+        // Walking through bars with Enter types nothing that was not changed (a bar with a chord to check
+        // is the exception: Enter there confirms it).
+        const onScreen = JSON.stringify(song.bars[u].chords.map((c) => [c.beats, moved(W.edits.label(c), T())]));
+        const unchanged = !typed && !doubt && JSON.stringify(parsed.chords) === onScreen;
+        let said = null;
+        if (!unchanged) {
+          const bars = [u, ...(also && also.checked ? others : [])];
+          const shared = app.typeBars(bars, parsed.chords.map(([n, l]) => [n, moved(l, -T())])); // kept in concert pitch
+          const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
+          said = bars.length > 1 ? W.t("Saved: bar {n} and its {m} repeats. {where}", { n: u + 1, m: bars.length - 1, where }) : W.t("Saved: bar {n}. {where}", { n: u + 1, where });
+        }
         if (next && u + 1 < song.bars.length) openBar(u + 1, chart.barEl(u + 1));
         else close(true);
+        if (said) app.toast(said); // after the sheet closed: the note does not jump on a phone
       }
       // A candidate fills the beats of the doubt it answers.
       function fill(candidate) {
@@ -331,6 +353,10 @@
     function startPart(u) {
       const name = h("input", { class: "part-start-name", type: "text", maxlength: "40", hidden: "", "data-testid": "part-start-name",
         "aria-label": W.t("Name of the part starting at bar {n}", { n: u + 1 }), placeholder: W.t("Bridge, Tag, Solo…") });
+      // A bar that already starts a part: the same field renames it.
+      const part = app.sectionOf(u);
+      const starts = !!part && part.start === u;
+      if (starts) name.value = W.partName(part);
       const go = h("button", { type: "button", class: "btn", "data-testid": "part-start", onclick: () => {
         if (name.hidden) {
           name.hidden = false;
@@ -339,9 +365,9 @@
         }
         if (!name.value.trim()) return name.focus();
         app.namePart(u, name.value);
-        app.toast(W.t("A part starts at bar {n}.", { n: u + 1 }));
         close(true);
-      } }, W.t("Start a part here"));
+        app.toast(starts ? W.t("The part at bar {n} is renamed.", { n: u + 1 }) : W.t("A part starts at bar {n}.", { n: u + 1 }));
+      } }, starts ? W.t("Rename the part") : W.t("Start a part here"));
       name.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -400,8 +426,10 @@
         h("span", { class: "acts" },
           Object.keys(app.typedParts.values()).length
             ? h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-parts", onclick: () => {
-                app.untypeParts();
-                app.toast(W.t("The parts are the analysis's again."));
+                const n = Object.keys(app.typedParts.values()).length;
+                if (!window.confirm(W.t("Take back {what}, for the whole band?", { what: n === 1 ? W.t("1 part name") : W.t("{n} part names", { n }) }))) return;
+                const undo = app.untypeParts();
+                app.toast(W.t("The parts are the analysis's again."), { label: W.t("Undo"), run: undo });
               } }, W.t("Parts back to the analysis"))
             : null,
           h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-all", onclick: untypeAll }, W.t("Back to the analysis…")),

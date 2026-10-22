@@ -514,6 +514,8 @@
     "Made by an older woodshed: analyse it again for the new page":
       "Fait par une version plus ancienne de woodshed : analyse-le à nouveau pour avoir la nouvelle page",
     "Bar {n} changed on another device.": "La mesure {n} a changé sur un autre appareil.",
+    "The part at bar {n} is renamed.": "La partie de la mesure {n} est renommée.",
+    "Rename the part": "Renommer la partie",
     "{n} bars changed on another device.": "{n} mesures ont changé sur un autre appareil.",
     "Edit when the parts are ready: the full analysis may move the beats.": "Modifiable quand les parties seront prêtes : l'analyse complète peut déplacer les temps.",
     "{part}, played again": "{part}, rejoué",

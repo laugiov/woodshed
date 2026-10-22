@@ -55,6 +55,59 @@ def test_a_part_started_mid_line_starts_a_line(open_page: Any) -> None:
     firsts = o.js("Woodshed.current.song.groups.flatMap((g) => g.occurrences.map((l) => l[0]))")
     assert 2 in firsts  # the line breaks where the part starts
     # The parts back to the analysis: the lines as they were.
+    page.once("dialog", lambda d: d.accept())
     page.get_by_test_id("untype-parts").click()
     assert 2 not in o.js("Woodshed.current.song.groups.flatMap((g) => g.occurrences.map((l) => l[0]))")
     assert [2, "Tag", True] not in o.js(PARTS)
+
+
+def test_the_parts_overlay_on_its_edges(open_page: Any) -> None:
+    o = open_page("pop")
+    apply = "(base, parts) => Woodshed.edits.applyParts(base, parts, 0, 4, 12).map((p) => [p.start, p.name, p.role])"
+    base = [
+        {"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 8},
+        {"name": "Chorus 1", "role": "chorus", "letter": "B", "start": 8, "end": 12},
+    ]
+    assert o.js(f"({apply})({base}, {{'0': {{join: true}}}})") == [
+        [0, "Verse 1", "verse"],
+        [8, "Chorus 1", "chorus"],
+    ]  # nothing before the first
+    assert o.js(f"({apply})({base}, {{'16': {{name: 'Tag'}}, '17': {{name: 'Solo over the chorus'}}}})") == [
+        [0, "Verse 1", "verse"],
+        [4, "Solo over the chorus", "instrumental"],  # beats 16 and 17 round to bar 4: the later one wins
+        [8, "Chorus 1", "chorus"],
+    ]
+    assert o.js(f"({apply})([], {{'16': {{name: 'B'}}}})")[0][1] == "Part A"  # no parts before: the first has a name
+
+
+def test_enter_on_an_untouched_bar_types_nothing(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    page.locator('.bar[data-bar="1"]').first.click()
+    page.get_by_test_id("bar-field").press("Enter")  # walks on to the next bar
+    expect(page.get_by_test_id("bar-editor")).to_contain_text("Bar 3")
+    assert o.js("Woodshed.app.typedBar(1)") is None and o.js("Woodshed.current.bars[1].edited") is False
+
+
+def test_on_a_part_s_first_bar_the_editor_renames_it(open_page: Any) -> None:
+    o = open_page("pop")
+    page = editing(o)
+    page.locator('.bar[data-bar="0"]').first.click()
+    expect(page.get_by_test_id("part-start")).to_have_text("Rename the part")
+    page.get_by_test_id("part-start").click()
+    page.get_by_test_id("part-start-name").fill("Intro riff")
+    page.get_by_test_id("part-start-name").press("Enter")
+    assert o.js(PARTS)[0] == [0, "Intro riff", True]
+    expect(page.get_by_test_id("toast")).to_contain_text("The part at bar 1 is renamed")
+
+
+def test_the_parts_go_back_to_the_analysis_with_a_confirm_and_an_undo(open_page: Any) -> None:
+    o = open_page("pop")
+    before = o.js(PARTS)
+    o.js("Woodshed.app.namePart(4, 'Chorus')")
+    page = editing(o)
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_test_id("untype-parts").click()
+    assert o.js(PARTS) == before
+    page.get_by_test_id("toast-action").click()  # Undo
+    assert [4, "Chorus", True] in o.js(PARTS)

@@ -110,9 +110,10 @@
   }
 
   // A typed part name's colour role, from a word in it (else neutral).
+  // The first word only: "Solo over the chorus" is a solo.
   const ROLES = [
-    [/pre[- ]?(chorus|refrain)/i, "prechorus"], [/chorus|refrain/i, "chorus"], [/verse|couplet/i, "verse"],
-    [/bridge|pont/i, "bridge"], [/intro/i, "intro"], [/outro|coda/i, "outro"], [/solo|instrumental/i, "instrumental"],
+    [/^pr[eé][- ]?(chorus|refrain)\b/i, "prechorus"], [/^(chorus|refrain)\b/i, "chorus"], [/^(verse|couplet)\b/i, "verse"],
+    [/^(bridge|pont)\b/i, "bridge"], [/^intro\b/i, "intro"], [/^(outro|coda)\b/i, "outro"], [/^(solo|instrumental)\b/i, "instrumental"],
   ];
   const roleOf = (name) => (ROLES.find(([re]) => re.test(name)) || [null, "part"])[1];
 
@@ -123,7 +124,7 @@
     const entries = Object.entries(parts || {});
     if (!entries.length || !nBars) return null;
     const starts = new Map();
-    const given = base.length ? base : [{ name: "", role: "part", letter: "", start: 0, end: nBars }];
+    const given = base.length ? base : [{ name: "Part A", role: "part", letter: "A", start: 0, end: nBars }];
     for (const sec of given) starts.set(sec.start, { name: sec.name, role: sec.role, letter: sec.letter, custom: !!sec.custom });
     for (const [at, v] of entries.sort((a, b) => Number(a[0]) - Number(b[0]))) {
       const u = Math.max(0, Math.min(nBars - 1, Math.round((Number(at) - firstBeat) / per)));
