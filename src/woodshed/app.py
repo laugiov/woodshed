@@ -1582,7 +1582,7 @@ class AppServer(ThreadingHTTPServer):
                     flush=True,
                 )
             return
-        if isinstance(error, (ConnectionResetError, BrokenPipeError, TimeoutError)):
+        if isinstance(error, (ConnectionError, TimeoutError)):  # reset, aborted (Windows), broken pipe
             return  # a phone gone mid-request
         super().handle_error(request, client_address)
 
@@ -1655,9 +1655,15 @@ def running_url(port: int) -> str | None:
     this_computer = ssl.create_default_context()
     this_computer.check_hostname = False  # 127.0.0.1 asking itself: the certificate is for the phones
     this_computer.verify_mode = ssl.CERT_NONE
-    handlers = (urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=this_computer))
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+            return None  # woodshed answers itself: another service's redirect is not followed
+
+    handlers = (urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=this_computer), NoRedirect())
     no_proxy = urllib.request.build_opener(*handlers)  # this computer, never a proxy
-    for url in (f"http://127.0.0.1:{port}/", f"https://localhost:{port}/"):
+    # HTTPS first: a plain server answers a TLS hello with a quiet 400, while a plain request on a TLS
+    # listener would count as a device that does not trust the certificate.
+    for url in (f"https://localhost:{port}/", f"http://127.0.0.1:{port}/"):
         try:
             with no_proxy.open(url.replace("localhost", "127.0.0.1") + "api/token", timeout=1.5) as answer:
                 if isinstance(json.loads(answer.read(4096)).get("token"), str):

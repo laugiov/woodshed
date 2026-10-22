@@ -188,3 +188,47 @@ def test_the_command_takes_both_files_or_none(tmp_path: Path, monkeypatch: pytes
     seen.clear()
     assert cli.main(["app", str(tmp_path / "lib"), "--no-open"]) == 0  # the Docker image's way
     assert seen["tls"] == (cert, key)
+
+
+def test_a_device_that_stalls_its_handshake_holds_nobody_up(
+    network_server: app.AppServer, certificate: tuple[Path, Path]
+) -> None:
+    import socket
+
+    port = network_server.port
+    with socket.create_connection(("127.0.0.1", port), timeout=5):  # connected, says nothing
+        status, _ = get(port, "/api/token", certificate[0], f"127.0.0.1:{port}")
+        assert status == 200  # the handshake waits on the request's own thread, not on the accept loop
+
+
+@needs_lan
+def test_closing_the_door_drops_a_phone_on_the_https_stream(
+    tmp_path: Path, certificate: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
+    library = app.Library(tmp_path / "library", Options(use_stems=False, open_page=False))
+    srv = serving(app.AppServer(library, "127.0.0.1", 0, tls=tls.load(*certificate, library.root)))
+    monkeypatch.setattr(app, "lan_addresses", lambda: LAN[:1])
+    try:
+        srv.set_door(True)
+        conn = http.client.HTTPSConnection(LAN[0], srv.port, timeout=10, context=trusting(certificate[0]))
+        conn.request("GET", f"/api/live?t={srv.token}", headers={"Host": f"{LAN[0]}:{srv.port}"})
+        events = conn.getresponse()
+        assert events.readline().startswith(b"data: ")
+        events.readline()
+        srv.set_door(False)
+        started = time.monotonic()
+        while events.readline() not in (b"",):
+            assert time.monotonic() - started < 5
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_probing_this_computer_is_not_a_device_that_distrusts_the_certificate(
+    network_server: app.AppServer, capfd: pytest.CaptureFixture[str]
+) -> None:
+    assert app.running_url(network_server.port) == f"https://localhost:{network_server.port}/"
+    assert "does not trust" not in capfd.readouterr().err and not network_server.untrusted_told

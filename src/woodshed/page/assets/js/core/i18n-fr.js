@@ -414,8 +414,8 @@
       "Pistes séparées sur cet ordinateur. Une seule joue à la fois : elles ne se décalent jamais.",
     "Only the full mix: this page was made without stems.": "Seulement le mix complet : cette page a été faite sans pistes séparées.",
     // Awake on the music stand (app.js, core/awake.js)
-    "Screen locking? Settings → Auto-Lock → Never.": "L'écran se verrouille ? Réglages → Verrouillage auto → Jamais.",
-    "Screen going dark? Settings → Screen timeout → the longest.": "L'écran s'éteint ? Paramètres → Mise en veille de l'écran → la plus longue.",
+    "Screen locking? Settings → Display & Brightness → Auto-Lock → Never.": "L'écran se verrouille ? Réglages → Luminosité et affichage → Verrouillage auto → Jamais.",
+    "Screen going dark? Settings → Screen timeout → the longest.": "L'écran s'éteint ? Paramètres → Délai de mise en veille de l'écran → le plus long.",
     "Screen locking? Turn off its sleep while you play.": "L'écran se verrouille ? Désactive sa mise en veille pendant que tu joues.",
     // Your part (views/desk.js)
     "Listen to": "Écouter",

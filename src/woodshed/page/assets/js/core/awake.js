@@ -69,6 +69,7 @@
 
     async function ask() {
       if (!navigator.wakeLock || !navigator.wakeLock.request) return false;
+      if (lock) return true; // held already: never two
       if (asking) return asking;
       asking = (async () => {
         try {
@@ -125,6 +126,7 @@
       },
       wanted: () => wanted,
       holding,
+      locked: () => !!lock, // the browser's Wake Lock itself, not the video's best effort
     };
   };
 })();

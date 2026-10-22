@@ -869,6 +869,6 @@ body.editing .chart-hint { display: none; }
 
 /* Awake on the music stand (core/awake.js): the video is in view but invisible; the line under the Follow banner. */
 .awake-video { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
-.awake-line { position: sticky; top: 40px; z-index: 19; display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 12px; font-size: 13px; background: var(--sheet); border-bottom: 1px solid var(--line); color: var(--ink); }
+.awake-line { display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 12px; font-size: 13px; background: var(--sheet); border-bottom: 1px solid var(--line); color: var(--ink); }
 .awake-line[hidden] { display: none; }
 .awake-line button { margin-left: auto; min-width: 44px; min-height: 44px; border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer; }

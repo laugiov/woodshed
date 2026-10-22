@@ -23,7 +23,11 @@ Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { requ
   if (__locks.refuse) throw new DOMException('refused', 'NotAllowedError');
   const s = new EventTarget();
   s.released = false;
-  s.release = async () => { if (!s.released) { s.released = true; __locks.released += 1; __locks.held -= 1; } };
+  s.release = async () => {
+    if (s.released) return;
+    s.released = true; __locks.released += 1; __locks.held -= 1;
+    s.dispatchEvent(new Event('release'));  // as a browser does, whoever released it
+  };
   __locks.held += 1; __locks.last = s;
   return s;
 } } });
@@ -76,7 +80,7 @@ def test_follow_lead_and_stage_hold_the_screen_and_leaving_lets_it_go(browser: B
     page.evaluate("__locks.last.release()")
     page.evaluate(HIDE, False)
     until(page, "__locks.held === 1 && __locks.asked === 2")  # asked again when back in view
-    page.evaluate("__locks.last.released = true; __locks.held -= 1; __locks.last.dispatchEvent(new Event('release'))")
+    page.evaluate("__locks.last.release()")  # dropped by the system, the page still in view
     until(page, "__locks.held === 1 && __locks.asked === 3")  # dropped by the system, the page in view: again
     page.get_by_test_id("band-alone").click()
     until(page, "__locks.held === 0")
@@ -144,7 +148,7 @@ def test_the_follower_is_told_how_to_keep_the_screen_on_only_when_it_may_lock(
     url = server.url + "pop.woodshed/index.html?follow=1"
     page = device(browser, url, NO_LOCK + REFUSED_PLAY, problems, user_agent=IPHONE, has_touch=True, is_mobile=True)
     line = page.get_by_test_id("awake-line")
-    expect(line).to_contain_text("Settings → Auto-Lock → Never")  # worded for an iPhone
+    expect(line).to_contain_text("Display & Brightness → Auto-Lock → Never")  # worded for an iPhone
     assert page.evaluate("document.getElementById('awakeLine').closest('[role=status],[aria-live]')") is None
     page.get_by_test_id("awake-close").click()
     expect(line).to_be_hidden()
@@ -181,3 +185,31 @@ def test_the_videos_are_tiny_silent_and_ours() -> None:
     assert b"A_" not in webm and b"V_VP8" in webm  # Matroska codec ids: video only
     script = (Path(__file__).resolve().parents[2] / "scripts" / "awake_video.py").read_text(encoding="utf-8")
     assert '"-an"' in script  # made here, without audio
+
+
+def test_a_follower_back_from_a_locked_screen_is_told_until_the_lock_holds_again(
+    browser: Browser, server: app.AppServer
+) -> None:
+    problems: list[str] = []
+    page = device(browser, server.url + "pop.woodshed/index.html?follow=1", FAKE_LOCK, problems)
+    until(page, "Woodshed.band.mode() === 'follow' && __locks.held === 1")
+    line = page.get_by_test_id("awake-line")
+    page.wait_for_timeout(1800)
+    expect(line).to_be_hidden()  # a working lock: nothing to say
+    page.evaluate("__locks.refuse = true")  # the phone locked; back, the system refuses the lock
+    page.evaluate(HIDE, True)
+    page.evaluate("__locks.last.release()")
+    page.evaluate(HIDE, False)
+    expect(line).to_be_visible(timeout=5000)
+    page.get_by_test_id("lang-fr").click()
+    expect(line).to_contain_text("L'écran")  # said again in the other language
+    page.evaluate("__locks.refuse = false")
+    page.evaluate(HIDE, True)
+    page.evaluate(HIDE, False)
+    expect(line).to_be_hidden(timeout=5000)  # held again: the advice goes
+    assert problems == []
+
+
+def test_the_page_lets_the_videos_play_and_nothing_else_in() -> None:
+    template = (ASSETS.parent / "template.html").read_text(encoding="utf-8")
+    assert "media-src 'self';" in template  # the awake videos come from the page's own folder

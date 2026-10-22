@@ -7,6 +7,7 @@ The files are checked before the library starts, and their content is never prin
 from __future__ import annotations
 
 import ssl
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,7 +30,7 @@ def load(cert: Path, key: Path, library: Path) -> Tls:
     for path in (cert, key):
         resolved = path.expanduser().resolve()
         if not resolved.is_file():
-            raise WoodshedError(f"{path}: no such file")
+            raise WoodshedError(f"{path}: no such file" if not resolved.exists() else f"{path}: not a file")
         if resolved.is_relative_to(root):  # the library is served: the key would be downloadable
             raise WoodshedError(f"{path} is inside the library, which is served to the phones: keep it elsewhere")
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -38,9 +39,10 @@ def load(cert: Path, key: Path, library: Path) -> Tls:
         context.load_cert_chain(cert.expanduser(), key.expanduser(), password=_refuse_password)
     except WoodshedError:
         raise
-    except PermissionError:
+    except PermissionError as exc:
         raise WoodshedError(
-            f"{key}: cannot be read by this user (in Docker: chmod 640 the key, or set WOODSHED_UID to its owner)"
+            f"{exc.filename or key}: cannot be read by this user (in Docker: chmod 640 it, or set WOODSHED_UID"
+            " to its owner)"
         ) from None
     except ssl.SSLError as exc:
         if "BAD_DECRYPT" in str(exc) or "bad decrypt" in str(exc).lower():
@@ -55,5 +57,11 @@ def _dns_names(cert: Path) -> list[str]:
     try:
         decoded = ssl._ssl._test_decode_cert(str(cert))  # type: ignore[attr-defined]
     except (AttributeError, ssl.SSLError, OSError, ValueError):
+        print(
+            "woodshed app: could not read the certificate's names: the phones must type its IP address",
+            file=sys.stderr,
+            flush=True,
+        )
         return []
-    return [value.lower() for kind, value in decoded.get("subjectAltName", ()) if kind == "DNS"]
+    names = [value.lower() for kind, value in decoded.get("subjectAltName", ()) if kind == "DNS"]
+    return [n for n in names if "*" not in n]  # a wildcard is no name a Host header carries

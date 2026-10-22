@@ -864,13 +864,14 @@
     let cameBack = false; // the page was hidden while a mode was on: the screen probably locked
     let sayTimer = 0;
     const awake = W.createAwake(() => {
+      if (awake && awake.locked() && !document.hidden) cameBack = false; // the Wake Lock again: nothing to fear
       clearTimeout(sayTimer);
       sayTimer = setTimeout(sayAwake, 1500); // a lock or a video takes a moment: no line that flickers
     });
     const bandMode = () => (W.band ? W.band.mode() : "alone");
     function screenAdvice() {
       const ua = navigator.userAgent;
-      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return W.t("Screen locking? Settings → Auto-Lock → Never.");
+      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return W.t("Screen locking? Settings → Display & Brightness → Auto-Lock → Never.");
       if (/Android/.test(ua)) return W.t("Screen going dark? Settings → Screen timeout → the longest.");
       return W.t("Screen locking? Turn off its sleep while you play.");
     }
@@ -878,7 +879,9 @@
       const mode = bandMode();
       const atRisk = awake.wanted() && (!awake.holding() || cameBack);
       const line = mode === "follow" && atRisk && !stored("woodshed:awakeLineClosed");
-      if (line && awakeLine.hidden) {
+      if (mode !== "follow") cameBack = false;
+      if (line && (awakeLine.hidden || awakeLine.lang !== W.lang())) {
+        awakeLine.lang = W.lang(); // said again in the other language
         W.clear(awakeLine, h("span", null, screenAdvice()), h("button", {
           type: "button", "aria-label": W.t("Close"), "data-testid": "awake-close",
           onclick: () => {
@@ -919,6 +922,7 @@
       renderExports();
       renderMore();
       renderStagePlay(store.get());
+      sayAwake();
     });
 
     // Input.

@@ -58,7 +58,7 @@ VOLUME ["/library", "/cache"]
 EXPOSE 8000
 # "healthy" once the library answers: `docker compose ps` and `up --wait` then say when it is ready.
 HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 \
-    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/', timeout=2)"]
+    CMD ["python", "-c", "import sys; from woodshed.app import running_url; sys.exit(0 if running_url(8000) else 1)"]
 ENTRYPOINT ["woodshed"]
 # Inside the container every visitor comes through Docker's network, never from loopback: the app
 # must accept them, and their uploads. Who can reach it is decided by the published port (compose.yaml).

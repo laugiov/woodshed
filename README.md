@@ -340,13 +340,14 @@ its screen on: with the browser's Screen Wake Lock on a secure page, otherwise w
 video playing in the page (it starts at the first touch after a song change). It is best effort:
 the phone's system decides, Low Power Mode or Battery Saver can refuse it, and the video costs
 battery, so plug the phones in for a long rehearsal. A follower whose screen may still lock sees one
-line saying where to turn its sleep off (Settings → Auto-Lock → Never on an iPhone, Screen timeout
-on Android).
+line saying where to turn its sleep off (Settings → Display & Brightness → Auto-Lock → Never on an
+iPhone, where Low Power Mode greys "Never" out; Screen timeout on Android).
 
 **HTTPS for the phones (optional).** Over the Wi-Fi's plain `http://` address, phones have no Screen
 Wake Lock. Served over HTTPS they do. With [mkcert](https://github.com/FiloSottile/mkcert) on the
 computer: `mkcert -install`, then `mkcert 192.168.1.20 localhost 127.0.0.1` with this computer's
-address on the band's network (a name such as `mylaptop.local` works too), and start
+address on the band's network (a name such as `mylaptop.local` works too, though Android often cannot
+resolve `.local` names: the address is the safe choice), and start
 `woodshed app --cert 192.168.1.20+2.pem --key 192.168.1.20+2-key.pem` (or set `WOODSHED_CERT` and
 `WOODSHED_KEY`). Keep both files outside the library folder: woodshed refuses a key it would serve.
 The library page then shows `https://` addresses and code. Each phone must trust mkcert's root,
@@ -360,8 +361,12 @@ The library page then shows `https://` addresses and code. Each phone must trust
 
 Remove the root from the phones after the gig: anything that trusts it trusts every certificate
 your mkcert makes. The address in the certificate must be the one the phones type: give the
-computer a fixed address on the router, or make a new certificate after joining another network. An
-old `http://` bookmark no longer answers; the computer itself still opens `http://127.0.0.1:8000`.
+computer a fixed address on the router, or make a new certificate after joining another network.
+mkcert's certificates last a little over two years. An old `http://` bookmark no longer answers. The
+computer itself still opens `http://127.0.0.1:8000`, except when the whole library listens on the
+network (`--host 0.0.0.0`, or Docker): then it is `https://localhost:8000` too, and the certificate must
+include `localhost` and `127.0.0.1`. With Docker: put the two files in a `certs` folder next to
+`compose.yaml` (not inside `woodshed`), and follow the comment in `compose.yaml`.
 
 **No Wi-Fi in the room.** Turn on a phone's hotspot, join it from the computer and the other phones,
 and let the band's phones join again: the library page shows the address on that network (not last
