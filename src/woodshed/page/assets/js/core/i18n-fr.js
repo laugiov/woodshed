@@ -513,6 +513,8 @@
     "shape at fret {n}": "position en case {n}",
     "Made by an older woodshed: analyse it again for the new page":
       "Fait par une version plus ancienne de woodshed : analyse-le à nouveau pour avoir la nouvelle page",
+    "Bar {n} changed on another device.": "La mesure {n} a changé sur un autre appareil.",
+    "The parts changed on another device.": "Les parties ont changé sur un autre appareil.",
     "1 to check": "1 à vérifier",
     "{n} to check": "{n} à vérifier",
     "Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how.":

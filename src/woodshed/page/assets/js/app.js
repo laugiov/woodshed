@@ -345,6 +345,19 @@
     // The analysis's doubts: picks are checked against these, not against the chart now (a bar the band
     // typed has no doubt left, but its picks are kept for when the typed chords are taken back).
     const analysedDoubts = new Set(original.flat().filter((c) => c.doubt).map((c) => String(c.doubt.id)));
+    // The band's typed bars and part names (core/edits.js), kept by the beat they start on under a key of
+    // the beats alone: a new analysis on the same beats (the bar lines moved) keeps them. As app.beats_key.
+    const editsKey = fnv1a(JSON.stringify(meta.beats.map((t) => Math.floor(t * 1000 + 0.5))));
+    const BEAT = /^-?[0-9]{1,6}$/;
+    const typedBars = W.keyed("woodshed:edits:" + editsKey + ":bars", (k, v) =>
+      BEAT.test(k) && !!v && Array.isArray(v.chords) && v.chords.length > 0 &&
+      v.chords.every((c) => Array.isArray(c) && Number.isInteger(c[0]) && c[0] > 0 && typeof c[1] === "string" && !W.chords.parse(c[1]).refused));
+    const typedParts = W.keyed("woodshed:edits:" + editsKey + ":parts", (k, v) =>
+      BEAT.test(k) && !!v && (v.join === true || (typeof v.name === "string" && v.name.trim().length > 0 && v.name.length <= 40)));
+    typedBars.restore();
+    typedParts.restore();
+    // Beats are counted from the first bar's beat one in the page, from the first tracked beat in the store.
+    const beatOfBar = (u) => String(meta.first_beat + u * song.per);
     function applyFixes() {
       song.bars.forEach((bar, u) => {
         bar.chords = original[u].map((c) => ({ ...c }));
@@ -356,6 +369,12 @@
         }
         merge(bar);
       }
+      // The bars the band typed, over the picks (core/edits.js): on their beats.
+      const typed = W.edits.apply(song.bars, { bars: typedBars.values() }, meta.first_beat, song.per);
+      typed.forEach((bar, u) => {
+        song.bars[u].chords = bar.chords;
+        song.bars[u].edited = !!bar.edited;
+      });
     }
     // Doubts taken back to the analysis on this device, until the band's library has them: a
     // device that was offline shares them when it comes back, and the library's copy of the old fix
@@ -463,6 +482,58 @@
     };
 
     restoreCorrections();
+
+    // Typing the chords of bars (the bar editor): stored, applied, and shared with the band when served.
+    app.editsKey = editsKey;
+    app.typedBars = typedBars;
+    app.typedParts = typedParts;
+    function editsChanged(change) {
+      applyFixes();
+      store.set({ corrections: store.get().corrections + 1 });
+      return app.shareEdits ? app.shareEdits(change) : false;
+    }
+    // The chords typed on bar u, as [[beats, label]], or null.
+    app.typedBar = (u) => {
+      const entry = typedBars.get(beatOfBar(u));
+      return entry ? entry.chords.map(([n, l]) => [n, l]) : null;
+    };
+    // chords: [[beats, label]] for bar u, and the same on the bars in `also` (the line played again).
+    app.typeBars = (us, chords) => {
+      const change = {};
+      for (const u of us) {
+        const entry = { chords: chords.map(([n, l]) => [n, l]), t: Math.round(song.beatTime(u * song.per) * 1000) / 1000 };
+        typedBars.set(beatOfBar(u), entry);
+        change[beatOfBar(u)] = entry;
+      }
+      return editsChanged({ bars: change });
+    };
+    // Back to the analysis for bar u: every typed span that starts on one of its beats.
+    app.untypeBar = (u) => {
+      const first = meta.first_beat + u * song.per;
+      const keys = Object.keys(typedBars.values()).filter((k) => Number(k) >= first && Number(k) < first + song.per);
+      for (const k of keys) typedBars.take(k);
+      if (!app.shareEdits) typedBars.heard(keys); // opened from disk: this browser was all there was
+      return editsChanged({ bars: Object.fromEntries(keys.map((k) => [k, null])) });
+    };
+    // The band's copy of the typed bars and parts (views/band.js): what this device still has to share.
+    // `quiet`: the first read when the page opens, nothing to announce.
+    app.useEdits = (edits, quiet) => {
+      const before = typedBars.values();
+      const bars = typedBars.merge(edits.bars, edits.removed_bars);
+      const parts = typedParts.merge(edits.parts, edits.removed_parts);
+      if (bars.changed || parts.changed) {
+        applyFixes();
+        store.set({ corrections: store.get().corrections + 1 });
+        const after = typedBars.values();
+        const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+          .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+          .map((k) => Math.floor((Number(k) - meta.first_beat) / song.per) + 1)
+          .sort((a, b) => a - b);
+        if (!quiet && moved.length) app.toast(W.t("Bar {n} changed on another device.", { n: moved[0] }));
+        else if (!quiet && parts.changed) app.toast(W.t("The parts changed on another device."));
+      }
+      return { bars: bars.share, parts: parts.share };
+    };
 
     // One pending "stop after these bars" at a time; any play, pause or new preview cancels it.
     let oneShot = 0;

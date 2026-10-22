@@ -171,8 +171,11 @@
     // The chart's corrections, kept by the library for the band: read when the page opens, when it
     // comes back to the screen, and when the stream says another device corrected this song.
     let fixesRev = -1;
+    let editsRead = false; // the first answer only fills the page in
     async function loadFixes() {
-      const r = await api("/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey));
+      const r = await api(
+        "/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey) + "&edits=" + encodeURIComponent(app.editsKey),
+      );
       if (!r.ok || typeof r.data.rev !== "number" || r.data.rev < fixesRev) return; // an older answer
       fixesRev = Math.max(fixesRev, r.data.rev);
       const removed = r.data.removed && typeof r.data.removed === "object" && !Array.isArray(r.data.removed) ? r.data.removed : {};
@@ -198,7 +201,23 @@
       app.useBand(r.data.band || {});
       if (pending.size) share(Object.fromEntries([...pending.keys()].map((id) => [id, null])));
       if (Object.keys(mine).some((k) => !(k in theirs))) share(app.fixes()); // made before, on this device
+      // The typed bars and part names, the same way (core/keyed.js).
+      const owed = app.useEdits(r.data.edits || {}, !editsRead);
+      editsRead = true;
+      if (Object.keys(owed.bars).length || Object.keys(owed.parts).length) shareEdits(owed);
     }
+    function shareEdits(change) {
+      api("/api/edits", { page: folder, key: app.editsKey, bars: change.bars || {}, parts: change.parts || {} }).then((r) => {
+        if (!r.ok || typeof r.data.rev !== "number") app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
+        else {
+          app.typedBars.heard(Object.keys(r.data.removed_bars || {}));
+          app.typedParts.heard(Object.keys(r.data.removed_parts || {}));
+          heardRev(r.data.rev);
+        }
+      });
+      return true;
+    }
+    app.shareEdits = shareEdits;
     function share(fixes) {
       api("/api/corrections", { page: folder, key: app.fixesKey, fixes }).then((r) => {
         if (!r.ok || typeof r.data.rev !== "number") app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));

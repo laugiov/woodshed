@@ -105,7 +105,7 @@
         }
       }
       chords.forEach((c) => delete c.of);
-      return { ...bar, chords, ...(edited ? { edited: true } : {}) };
+      return { ...bar, chords, edited };
     });
   }
 
