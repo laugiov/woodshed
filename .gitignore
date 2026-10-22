@@ -35,3 +35,6 @@ private/
 *.webm
 # Except the demo song, under a free licence (see demo/LICENSE.md), pinned by scripts/vendored.sha256
 !/demo/*.mp3
+# and the two silent black videos that keep a phone awake (scripts/awake_video.py)
+!/src/woodshed/page/assets/awake/awake.mp4
+!/src/woodshed/page/assets/awake/awake.webm

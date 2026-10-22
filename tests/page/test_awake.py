@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Browser, Page, expect
+from playwright.sync_api import Browser, Page, ViewportSize, expect
 
 from tests.page import test_band as band
 from tests.page.test_band import until
@@ -56,7 +56,7 @@ ANDROID = (
 
 
 def device(browser: Browser, url: str, script: str, problems: list[str], **context: Any) -> Page:
-    size = {"width": 390, "height": 844} if context.get("is_mobile") else {"width": 1280, "height": 800}
+    size: ViewportSize = {"width": 390, "height": 844} if context.get("is_mobile") else {"width": 1280, "height": 800}
     page = browser.new_context(viewport=size, locale="en-US", **context).new_page()
     page.add_init_script(script)
     page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
@@ -160,10 +160,11 @@ def test_leading_without_a_lock_says_it_once_as_a_toast(browser: Browser, server
     url = server.url + "pop.woodshed/index.html"
     page = device(browser, url, NO_LOCK + REFUSED_PLAY, problems, user_agent=ANDROID)
     page.evaluate("() => { HTMLMediaElement.prototype.play = () => Promise.reject(new Error('never')); }")
+    page.evaluate("Woodshed.app.toast('Another message being read')")
     page.get_by_test_id("band-lead").click()
     until(page, "Woodshed.band.mode() === 'lead'")
-    page.wait_for_timeout(2500)
-    expect(page.get_by_test_id("toast")).to_contain_text("Screen timeout → the longest")
+    # Said when no other toast is being read ("leading the band" may be one): within a few seconds.
+    expect(page.get_by_test_id("toast")).to_contain_text("Screen timeout → the longest", timeout=12_000)
     expect(page.get_by_test_id("awake-line")).to_be_hidden()  # the line is for followers
     page.get_by_test_id("band-alone").click()
     page.evaluate("document.getElementById('toast').hidden = true")
@@ -174,7 +175,7 @@ def test_leading_without_a_lock_says_it_once_as_a_toast(browser: Browser, server
 
 
 def test_the_videos_are_tiny_silent_and_ours() -> None:
-    mp4, webm = (ASSETS / "awake.mp4").read_bytes(), (ASSETS / "awake.webm").read_bytes()
+    mp4, webm = (ASSETS / "awake" / "awake.mp4").read_bytes(), (ASSETS / "awake" / "awake.webm").read_bytes()
     assert len(mp4) < 20_000 and len(webm) < 20_000
     assert b"soun" not in mp4 and b"vide" in mp4  # no audio handler: no audio track to take the phone's session
     assert b"A_" not in webm and b"V_VP8" in webm  # Matroska codec ids: video only

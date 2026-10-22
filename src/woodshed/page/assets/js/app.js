@@ -889,7 +889,12 @@
       }
       awakeLine.hidden = !line;
       // Leading or on stage: a toast, once per device, never over another one.
-      if (mode !== "follow" && atRisk && !stored("woodshed:awakeTold") && $("toast").hidden) {
+      if (mode !== "follow" && atRisk && !stored("woodshed:awakeTold")) {
+        if (!$("toast").hidden) {
+          clearTimeout(sayTimer);
+          sayTimer = setTimeout(sayAwake, 3000); // another toast is being read: after it
+          return;
+        }
         app.toast(screenAdvice());
         keep("woodshed:awakeTold");
       }

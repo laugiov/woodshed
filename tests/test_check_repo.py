@@ -212,3 +212,17 @@ def test_the_musicxml_doctype_is_an_identifier_not_a_fetch(tmp_path: Path) -> No
         code = f'fetch("http://www.musicxml.org/{url}")\n'
         write(tmp_path, f"src/woodshed/page/assets/js/core/y{i}.js", code.encode())
     assert sum("network" in p for p in problems(tmp_path)) == 4
+
+
+def test_only_the_two_awake_videos_are_allowed_with_their_licence_and_pinned(tmp_path: Path) -> None:
+    for name in ("awake.mp4", "awake.webm"):
+        write(tmp_path, f"src/woodshed/page/assets/awake/{name}", b"\x00\x00\x00\x18ftypisom")
+    found = problems(tmp_path)
+    assert not any("audio or video" in p for p in found) and any("licence" in p for p in found)
+    write(tmp_path, "src/woodshed/page/assets/awake/LICENSE.md", b"Black frames made by a script here\n")
+    assert check_repo.main(["check_repo", str(tmp_path), "--pin-vendored"]) == 0
+    assert problems(tmp_path) == []
+    for other in ("src/woodshed/page/assets/awake/song.mp4", "src/woodshed/page/assets/awake/awake.flac"):
+        write(tmp_path, other)
+        assert any("audio or video" in p for p in problems(tmp_path)), other
+        (tmp_path / other).unlink()

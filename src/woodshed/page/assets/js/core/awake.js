@@ -25,7 +25,7 @@
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
-      for (const [file, type] of [["assets/awake.mp4", "video/mp4"], ["assets/awake.webm", "video/webm"]]) {
+      for (const [file, type] of [["assets/awake/awake.mp4", "video/mp4"], ["assets/awake/awake.webm", "video/webm"]]) {
         const source = document.createElement("source");
         source.src = file;
         source.type = type;
