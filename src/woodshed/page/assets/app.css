@@ -805,9 +805,9 @@ body.following #playBtn { opacity: 0.45; }
 .editing .bar:not(.empty):hover { background: var(--accent-soft); }
 .bar.edited::after { content: "✎"; position: absolute; top: 3px; right: 5px; font-size: 11px; color: var(--accent); }
 .ed-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, 0.35); }
-.ed { position: fixed; z-index: 40; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28); padding: 14px; display: grid; gap: 10px; color: var(--ink); }
+.ed { position: fixed; z-index: 40; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; color: var(--ink); } /* the column never grows past the box: a long French label wraps, the field shrinks */
 .ed h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.ed h3 small { color: var(--muted); font-weight: 400; font-size: 13px; }
+.ed h3 small { color: var(--muted); font-weight: 400; font-size: 13px; text-align: right; }
 .ed .row { display: flex; gap: 8px; align-items: stretch; }
 .ed .field { flex: 1; min-width: 0; font-family: var(--font-chord); font-weight: 600; font-size: 26px; letter-spacing: 0.02em; padding: 6px 10px; border: 1.5px solid var(--accent); border-radius: 8px; background: var(--sheet); color: var(--ink); }
 .ed .field[aria-invalid="true"] { border-color: var(--warn); }

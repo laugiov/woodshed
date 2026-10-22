@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
 from playwright.sync_api import expect
 
 from tests.page.conftest import built
@@ -257,3 +258,29 @@ def test_the_chart_is_not_edited_while_the_full_analysis_is_coming(open_page: An
     button = o.page.get_by_test_id("edit-chart")
     expect(button).to_be_disabled()
     expect(button).to_have_attribute("title", re.compile("the full analysis may move the beats"))
+
+
+@pytest.mark.parametrize("width", [700, 830, 1280])
+def test_the_editor_fits_its_box_in_every_language(browser: Any, pages_root: str, width: int) -> None:
+    # The French labels are longer ("Cette mesure", "Enregistrer, suivante"): nothing runs past the box.
+    context = browser.new_context(viewport={"width": width, "height": 900}, locale="fr-FR")
+    try:
+        page = context.new_page()
+        page.add_init_script("try { localStorage.setItem('woodshed:lang', 'fr'); } catch (e) {}")
+        page.goto((built("pop", True, pages_root) / "index.html").as_uri())
+        until(page, "window.Woodshed && window.Woodshed.ready === true")
+        page.get_by_test_id("edit-chart").click()
+        open_bar(page, 2)
+        page.get_by_test_id("bar-field").fill("E . N.C. D#m")
+        editor = page.get_by_test_id("bar-editor")
+        assert editor.evaluate("e => e.scrollWidth <= e.clientWidth"), "the editor scrolls sideways"
+        box = editor.bounding_box()
+        assert box
+        for target in editor.locator("button, input").all():
+            b = target.bounding_box()
+            if b and b["width"] > 0:
+                assert b["x"] >= box["x"] - 0.5 and b["x"] + b["width"] <= box["x"] + box["width"] + 0.5, (
+                    target.inner_text()
+                )
+    finally:
+        context.close()
