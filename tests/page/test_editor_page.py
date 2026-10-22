@@ -156,3 +156,20 @@ def test_the_editor_speaks_french(open_page: Any) -> None:
     open_bar(page, 1)
     page.get_by_test_id("bar-field").fill("D/F# . G .")
     expect(page.get_by_test_id("bar-reading")).to_have_text("D/F♯ sur 2 temps, F♯ à la basse, puis G sur 2")
+
+
+def test_a_long_numeral_never_covers_the_bar_number(browser: Any, pages_root: str) -> None:
+    context = browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True, locale="en-US"
+    )
+    try:
+        page = context.new_page()
+        page.goto((built("pop", True, pages_root) / "index.html").as_uri())
+        until(page, "window.Woodshed && window.Woodshed.ready === true")
+        page.evaluate("Woodshed.app.typeBars([2], [[2, 'Dsus4'], [2, 'D/F#']])")
+        bar = page.locator('.bar[data-bar="2"]').first
+        num = bar.locator(".num").bounding_box()
+        rn = bar.locator(".rn").bounding_box()
+        assert num and rn and rn["x"] >= num["x"] + num["width"]  # side by side, never over it
+    finally:
+        context.close()
