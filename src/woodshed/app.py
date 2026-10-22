@@ -151,8 +151,7 @@ class Library:
             info["complete"] = data.get("complete") is True
             # Complete but still on older page code after the start's update: its data is in a format this
             # code does not read, so only a new analysis gives it this version's page.
-            settings = data.get("settings")
-            info["stale"] = info["complete"] and isinstance(settings, dict) and settings.get("page") != page_revision()
+            info["stale"] = _stale(manifest)
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             band = self._stored(manifest.parent.name)["band"]
@@ -179,6 +178,9 @@ class Library:
             try:
                 if update_page_code(manifest.parent) is not None:
                     updated.append(manifest.parent.name)
+                elif _stale(manifest):
+                    name = manifest.parent.name
+                    print(f"woodshed app: {name}: made by an older woodshed, analyse it again", flush=True)
             except (WoodshedError, OSError) as exc:  # one page held open or not writable: the others still are
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
         return updated
@@ -783,6 +785,18 @@ def lan_addresses() -> list[str]:
         with contextlib.suppress(OSError):
             found |= set(socket.gethostbyname_ex(socket.gethostname())[2])
     return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
+
+
+def _stale(manifest: Path) -> bool:
+    """A complete page still on older page code: its data is in a format this code does not read, so
+    only a new analysis gives it this version's page."""
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    settings = data.get("settings") if isinstance(data, dict) else None
+    built_by = settings.get("page") if isinstance(settings, dict) else None
+    return data.get("complete") is True and isinstance(built_by, str) and built_by != page_revision()
 
 
 def _home_network(address: str) -> bool:

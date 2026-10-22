@@ -183,6 +183,8 @@
       status = h("span", { class: "working" },
         h("span", null, W.t(STATUS[job.status]) + (percent !== null ? " " + percent + " %" : job.step ? " (" + W.t(job.step) + ")" : "")),
         h("span", { class: "meter" + (percent === null ? " busy" : "") }, h("i", { style: percent === null ? null : "width:" + Math.max(3, percent) + "%" })));
+    } else if (song && song.stale) {
+      status = h("span", { class: "tag warn", "data-testid": "song-stale" }, W.t("Made by an older woodshed: analyse it again for the new page"));
     } else if (song && !song.complete) status = h("span", { class: "tag" }, W.t("Mix only"));
     else if (song && !song.stems) status = h("span", { class: "tag" }, W.t("Ready"));
     const tags = [];

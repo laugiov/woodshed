@@ -214,3 +214,13 @@ def test_a_finger_gets_room_on_the_library_buttons(browser: Any, songs: app.AppS
         assert box and box["height"] >= 44 and box["width"] >= 44
     finally:
         ctx.close()
+
+
+def test_a_page_made_by_an_older_woodshed_says_to_analyse_it_again(page: Page, songs: app.AppServer) -> None:
+    manifest = songs.library.root / "Pop.woodshed" / "woodshed.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["settings"]["page"] = "an older page code"
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    page.goto(songs.url)
+    expect(row_of(page, "Pop").get_by_test_id("song-stale")).to_contain_text("analyse it again")
+    expect(row_of(page, "Night Drive").get_by_test_id("song-stale")).to_have_count(0)
