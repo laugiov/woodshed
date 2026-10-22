@@ -94,9 +94,9 @@ The library renders each track in that key, one at a time, about 10 s per minute
 you play first: the original plays meanwhile and the page swaps to the new one at the same place,
 without stopping. The tracks stay in tune, as long and at their level (a track already at the
 loudest is made a little quieter rather than clipped); the drums alone play as recorded. It needs
-ffmpeg with its Rubber Band filter: Ubuntu's, Debian's and the Docker image's have it, as does the
-full Windows build from `winget install Gyan.FFmpeg`; on a Mac, Homebrew's plain `ffmpeg` does not,
-`brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-rubberband` does. The library page says when it is
+ffmpeg with its Rubber Band filter: Ubuntu's, Debian's and the Docker image's have it; on a Mac,
+Homebrew's plain `ffmpeg` does not, `brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-rubberband` does;
+on Windows, `ffmpeg -filters` lists `rubberband` when yours has it. The library page says when it is
 missing; `woodshed app --no-pitch` turns it off. A page
 opened from disk plays the recording in its own key. Each page keeps the band's key, the two
 most recently asked others and any key a device played in the last minute; the downloads stay the original files.
