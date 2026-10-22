@@ -537,6 +537,7 @@ def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app
     page.get_by_test_id("band-alone").click()
     sheet = page.evaluate("document.getElementById('sheet').getBoundingClientRect().top")
     assert sheet < 844 - 120  # the chart still starts on the first screen
+    context.close()
     assert problems == []
 
 
@@ -544,14 +545,16 @@ def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app
 def test_add_the_words_is_offered_only_where_words_can_be_placed(
     browser: Browser, server: app.AppServer, can_upload: bool
 ) -> None:
-    page = browser.new_context(locale="en-US").new_page()
-
-    def answer(route: Any) -> None:  # a song with its parts and no words; this device, or a phone
-        data = json.loads(route.fetch().text())
-        data["songs"] = [{**s, "complete": True, "stems": True, "words": False} for s in data["songs"]]
-        route.fulfill(json=dict(data, can_upload=can_upload))
-
-    page.route("**/api/songs", answer)
-    page.goto(server.url)
-    expect(page.get_by_test_id("song-row").first).to_be_visible()
-    expect(page.get_by_test_id("add-words")).to_have_count(2 if can_upload else 0)
+    context = browser.new_context(locale="en-US")
+    page = context.new_page()
+    # A song with its parts and no words, as this device or a phone of the band reads the library.
+    state = server.library.state()
+    state["songs"] = [{**s, "complete": True, "stems": True, "words": False} for s in state["songs"]]
+    body = {**state, "addresses": [], "container": False, "can_upload": can_upload, "network": {"on": False}}
+    page.route("**/api/songs", lambda route: route.fulfill(json=body))
+    try:
+        page.goto(server.url)
+        expect(page.get_by_test_id("song-row").first).to_be_visible()
+        expect(page.get_by_test_id("add-words")).to_have_count(2 if can_upload else 0)
+    finally:
+        context.close()  # the page polls the library: nothing may answer it after the test

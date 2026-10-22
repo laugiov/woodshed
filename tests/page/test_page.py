@@ -1130,7 +1130,7 @@ def test_a_looped_passage_shows_the_bass_tab_of_every_looped_bar(open_page: Any)
     last = o.js("Woodshed.current.bars.length - 1")
     assert last >= 8
     o.js(f"Woodshed.app.store.set({{loop: [0, {last}], loopOn: true}})")
-    expect(tabs).to_have_count(8)  # a long loop: its first eight bars
+    expect(tabs).to_have_count(12)  # a whole loop of twelve bars, up to sixteen (a chorus)
     o.js("Woodshed.app.store.set({loopOn: false})")
     expect(tabs).to_have_count(1)
 
