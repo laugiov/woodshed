@@ -159,6 +159,16 @@ def section_letter(n: int) -> str:
     return out
 
 
+def line_starts(n_bars: int, part_starts: Sequence[int]) -> list[int]:
+    """First bar of each line: every four bars inside each part, a part always starting a line. The
+    analysis's parts start on the four-bar grid; a band's own may start on any bar (core/structure.js)."""
+    edges = sorted({0, *(s for s in part_starts if 0 < s < n_bars)})
+    out: list[int] = []
+    for a, b in zip(edges, [*edges[1:], n_bars], strict=True):
+        out += range(a, b, LINE_BARS)
+    return out
+
+
 def _group(bars: list[Bar], sections: Sequence[Section] = ()) -> list[Group]:
     """Lines of four bars. Only exactly identical consecutive lines of one section collapse into a
     repeat: a section always starts a new line on the page."""
@@ -166,8 +176,9 @@ def _group(bars: list[Bar], sections: Sequence[Section] = ()) -> list[Group]:
     groups: list[Group] = []
     previous: LineSignature | None = None
     starts = {s.start for s in sections}
-    for start in range(0, len(bars), LINE_BARS):
-        line = list(range(start, min(start + LINE_BARS, len(bars))))
+    firsts = line_starts(len(bars), sorted(starts))
+    for start, end in zip(firsts, [*firsts[1:], len(bars)][: len(firsts)], strict=True):
+        line = list(range(start, min(start + LINE_BARS, end)))
         sig = tuple(bars[i].signature() for i in line)
         if groups and sig == previous and start not in starts:
             groups[-1].occurrences.append(line)
