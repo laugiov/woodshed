@@ -10,7 +10,7 @@
 
   // The analysis writes these four; any other quality (and any slash bass) was typed by the band
   // (core/chords.js) and draws from the typed chords' own shapes.
-  const ANALYSED = new Set(["", "m", "7", "m7"]);
+  const ANALYSED = { has: (q) => W.chords.analysed(q) };
   const CHORDS = W.CHORD_TABLE;
   const isNone = (bass) => bass === undefined || bass === null;
 
@@ -23,12 +23,12 @@
       if (slash) return { frets: slash, barre: 0, open: true };
     }
     const frets = shapes.open[name] || (ANALYSED.has(quality) ? null : CHORDS.open[name]);
-    if (frets) return { frets, barre: 0, open: true, bass: isNone(bass) ? null : mod12(bass) };
-    return null;
+    return frets ? { frets, barre: 0, open: true } : null;
   }
 
-  // A typed quality: the movable form (root on the E or the A string) lowest on the neck, up an
-  // octave when a finger would sit below the nut. tests/test_chords.py checks every one plays its chord.
+  // A typed quality: the movable form (root on the E or the A string) lowest on the neck, a wide
+  // stretch counted as three frets higher, up an octave when a finger would sit below the nut.
+  // tests/test_chords.py checks every one plays its chord, with the same choice.
   function movableShape(pc, quality) {
     let best = null;
     for (const [string, form] of Object.entries(CHORDS.movable[quality])) {
@@ -38,7 +38,12 @@
         const frets = form.map((o) => (o === null ? -1 : r + o));
         const fretted = frets.filter((f) => f > 0);
         const low = fretted.length ? Math.min(...fretted) : 0;
-        if (!best || low < best.low) best = { low, frets, barre: r > 0 && form.filter((o) => o === 0).length > 1 ? r : 0, from: string === "E" ? 0 : 1 };
+        const score = low + (fretted.length && Math.max(...fretted) - low >= 4 ? 3 : 0);
+        // A barre only for a form whose strings all sound from the root's string on, none below its fret,
+        // two of them or more at it.
+        const from = string === "E" ? 0 : 1;
+        const full = form.slice(from).every((o) => o !== null && o >= 0) && form.filter((o) => o === 0).length > 1;
+        if (!best || score < best.score) best = { score, frets, barre: r > 0 && full ? r : 0, from };
         break;
       }
     }
@@ -47,8 +52,7 @@
 
   // E-shape or A-shape barre, whichever sits lower on the neck. Sevenths keep the triad shape.
   function barreShape(pc, quality, bass) {
-    if (!ANALYSED.has(quality)) return { ...movableShape(pc, quality), bass: isNone(bass) ? null : mod12(bass) };
-    if (!isNone(bass)) return { ...barreShape(pc, quality), bass: mod12(bass) };
+    if (!ANALYSED.has(quality)) return movableShape(pc, quality);
     const minor = quality.startsWith("m");
     const fe = mod12(pc - 4) || 12;
     const fa = mod12(pc - 9) || 12;
@@ -62,14 +66,15 @@
     return tableShape(shapes, pc, quality, bass) || barreShape(pc, quality, bass);
   }
 
-  // Three notes that say the chord: root, third (or the suspended note), and the seventh or sixth
-  // when there is one, else the fifth.
+  // Three notes that say the chord: root, third (or the suspended note), and a diminished or augmented
+  // fifth when there is one (dim, dim7, m7b5, aug), else the seventh or sixth, else the fifth. A ninth
+  // (add9) is left out: three strings cannot say everything.
   function triadOf(pc, quality) {
     if (ANALYSED.has(quality)) return [0, quality.startsWith("m") ? 3 : 4, 7].map((i) => mod12(pc + i));
     const tones = CHORDS.qualities[quality].intervals.map((i) => mod12(i));
     const third = tones.find((i) => [2, 3, 4, 5].includes(i));
-    const colour = tones.find((i) => [9, 10, 11].includes(i));
     const fifth = tones.find((i) => [6, 7, 8].includes(i));
+    const colour = fifth === 6 || fifth === 8 ? fifth : tones.find((i) => [9, 10, 11].includes(i));
     return [0, third === undefined ? fifth : third, colour === undefined ? fifth : colour]
       .filter((i, k, a) => i !== undefined && a.indexOf(i) === k)
       .map((i) => mod12(pc + i));
@@ -129,7 +134,8 @@
     if (ANALYSED.has(quality)) v = [n0, n0 + (quality.startsWith("m") ? 3 : 4), n0 + 7];
     else {
       const all = CHORDS.qualities[quality].intervals;
-      v = (all.length > 4 ? all.filter((i) => i !== 7) : all).map((i) => n0 + i);
+      // Within the two octaves the keys panel draws (48-71): a ninth or a seventh above it folds down.
+      v = [...new Set((all.length > 4 ? all.filter((i) => i !== 7) : all).map((i) => (n0 + i > 71 ? n0 + i - 12 : n0 + i)))].sort((a, b) => a - b);
     }
     if (!isNone(bass)) return [n0 - 12 - mod12(r - bass), ...v]; // the bass note below the hand
     return withBass ? [n0 - 12, ...v] : v;

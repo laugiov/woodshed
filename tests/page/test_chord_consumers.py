@@ -22,15 +22,14 @@ def test_movable_shapes_are_the_ones_python_checks_for_every_quality_and_key(ope
         assert got == [movable_shape(pc, quality) for pc in range(12)], quality
 
 
-def test_typed_chords_find_their_open_shapes_and_a_slash_bass_is_kept(open_page: Any) -> None:
+def test_typed_chords_find_their_open_shapes_and_a_slash_chord_falls_back_on_its_chord(open_page: Any) -> None:
     o = open_page("pop")
     shape = "(pc, q, bass) => Woodshed.instruments.openOrBarre(Woodshed.current.view.shapes, pc, q, bass)"
     assert o.js(f"({shape})(2, '', 6).frets") == chords.OPEN["D/F#"]  # D/F# has its own open shape
     assert o.js(f"({shape})(2, 'sus4', null).frets") == chords.OPEN["Dsus4"]
-    e_over_gs = o.js(f"({shape})(4, '', 8)")  # no own shape: E's, with the bass named apart
-    assert e_over_gs["bass"] == 8 and e_over_gs["frets"] == [0, 2, 2, 1, 0, 0]
-    # The analysis's chords keep exactly their shapes (no bass, the four qualities).
-    assert o.js(f"({shape})(9, 'm7', null)").get("bass") is None
+    e_over_gs = o.js(f"({shape})(4, '', 8)")  # no own shape: E's (the name above it says the bass)
+    assert e_over_gs == {"frets": [0, 2, 2, 1, 0, 0], "barre": 0, "open": True}
+    assert o.js(f"({shape})(9, 'm7', null)") == {"frets": [-1, 0, 2, 0, 1, 0], "barre": 0, "open": True}  # unchanged
 
 
 def test_keys_and_triads_play_the_typed_chord(open_page: Any) -> None:
@@ -44,6 +43,16 @@ def test_keys_and_triads_play_the_typed_chord(open_page: Any) -> None:
     assert o.js("Woodshed.instruments.triadOf(0, 'maj7')") == [0, 4, 11]
     assert o.js("Woodshed.instruments.triadOf(2, 'sus4')") == [2, 7, 9]
     assert o.js("Woodshed.instruments.triadOf(9, 'm')") == [9, 0, 4]  # the analysis's: unchanged
+    assert o.js("Woodshed.instruments.triadOf(11, 'm7b5')") == [11, 2, 5]  # B D F: the tritone kept
+    assert o.js("Woodshed.instruments.triadOf(11, 'dim7')") == [11, 2, 5]
+    assert o.js("Woodshed.instruments.triadOf(0, 'add9')") == [0, 4, 7]
+    for pc in range(12):  # within the two octaves the keys panel draws
+        for quality in ("maj9", "9", "m9", "add9", "7sus4", "dim7"):
+            notes = o.js(f"Woodshed.instruments.keysMidi({pc}, '{quality}', false)")
+            assert min(notes) >= 48 and max(notes) <= 71, (pc, quality, notes)
+    # The barre flag: only a form whose strings all sound from the root's string on.
+    assert o.js("Woodshed.instruments.movableShape(11, 'dim7').barre") == 0
+    assert o.js("Woodshed.instruments.movableShape(5, 'sus4').barre") == 1  # Fsus4: a full barre at fret 1
 
 
 TYPED = (
@@ -94,6 +103,10 @@ def test_the_exports_carry_typed_qualities_and_slash_basses(open_page: Any) -> N
     second = xml.split('<measure number="2">')[1].split("</measure>")[0]
     assert "<kind>major</kind><bass><bass-step>F</bass-step><bass-alter>1</bass-alter></bass>" in second
     assert '<kind text="maj7">major-seventh</kind>' in second
+    o.js("Woodshed.current.bars[2].chords = [{pc: 0, quality: 'add9', bass: 4, beats: 4, doubt: null}]")
+    third = o.js("Woodshed.exports.musicxml(Woodshed.current)").split('<measure number="3">')[1].split("</measure>")[0]
+    order = ["<root>", "<kind", "<bass>", "<degree>"]  # the MusicXML content model of harmony
+    assert sorted(order, key=third.index) == order and third.index("<degree>") < third.index("</harmony>")
     midi = bytes(o.js("Array.from(Woodshed.exports.midi(Woodshed.current))"))
     at = per * 480  # bar 2
     d_over_fs = sorted(n for t, n in note_ons(midi, 1) if t == at)

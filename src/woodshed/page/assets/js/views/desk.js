@@ -116,7 +116,7 @@
           label = app.nameFor(c, s.capo, s);
           sub = s.capo ? W.nodes(W.t("sounds {chord}"), { chord: chordNode(app.nameFor(c, 0, s)) }) : "";
           // No open shape for this chord here: a barre, said so.
-          if (!I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality, I.bassOf(c, t - s.capo))) sub = [sub, sub ? " · " : "", h("span", { class: "barre-tag" }, W.t("barre"))];
+          if (shape.barre > 0) sub = [sub, sub ? " · " : "", h("span", { class: "barre-tag" }, W.t("barre"))];
         } else if (s.pos === "barre") {
           shape = I.barreShape(c.pc + t, c.quality, I.bassOf(c, t));
           label = app.nameFor(c, 0, s);
@@ -144,7 +144,7 @@
       // One line: the capo the page chooses when it transposes (theory.suggest_capo: chords weighted
       // by how long they last, a high capo only when clearly easier), with the barre chords it saves,
       // and a button to put it on.
-      const barresAt = (k) => chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - k, c.quality, I.bassOf(c, t - k))).length;
+      const barresAt = (k) => chords.filter((c) => I.openOrBarre(song.view.shapes, c.pc + t - k, c.quality, I.bassOf(c, t - k)).barre > 0).length;
       const best = song.capoFor(t);
       const counts = { [best]: barresAt(best), 0: barresAt(0) };
       let useBest = null;

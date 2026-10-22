@@ -90,7 +90,8 @@ FIFTH_OPTIONAL = {"9", "m9", "maj9", "add9", "madd9"}
 
 
 def movable_shape(pc: int, quality: str) -> list[int]:
-    """The page's choice (core/instruments.js): the playable movable form lowest on the neck."""
+    """The page's choice (core/instruments.js): the movable form lowest on the neck, a stretch of four
+    frets or more counted as three frets higher."""
     forms = chords.MOVABLE[quality]
     found = []
     for string, form in forms.items():
@@ -99,9 +100,11 @@ def movable_shape(pc: int, quality: str) -> list[int]:
             if all(o is None or r + o >= 0 for o in form):
                 frets = [-1 if o is None else r + o for o in form]
                 fretted = [f for f in frets if f > 0]
-                found.append((min(fretted) if fretted else 0, frets))
+                low = min(fretted) if fretted else 0
+                stretch = 3 if fretted and max(fretted) - low >= 4 else 0
+                found.append((low + stretch, frets))
                 break
-    return min(found)[1]
+    return min(found, key=lambda x: x[0])[1]
 
 
 def sounded(frets: list[int]) -> set[int]:

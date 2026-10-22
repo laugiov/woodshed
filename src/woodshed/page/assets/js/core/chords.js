@@ -63,6 +63,8 @@
 
   W.chords = {
     parse,
+    // The four qualities the analysis writes; every other one was typed by the band.
+    analysed: (quality) => quality === "" || quality === "m" || quality === "7" || quality === "m7",
     // One identity for a chord everywhere: D and D/F# differ.
     key: (c) => c.pc + "|" + c.quality + "|" + (c.bass === undefined || c.bass === null ? "" : c.bass),
     NO_CHORD,

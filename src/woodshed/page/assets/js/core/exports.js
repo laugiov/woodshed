@@ -333,11 +333,11 @@
   }
 
   // MusicXML, as woodshed.exports.musicxml: chord symbols over the bars, and the bass line.
-  // A typed quality names itself (text="Dsus4" style) and adds its degrees; a slash bass follows the kind.
+  // A typed quality names itself (text="sus4") and adds its degrees; a slash bass follows the kind.
   function harmonyXml(c, spelled) {
     const q = QUALITIES[c.quality];
     const [step, alter] = spelled(c.pc);
-    const typed = !["", "m", "7", "m7"].includes(c.quality);
+    const typed = !W.chords.analysed(c.quality);
     let xml = "<harmony><root><root-step>" + step + "</root-step>" + (alter ? "<root-alter>" + alter + "</root-alter>" : "") + "</root>";
     xml += "<kind" + (typed ? ' text="' + xmlText(c.quality) + '"' : "") + ">" + q.musicxml.kind + "</kind>";
     if (hasBass(c)) {

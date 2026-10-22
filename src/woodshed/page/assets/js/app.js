@@ -65,7 +65,7 @@
         if (s.pos === "funk") return W.t("funk triad on strings 3-2-1");
         if (s.pos === "barre") return W.t("barre chord, no capo");
         // In the Open voicing a chord with no open shape is played as a barre: said as the diagram shows it.
-        return I.tableShape(song.view.shapes, c.pc + s.transpose, c.quality, I.bassOf(c, s.transpose)) ? W.t("open shape") : W.t("barre shape");
+        return I.openOrBarre(song.view.shapes, c.pc + s.transpose, c.quality, I.bassOf(c, s.transpose)).barre > 0 ? W.t("barre shape") : W.t("open shape");
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
