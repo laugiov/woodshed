@@ -902,7 +902,14 @@ def test_following_comes_back_when_the_bar_playing_is_where_the_page_would_put_i
     o.js(PEEK)
     o.page.get_by_test_id("play").click()
     until(o, IN_BAND)
-    o.page.wait_for_timeout(700)  # the page's smooth scroll ends
+    # The page's smooth scroll ends (on a loaded machine it takes longer than a fixed wait): still for 300 ms.
+    last = None
+    for _ in range(50):
+        now = o.js("scrollY")
+        if now == last:
+            break
+        last = now
+        o.page.wait_for_timeout(300)
     o.page.mouse.move(40, 100)
     o.page.mouse.wheel(0, -120)  # reading the bars before: the bar playing drops low on the screen
     back = o.page.get_by_test_id("back-to-song")
