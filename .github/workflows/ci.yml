@@ -79,7 +79,8 @@ jobs:
           pactl load-module module-null-sink sink_name=silence
           pactl set-default-sink silence
       - run: uv run --frozen --group dev playwright install --with-deps chromium firefox
-      - run: uv run --frozen --group dev pytest -q -m page --browser chromium --browser firefox
+      # Spread over the runner's cores, as scripts/ci.sh does: one by one the page tests reached the 20-minute limit.
+      - run: uv run --frozen --group dev pytest -q -m page -n 4 --browser chromium --browser firefox
 
   package:
     name: Build and smoke-test the package
