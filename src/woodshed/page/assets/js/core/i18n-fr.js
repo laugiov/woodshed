@@ -85,7 +85,9 @@
     "Seventh chords (less reliable)": "Accords de septième (moins fiables)",
     "Set list": "Set list",
     "No set yet: add songs with": "Pas encore de set : ajoute des morceaux avec",
-    "in the library below. On a song page,": "dans la bibliothèque ci-dessous. Sur la page d'un morceau,",
+    "in your songs. On a song page,": "dans tes morceaux. Sur la page d'un morceau,",
+    "Start with a song": "Commence par un morceau",
+    "Drop to add the songs": "Lâche pour ajouter les morceaux",
     "goes to the next song of the set, and the band follows the device that leads.":
       "passe au morceau suivant du set, et le groupe suit l'appareil qui mène.",
     Library: "Bibliothèque",
@@ -94,7 +96,8 @@
     Length: "Durée",
     "To check": "À vérifier",
     Status: "État",
-    "No song yet: add one above.": "Aucun morceau pour l'instant : ajoutes-en un ci-dessus.",
+    "No song yet: they are added on the computer that runs woodshed.":
+      "Aucun morceau pour l'instant : ils s'ajoutent sur l'ordinateur où tourne woodshed.",
     "Everything runs on this computer: nothing is uploaded anywhere else.":
       "Tout se passe sur cet ordinateur : rien n'est envoyé ailleurs.",
 
@@ -506,6 +509,9 @@
     "Mix only": "Mix seulement",
     "add the words": "ajouter les paroles",
     "In the set": "Dans le set",
+    Parts: "Parties",
+    "1 to check": "1 à vérifier",
+    "{n} to check": "{n} à vérifier",
     "Bandmates on the same Wi-Fi: open this computer's network address on their phones, with the port of compose.yaml (for example 192.168.1.20:8000). The port must be published to the network: compose.yaml says how.":
       "Pour le groupe sur le même Wi-Fi : ouvre l'adresse réseau de cet ordinateur sur leurs téléphones, avec le port de compose.yaml (par exemple 192.168.1.20:8000). Le port doit être publié sur le réseau : compose.yaml explique comment.",
     "The band's phones": "Les téléphones du groupe",

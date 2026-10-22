@@ -205,7 +205,7 @@ def test_the_library_in_french(page: Page, library: app.AppServer) -> None:
     expect(page.locator("h1")).to_have_text("Tes morceaux")
     expect(page).to_have_title("Bibliothèque · woodshed")
     expect(page.get_by_test_id("song-link")).to_have_text("Pop")
-    expect(page.get_by_test_id("song-status")).to_contain_text("Prêt, avec les parties")
+    expect(page.get_by_test_id("song-status")).to_contain_text("Parties")  # what the page has, in quiet tags
     expect(page.get_by_test_id("add-words")).to_have_text("ajouter les paroles")
     page.get_by_test_id("set-add").click()
     expect(page.get_by_test_id("set-item")).to_have_count(1)

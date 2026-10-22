@@ -19,6 +19,11 @@
 
   // "./" and a fully encoded folder: a name with # or ? (or "javascript:") stays a relative path.
   const link = (folder) => "./" + encodeURIComponent(folder) + "/index.html";
+  // "As I Am (Josh Woodward)": the name to read, and the trailing "(…)" (the artist, a version) apart.
+  function titled(title) {
+    const m = /^(.*\S)\s*\(([^()]+)\)\s*$/.exec(title);
+    return m ? { name: m[1], sub: m[2] } : { name: title, sub: "" };
+  }
 
   // The set list: the order the band plays in, saved in the library.
   let setlist = [];
@@ -108,6 +113,12 @@
   let setShown = "";
   // `again`: drawn even if nothing changed (a save refused leaves a menu to put back); `editor`: drawn
   // although a note is being written (opening or closing it).
+  function setTitle(folder) {
+    const t = titled(titles[folder] || folder.replace(/\.woodshed$/, ""));
+    return h("span", { class: "set-title" },
+      h("a", { href: link(folder), translate: "no" }, t.name),
+      t.sub ? h("span", { class: "sub", translate: "no" }, t.sub) : null);
+  }
   function renderSet({ again = false, editor = false } = {}) {
     if (editing && !editor) return; // drawn again when the note is written: the text stays as typed
     const shows = JSON.stringify([setlist, setlist.map((f) => [titles[f], info[f] && [info[f].key, info[f].bpm, info[f].duration, info[f].band]]), editing, W.lang()]);
@@ -139,7 +150,7 @@
           { "data-testid": "set-item", "data-set-song": folder },
           h("span", { class: "set-n" }, String(k + 1)),
           h("div", { class: "set-song" },
-            h("a", { href: link(folder), translate: "no" }, titles[folder] || folder.replace(/\.woodshed$/, "")),
+            setTitle(folder),
             h("span", { class: "set-facts" }, facts),
             noteEl),
           h(
@@ -160,38 +171,50 @@
   }
 
 
+  // A song: its key, its name, what its page has, and a way into the set. The whole row opens the song.
   function row(song, job) {
-    let status;
-    if (job && job.status !== "done") {
+    const working = job && !["done", "failed"].includes(job.status);
+    let status = null;
+    if (job && job.status === "failed") {
       // The reason of a failure is the library's own, in English.
-      status = job.status === "failed"
-        ? h("span", { class: "warn" }, job.kind === "words" ? W.t("Words not placed: {why}", { why: job.message }) : W.t("Failed: {why}", { why: job.message }))
-        : h("span", null, W.t(STATUS[job.status]) + (job.status === "separating" || job.status === "placing" ? " " + job.percent + " %" : job.step ? " (" + W.t(job.step) + ")" : ""));
-    } else status = song && song.complete ? h("span", { class: "okfact" }, song.stems ? W.t("Ready, with parts") : W.t("Ready")) : h("span", null, W.t("Mix only"));
+      status = h("span", { class: "tag warn" }, job.kind === "words" ? W.t("Words not placed: {why}", { why: job.message }) : W.t("Failed: {why}", { why: job.message }));
+    } else if (working) {
+      const percent = job.status === "separating" || job.status === "placing" ? job.percent : null;
+      status = h("span", { class: "working" },
+        h("span", null, W.t(STATUS[job.status]) + (percent !== null ? " " + percent + " %" : job.step ? " (" + W.t(job.step) + ")" : "")),
+        h("span", { class: "meter" + (percent === null ? " busy" : "") }, h("i", { style: percent === null ? null : "width:" + Math.max(3, percent) + "%" })));
+    } else if (song && !song.complete) status = h("span", { class: "tag" }, W.t("Mix only"));
+    else if (song && !song.stems) status = h("span", { class: "tag" }, W.t("Ready"));
+    const tags = [];
+    if (song) {
+      tags.push(h("span", { class: "fact" }, song.bpm + " BPM"), h("span", { class: "fact" }, fmt(song.duration)));
+      if (song.meter && song.meter !== "4/4") tags.push(h("span", { class: "fact", translate: "no" }, song.meter));
+      if (song.complete && song.stems) tags.push(h("span", { class: "tag on" }, W.t("Parts")));
+      if (song.words) tags.push(h("span", { class: "tag on" }, W.t("Words")));
+      if (song.doubts) tags.push(h("span", { class: "tag warn" }, song.doubts === 1 ? W.t("1 to check") : W.t("{n} to check", { n: song.doubts })));
+    }
     // The words go on the singer's track: offered once the song has its parts.
-    const addWords = canUpload && song && song.complete && song.stems && !song.words && !(job && !["done", "failed"].includes(job.status))
-      ? [" · ", h("a", { href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words"))]
-      : null;
-    const title = song ? h("a", { href: link(song.folder), "data-testid": "song-link", translate: "no" }, song.title) : h("span", { translate: "no" }, job.name);
+    if (canUpload && song && song.complete && song.stems && !song.words && !working)
+      tags.push(h("a", { class: "tag add", href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words")));
+    const t = titled(song ? song.title : job.name);
+    const band = (song && song.band) || {};
+    const key = song ? band.key || song.key : null;
     return h(
-      "tr",
-      { "data-testid": "song-row" },
-      h("td", null, title),
-      h("td", null, song ? chordNode(song.key) : ""),
-      h("td", { class: "num" }, song ? String(song.bpm) : ""),
-      h("td", { class: "wide", translate: "no" }, song ? song.meter : ""),
-      h("td", { class: "num wide" }, song ? fmt(song.duration) : ""),
-      h("td", { class: "wide" }, song ? (song.doubts ? h("span", { class: "warn" }, String(song.doubts)) : W.t("none")) : ""),
-      h("td", { "data-testid": "song-status" }, status, addWords),
-      h(
-        "td",
-        null,
+      "li",
+      { class: "srow" + (working ? " is-working" : ""), "data-testid": "song-row" },
+      h("span", { class: "key-tile" + (band.key ? " band" : "") },
+        key ? [h("span", { class: "sr-only" }, (band.key ? W.t("The band's key") : W.t("Key")) + " "), h("span", { class: "k" }, chordNode(key))] : ""),
+      h("div", { class: "srow-body" },
+        h("div", { class: "srow-title" },
+          song ? h("a", { href: link(song.folder), "data-testid": "song-link", translate: "no" }, t.name) : h("span", { translate: "no" }, t.name),
+          t.sub ? h("span", { class: "sub", translate: "no" }, t.sub) : null),
+        h("div", { class: "srow-facts", "data-testid": "song-status" }, status, tags)),
+      h("div", { class: "srow-act" },
         song
           ? setlist.includes(song.folder)
-            ? h("span", { class: "muted" }, W.t("In the set"))
+            ? h("span", { class: "in-set" }, W.t("In the set"))
             : h("button", { type: "button", class: "btn", onclick: () => saveSet((next) => (next.includes(song.folder) ? null : [...next, song.folder])), "data-testid": "set-add" }, "+ Set")
-          : "",
-      ),
+          : ""),
     );
   }
 
@@ -293,9 +316,14 @@
     const wanted = fold($("find").value);
     const rows = data.songs.filter((s) => !wanted || fold(s.title).includes(wanted)).map((s) => row(s, byFolder.get(s.folder)));
     for (const j of jobs) if (!j.page || !data.songs.some((s) => s.folder === j.page)) rows.unshift(row(null, j));
-    if (wanted && !rows.length) rows.push(h("tr", null, h("td", { colspan: "8", class: "muted", "data-testid": "no-match" }, W.t("No song matches this search."))));
+    if (wanted && !rows.length) rows.push(h("li", { class: "no-match muted", "data-testid": "no-match" }, W.t("No song matches this search.")));
     clear($("rows"), rows);
-    $("empty").hidden = rows.length > 0;
+    // No song yet: the drop area is the page's welcome; a phone of the band only says so.
+    const first = !rows.length;
+    $("wrap").classList.toggle("first", first && upload);
+    $("empty").hidden = !first || upload || wanted;
+    if (!data.songs.length && $("find").value) $("find").value = ""; // nothing left to find: no query kept hidden
+    $("find").hidden = data.songs.length === 0;
     const ready = data.songs.length;
     const songs = ready === 1 ? W.t("1 song") : ready === 0 ? W.t("0 songs") : W.t("{n} songs", { n: ready });
     $("summary").textContent = jobs.some((j) => !["done", "failed"].includes(j.status)) ? W.t("{songs}, working…", { songs }) : songs;
@@ -332,16 +360,38 @@
     upload([...e.target.files]);
     e.target.value = "";
   });
-  const drop = $("drop");
-  drop.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    drop.classList.add("over");
+  // Files dropped anywhere on the page: the drop area is only where it says so.
+  const carriesFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  let dragDepth = 0;
+  const dragging = (on) => {
+    $("dropOver").hidden = !on;
+    $("drop").classList.toggle("over", on);
+  };
+  document.addEventListener("dragenter", (e) => {
+    if (!canUpload || !carriesFiles(e)) return;
+    dragDepth++;
+    dragging(true);
   });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", (e) => {
+  document.addEventListener("dragleave", (e) => {
+    if (!carriesFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) dragging(false);
+  });
+  const dragOff = () => {
+    dragDepth = 0;
+    dragging(false);
+  };
+  document.addEventListener("dragend", dragOff);
+  document.addEventListener("visibilitychange", dragOff);
+  document.addEventListener("dragover", (e) => {
+    if (carriesFiles(e)) e.preventDefault(); // a file never opens in place of the library
+  });
+  document.addEventListener("drop", (e) => {
+    if (!carriesFiles(e)) return;
     e.preventDefault();
-    drop.classList.remove("over");
-    upload([...e.dataTransfer.files]);
+    dragDepth = 0;
+    dragging(false);
+    if (canUpload) upload([...e.dataTransfer.files]);
   });
 
   fetch("/api/setlist", { cache: "no-store" })

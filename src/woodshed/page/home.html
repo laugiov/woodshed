@@ -11,54 +11,65 @@
 </head>
 <body>
 <div class="wrap home" id="wrap">
-  <header class="head">
+  <header class="head home-head">
     <div class="song">
       <div class="brandrow"><span class="brand" data-testid="logo" translate="no"><svg class="mark" viewBox="0 0 132 150" aria-hidden="true"><path class="roof" d="M8 56 L66 8 L124 56"/><rect class="box" x="22" y="58" width="88" height="84" rx="4"/><g class="grid"><line x1="39.6" y1="58" x2="39.6" y2="142"/><line x1="57.2" y1="58" x2="57.2" y2="142"/><line x1="74.8" y1="58" x2="74.8" y2="142"/><line x1="92.4" y1="58" x2="92.4" y2="142"/><line x1="22" y1="86" x2="110" y2="86"/><line x1="22" y1="114" x2="110" y2="114"/></g><circle cx="57.2" cy="100" r="9.5"/><circle cx="74.8" cy="100" r="9.5"/><circle cx="92.4" cy="100" r="9.5"/></svg><span>wood<b>shed</b></span></span><span class="prefs"><span class="seg-ctl lang" data-lang-toggle role="group" aria-label="Language"><button type="button" data-lang="en" lang="en" aria-label="English" data-testid="lang-en">EN</button><button type="button" data-lang="fr" lang="fr" aria-label="Français" data-testid="lang-fr">FR</button></span><button class="btn icon" type="button" data-theme-toggle data-testid="theme"></button></span></div>
-      <h1>Your songs</h1>
-      <div class="facts" id="summary" data-testid="summary"></div>
     </div>
-    <div class="head-actions">
-      <button class="btn stage-btn" id="addBtn" type="button" data-testid="add">Add songs</button>
+    <div class="home-title">
+      <div>
+        <h1>Your songs</h1>
+        <div class="facts" id="summary" data-testid="summary"></div>
+      </div>
+      <div class="home-tools">
+        <input type="search" id="find" placeholder="Find a song" aria-label="Find a song" data-testid="find" autocomplete="off">
+        <button class="btn primary" id="addBtn" type="button" data-testid="add">Add songs</button>
+      </div>
     </div>
   </header>
 
-  <section class="panel drop" id="drop" data-testid="drop">
-    <input type="file" id="files" multiple hidden data-testid="file-input"
-      accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.aif,.aiff,.wma,.wv,.ac3,.mp4,.m4v,.mov,.mkv,.webm,.avi,.mpg">
-    <p>Drop audio or video files here, or use <b>Add songs</b>. Each one becomes a practice page:
-      first with the full mix (a few seconds), then with every instrument's track.</p>
-    <details class="options">
-      <summary>Options for the next songs</summary>
-      <label>Beats per bar <select id="beats" data-testid="opt-beats"><option>4</option><option>3</option><option>2</option><option>6</option></select></label>
-      <label>Tempo you hear (BPM) <input id="bpm" type="number" min="30" max="300" step="1" placeholder="auto" data-testid="opt-bpm"></label>
-      <label><input id="sevenths" type="checkbox" data-testid="opt-sevenths"> Seventh chords (less reliable)</label>
-    </details>
-  </section>
+  <div class="home-grid">
+    <main class="home-main">
+      <section class="drop" id="drop" data-testid="drop">
+        <input type="file" id="files" multiple hidden data-testid="file-input"
+          accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.aif,.aiff,.wma,.wv,.ac3,.mp4,.m4v,.mov,.mkv,.webm,.avi,.mpg">
+        <svg class="drop-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+        <div class="drop-text">
+          <h2 class="drop-title">Start with a song</h2>
+          <p>Drop audio or video files here, or use <b>Add songs</b><span class="drop-more">. Each one becomes a practice page: first with the full mix (a few seconds), then with every instrument's track.</span></p>
+        </div>
+        <details class="options">
+          <summary>Options for the next songs</summary>
+          <label>Beats per bar <select id="beats" data-testid="opt-beats"><option>4</option><option>3</option><option>2</option><option>6</option></select></label>
+          <label>Tempo you hear (BPM) <input id="bpm" type="number" min="30" max="300" step="1" placeholder="auto" data-testid="opt-bpm"></label>
+          <label><input id="sevenths" type="checkbox" data-testid="opt-sevenths"> Seventh chords (less reliable)</label>
+        </details>
+      </section>
 
-  <section class="panel" data-testid="set-panel">
-    <div class="set-head"><div class="label">Set list</div><span class="facts" id="setSummary" data-testid="set-summary"></span>
-      <button class="btn" id="printSet" type="button" hidden data-testid="set-print">Print the set</button></div>
-    <ol class="setlist" id="setlist" data-testid="setlist"></ol>
-    <p class="hint" id="setEmpty">No set yet: add songs with <b>+ Set</b> in the library below. On a song page,
-      <b>N</b> goes to the next song of the set, and the band follows the device that leads.</p>
-  </section>
+      <section class="songs-panel" data-testid="library" aria-label="Library">
+        <h2 class="sr-only">Library</h2>
+        <ul class="songs" id="rows"></ul>
+        <p class="hint" id="empty" hidden>No song yet: they are added on the computer that runs woodshed.</p>
+      </section>
+    </main>
 
-  <section class="panel" data-testid="band-network">
-    <div class="label">The band's phones</div>
-    <div id="net" data-testid="phones"></div>
-  </section>
+    <aside class="home-side">
+      <section class="panel side-panel" data-testid="set-panel">
+        <div class="set-head"><h2 class="label">Set list</h2><span class="facts" id="setSummary" data-testid="set-summary"></span>
+          <button class="btn ghost" id="printSet" type="button" hidden data-testid="set-print">Print the set</button></div>
+        <ol class="setlist" id="setlist" data-testid="setlist"></ol>
+        <p class="hint" id="setEmpty">No set yet: add songs with <b>+ Set</b> in your songs. On a song page,
+          <b>N</b> goes to the next song of the set, and the band follows the device that leads.</p>
+      </section>
 
-  <section class="panel">
-    <div class="set-head"><div class="label">Library</div>
-      <input type="search" id="find" placeholder="Find a song" aria-label="Find a song" data-testid="find" autocomplete="off"></div>
-    <table class="library" data-testid="library">
-      <thead><tr><th>Song</th><th>Key</th><th>BPM</th><th class="wide">Meter</th><th class="wide">Length</th><th class="wide">To check</th><th>Status</th><th><span class="sr-only">Set list</span></th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <p class="hint" id="empty" hidden>No song yet: add one above.</p>
-  </section>
+      <section class="panel side-panel" data-testid="band-network">
+        <h2 class="label">The band's phones</h2>
+        <div id="net" data-testid="phones"></div>
+      </section>
+    </aside>
+  </div>
   <footer class="foot"><span>Everything runs on this computer: nothing is uploaded anywhere else.</span></footer>
 </div>
+<div class="drop-over" id="dropOver" hidden aria-hidden="true"><span>Drop to add the songs</span></div>
 <div class="toast" id="toast" hidden data-testid="toast"></div>
 <script src="/app/assets/js/core/woodshed.js"></script>
 <script src="/app/assets/js/core/i18n.js"></script>
