@@ -461,12 +461,27 @@
       if (key) key.textContent = s.transpose ? W.t("The recording keeps its key.") : ""; // empty: hidden by CSS
     }
 
+    // The panel grows, never shrinks, while one instrument is shown (the rhythm grid and the shapes
+    // change height as the song plays): a page read at its bottom does not jump at every chord.
+    let deskOf = "";
+    if (window.ResizeObserver) {
+      new ResizeObserver(([entry]) => {
+        const desk = entry.target;
+        const now = desk.getBoundingClientRect().height;
+        if (now > (parseFloat(desk.style.minHeight) || 0)) desk.style.minHeight = now + "px";
+      }).observe($("desk"));
+    }
     function render(s) {
       $("deskTitle").textContent = TITLES()[s.inst];
       renderPart(s);
       $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
       const body = { guitar, bass, piano: keys, drums, voice }[s.inst](s);
-      clear($("desk"), body);
+      const desk = $("desk");
+      if (deskOf !== s.inst + "|" + W.lang()) {
+        deskOf = s.inst + "|" + W.lang();
+        desk.style.minHeight = ""; // another instrument: its own height
+      }
+      clear(desk, body);
       renderDockShapes(s);
       if (s.inst === "drums") app.drawDrumStaff();
       clear($("trVal"), chordNode(song.keyName(s.transpose)), s.transpose ? " (" + (s.transpose > 0 ? "+" : "") + s.transpose + ")" : "");
