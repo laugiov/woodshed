@@ -1,5 +1,6 @@
 // The song and its view tables, read once from the page, with the lookups every view needs.
-// No music theory here: names and numerals come from the view tables computed in Python.
+// Names and numerals come from the view tables computed in Python; a chord the band typed (core/chords.js)
+// adds its quality's mark and its slash bass to them.
 (function () {
   "use strict";
   const W = window.Woodshed;
@@ -60,7 +61,9 @@
       return bar.chords[bar.chords.length - 1];
     }
 
-    const same = (a, b) => !!a && !!b && a.pc === b.pc && a.quality === b.quality;
+    // The same chord only with the same bass: D and D/F# are two chords.
+    const bassOf = (c) => (c.bass === undefined || c.bass === null ? null : c.bass);
+    const same = (a, b) => !!a && !!b && a.pc === b.pc && a.quality === b.quality && bassOf(a) === bassOf(b);
 
     // The next n different chords after beat b (no-chord beats skipped).
     function upcoming(b, n) {
@@ -77,8 +80,21 @@
     const t = (transpose) => view.transpositions[((transpose % 12) + 12) % 12];
     // A pitch class from the recording, named in the transposed key.
     const noteName = (pc, transpose) => t(transpose).roots[((pc % 12) + 12) % 12];
-    const chordName = (c, transpose) => (c.pc < 0 ? "N.C." : noteName(c.pc, transpose) + c.quality);
-    const roman = (c) => (c.pc < 0 ? "" : view.romans[c.quality][c.pc]);
+    const chordName = (c, transpose) =>
+      c.pc < 0 ? "N.C." : noteName(c.pc, transpose) + c.quality + (bassOf(c) === null ? "" : "/" + noteName(c.bass, transpose));
+    // The analysis's four qualities have their numerals in the view; a typed one takes the root's numeral
+    // with its own case and mark. A slash bass is its degree above the root ("I/3"), as in chords.py.
+    function roman(c) {
+      if (c.pc < 0) return "";
+      let out;
+      if (view.romans[c.quality]) out = view.romans[c.quality][c.pc];
+      else {
+        const form = W.chords.roman(c.quality);
+        const numeral = view.romans[""][c.pc];
+        out = (form.lower ? numeral.toLowerCase() : numeral) + form.mark;
+      }
+      return bassOf(c) === null ? out : out + "/" + W.chords.degree(c.bass - c.pc);
+    }
     const keyName = (transpose) => t(transpose).key;
     const capoFor = (transpose) => t(transpose).capo;
 
@@ -119,7 +135,7 @@
       for (const bar of bars) {
         for (const c of bar.chords) {
           if (c.pc < 0 || (c.doubt && c.beats <= 1)) continue;
-          const key = c.pc + c.quality;
+          const key = c.pc + c.quality + "/" + bassOf(c);
           if (!seen.has(key)) {
             seen.add(key);
             out.push(c);

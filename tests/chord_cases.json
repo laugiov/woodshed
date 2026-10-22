@@ -1,0 +1,526 @@
+[
+[
+"C",
+{
+"pc": 0,
+"quality": "",
+"bass": null
+}
+],
+[
+"c",
+{
+"pc": 0,
+"quality": "",
+"bass": null
+}
+],
+[
+"Am",
+{
+"pc": 9,
+"quality": "m",
+"bass": null
+}
+],
+[
+"am",
+{
+"pc": 9,
+"quality": "m",
+"bass": null
+}
+],
+[
+"bb",
+{
+"pc": 10,
+"quality": "",
+"bass": null
+}
+],
+[
+"b",
+{
+"pc": 11,
+"quality": "",
+"bass": null
+}
+],
+[
+"bm",
+{
+"pc": 11,
+"quality": "m",
+"bass": null
+}
+],
+[
+"Bb5",
+{
+"pc": 10,
+"quality": "5",
+"bass": null
+}
+],
+[
+"Eb5",
+{
+"pc": 3,
+"quality": "5",
+"bass": null
+}
+],
+[
+"F#m7",
+{
+"pc": 6,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"F♯m7",
+{
+"pc": 6,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"E♭",
+{
+"pc": 3,
+"quality": "",
+"bass": null
+}
+],
+[
+"E#",
+{
+"pc": 5,
+"quality": "",
+"bass": null
+}
+],
+[
+"Cb",
+{
+"pc": 11,
+"quality": "",
+"bass": null
+}
+],
+[
+"Cmaj7",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"CM7",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"CΔ",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"CΔ7",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"Cm7",
+{
+"pc": 0,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"C-7",
+{
+"pc": 0,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"Cmin",
+{
+"pc": 0,
+"quality": "m",
+"bass": null
+}
+],
+[
+"C-",
+{
+"pc": 0,
+"quality": "m",
+"bass": null
+}
+],
+[
+"Dsus4",
+{
+"pc": 2,
+"quality": "sus4",
+"bass": null
+}
+],
+[
+"Dsus",
+{
+"pc": 2,
+"quality": "sus4",
+"bass": null
+}
+],
+[
+"Dsus2",
+{
+"pc": 2,
+"quality": "sus2",
+"bass": null
+}
+],
+[
+"A7sus4",
+{
+"pc": 9,
+"quality": "7sus4",
+"bass": null
+}
+],
+[
+"A7sus",
+{
+"pc": 9,
+"quality": "7sus4",
+"bass": null
+}
+],
+[
+"Bdim",
+{
+"pc": 11,
+"quality": "dim",
+"bass": null
+}
+],
+[
+"B°",
+{
+"pc": 11,
+"quality": "dim",
+"bass": null
+}
+],
+[
+"Bdim7",
+{
+"pc": 11,
+"quality": "dim7",
+"bass": null
+}
+],
+[
+"B°7",
+{
+"pc": 11,
+"quality": "dim7",
+"bass": null
+}
+],
+[
+"Bm7b5",
+{
+"pc": 11,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"Bø",
+{
+"pc": 11,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"Bm7-5",
+{
+"pc": 11,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"Bm7(b5)",
+{
+"pc": 11,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"Caug",
+{
+"pc": 0,
+"quality": "aug",
+"bass": null
+}
+],
+[
+"C+",
+{
+"pc": 0,
+"quality": "aug",
+"bass": null
+}
+],
+[
+"C6",
+{
+"pc": 0,
+"quality": "6",
+"bass": null
+}
+],
+[
+"Am6",
+{
+"pc": 9,
+"quality": "m6",
+"bass": null
+}
+],
+[
+"G9",
+{
+"pc": 7,
+"quality": "9",
+"bass": null
+}
+],
+[
+"Am9",
+{
+"pc": 9,
+"quality": "m9",
+"bass": null
+}
+],
+[
+"Fmaj9",
+{
+"pc": 5,
+"quality": "maj9",
+"bass": null
+}
+],
+[
+"Cadd9",
+{
+"pc": 0,
+"quality": "add9",
+"bass": null
+}
+],
+[
+"Cadd(9)",
+{
+"pc": 0,
+"quality": "add9",
+"bass": null
+}
+],
+[
+"Amadd9",
+{
+"pc": 9,
+"quality": "madd9",
+"bass": null
+}
+],
+[
+"E5",
+{
+"pc": 4,
+"quality": "5",
+"bass": null
+}
+],
+[
+"D/F#",
+{
+"pc": 2,
+"quality": "",
+"bass": 6
+}
+],
+[
+"D/f#",
+{
+"pc": 2,
+"quality": "",
+"bass": 6
+}
+],
+[
+"C/G",
+{
+"pc": 0,
+"quality": "",
+"bass": 7
+}
+],
+[
+"Am/G",
+{
+"pc": 9,
+"quality": "m",
+"bass": 7
+}
+],
+[
+"G/B",
+{
+"pc": 7,
+"quality": "",
+"bass": 11
+}
+],
+[
+"C/C",
+{
+"pc": 0,
+"quality": "",
+"bass": null
+}
+],
+[
+"Cmaj7/E",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": 4
+}
+],
+[
+" D / F# ",
+{
+"pc": 2,
+"quality": "",
+"bass": 6
+}
+],
+[
+"N.C.",
+"none"
+],
+[
+"NC",
+"none"
+],
+[
+"N.C",
+"none"
+],
+[
+"N/C",
+"none"
+],
+[
+"n.c.",
+"none"
+],
+[
+"Cmaj",
+{
+"refused": "maj-alone"
+}
+],
+[
+"A2",
+{
+"refused": "two"
+}
+],
+[
+"C6/9",
+{
+"refused": "six-nine"
+}
+],
+[
+"A7-5",
+{
+"refused": "altered"
+}
+],
+[
+"G7b5",
+{
+"refused": "altered"
+}
+],
+[
+"E7#9",
+{
+"refused": "altered"
+}
+],
+[
+"C7(b9)",
+{
+"refused": "altered"
+}
+],
+[
+"H",
+{
+"refused": "unknown"
+}
+],
+[
+"Cxyz",
+{
+"refused": "unknown"
+}
+],
+[
+"",
+{
+"refused": "empty"
+}
+],
+[
+"G|C",
+{
+"refused": "bar-line"
+}
+],
+[
+"D/X",
+{
+"refused": "unknown"
+}
+]
+]
