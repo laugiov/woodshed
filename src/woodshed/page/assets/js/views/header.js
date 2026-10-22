@@ -143,7 +143,9 @@
       const at = Math.floor((u - sec.start) / per);
       clear($("stMap"), Array.from({ length: Math.ceil(len / per) }, (_, i) => h("i", { class: i === at ? "on" : i < at ? "done" : "" })));
       $("stSection").textContent = W.partName(sec);
-      $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM";
+      // The recording in another key (views/pitch.js) is said on the stand too.
+      const shifted = s.pitchStatus && s.pitchStatus.state === "on" ? " · ♪ " + (s.transpose > 0 ? "+" : "−") + Math.abs(s.transpose) : "";
+      $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM" + shifted;
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
       const what = next ? W.partName(next) : k >= 0 && k === list.length - 1 ? W.t("End") : "";

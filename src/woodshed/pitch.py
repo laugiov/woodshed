@@ -261,11 +261,6 @@ class Renders:
             self.cond.notify_all()
             return "queued"
 
-    def note_band(self, page: str, key: str) -> None:
-        """The band's key known again (after a restart): kept before any pruning."""
-        with self.cond:
-            self.band.setdefault(page, key)
-
     def touch(self, page: str, key: str) -> None:
         """A rendered file served: its key is in use."""
         with self.cond:

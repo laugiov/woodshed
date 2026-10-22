@@ -808,8 +808,10 @@ class Library:
         if self.renders is None:
             raise PermissionError("this library cannot change the key")
         band = self._stored(folder)["band"].get("transpose")
-        if type(band) is int and band:  # after a restart: the band's key is known again before any pruning
-            self.renders.note_band(folder, pitch.key_dir(band))
+        if type(band) is int and band and folder not in self.renders.band:
+            # After a restart: the band's key known again before any pruning, and its tracks prepared again.
+            voice = [t for t in ("mix", "solo-vocals", "minus-vocals") if (audio_dir / f"{t}.flac").is_file()]
+            self.renders.set_band_key(folder, band, voice)
         waited = data.get("wait") is True  # the track the page plays: ahead of the role's others
         priority = pitch.WAITED if waited else pitch.ROLE
         return {"state": self.renders.ask(folder, str(track), semitones, priority, force=data.get("force") is True)}

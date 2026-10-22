@@ -121,3 +121,18 @@ def test_without_the_filter_or_with_no_pitch_nothing_is_rendered(
     monkeypatch.setenv("FAKE_RUBBERBAND", "0")
     pitch.available.cache_clear()
     assert app.Library(root, Options(use_stems=False, open_page=False)).renders is None
+
+
+def test_after_a_restart_the_band_s_key_is_prepared_again_at_the_first_ask(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {app.TOKEN_HEADER: server.token, "Content-Type": "application/json"}
+    body = json.dumps({"page": "One.woodshed", "transpose": 2, "key": "D"}).encode()
+    assert request(server, "POST", "/api/band", body, headers)[0] == 200
+    renders = server.library.renders
+    assert renders is not None
+    asked: list[tuple[str, int, list[str]]] = []
+    monkeypatch.setattr(renders, "band", {})  # the app restarted: the band's key lives in the corrections file only
+    monkeypatch.setattr(renders, "set_band_key", lambda p, n, t: asked.append((p, n, t)))
+    post(server, {"page": "One.woodshed", "track": "solo-bass", "semitones": 2})  # a bassist's page asks first
+    assert asked == [("One.woodshed", 2, ["mix", "solo-vocals", "minus-vocals"])]

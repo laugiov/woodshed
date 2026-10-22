@@ -48,7 +48,9 @@ def server(
 
 def opened(browser: Browser, url: str, problems: list[str], **context: Any) -> Page:
     page = browser.new_context(locale="en-US", **context).new_page()
-    page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+    # Firefox says so when the band's live stream is cut by a page loading: not this page's problem.
+    noise = "was interrupted while the page was loading"
+    page.on("console", lambda m: problems.append(m.text) if m.type == "error" and noise not in m.text else None)
     page.on("pageerror", lambda e: problems.append(str(e)))
     page.goto(url)
     until(page, "window.Woodshed && window.Woodshed.ready === true")
@@ -71,10 +73,12 @@ def test_the_bassist_turns_it_on_and_the_track_is_swapped_in_place(browser: Brow
     expect(page.get_by_test_id("key-note")).to_contain_text("the recording plays in C")
     page.get_by_test_id("play").click()
     until(page, "Woodshed.debug().playing === true && Woodshed.app.store.get().time > 0.3")
+    before = page.evaluate("Woodshed.app.store.get().time")
     switch.click()
     expect(switch).to_have_attribute("aria-pressed", "true")
     until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 20)
     assert page.evaluate("Woodshed.debug().playing") is True  # swapped without stopping
+    assert page.evaluate("Woodshed.app.store.get().time") >= before  # from where it was, no jump back
     expect(page.get_by_test_id("pitch-line")).to_have_text("2 semitones up.")
     expect(page.get_by_test_id("key-note")).to_contain_text("Chords in D, the recording too.")
     expect(page.get_by_test_id("key-mark")).to_have_text("♪ +2")
@@ -195,7 +199,7 @@ def test_a_render_the_library_could_not_make_is_asked_again_on_retry(
     monkeypatch.delenv("FAKE_FFMPEG_FAIL")
     page.get_by_test_id("pitch-retry").click()
     until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 20)
-    assert [p for p in problems if "was interrupted while the page was loading" not in p] == []  # Firefox, band stream
+    assert problems == []
 
 
 def test_a_busy_library_is_asked_again(browser: Browser, server: app.AppServer) -> None:
@@ -214,3 +218,40 @@ def test_a_busy_library_is_asked_again(browser: Browser, server: app.AppServer) 
     page.evaluate("Woodshed.app.setInstrument('voice'); Woodshed.app.transposeTo(2)")
     until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 30)
     assert problems == [p for p in problems if "429" in p]
+
+
+def test_while_it_is_prepared_the_page_says_so_and_the_stand_too(
+    browser: Browser, server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    problems: list[str] = []
+    monkeypatch.setenv("FAKE_FFMPEG_SECONDS", "2")
+    page = opened(browser, server.url + "pop.woodshed/index.html", problems)
+    page.evaluate("Woodshed.app.setInstrument('voice'); Woodshed.app.transposeTo(2)")
+    line = page.get_by_test_id("pitch-line")
+    expect(line).to_contain_text("Preparing the recording 2 semitones up", timeout=8000)
+    assert line.get_attribute("aria-live") == "polite"
+    expect(line).to_have_text("2 semitones up.", timeout=20_000)
+    page.get_by_test_id("stage-open").click()
+    page.evaluate("Woodshed.app.store.set({ beat: 8 })")
+    expect(page.locator("#stTop")).to_contain_text("♪ +2")
+    assert problems == []
+
+
+def test_every_role_hears_the_band_s_key_by_default(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = opened(browser, server.url + "pop.woodshed/index.html", problems)
+    page.evaluate("Woodshed.app.setInstrument('bass'); Woodshed.app.transposeTo(2)")
+    expect(page.get_by_test_id("pitch-switch")).to_have_attribute("aria-pressed", "false")
+    page.evaluate("Woodshed.app.keepBandKey()")  # the band plays it in D: everyone hears it in D
+    expect(page.get_by_test_id("pitch-switch")).to_have_attribute("aria-pressed", "true")
+    assert problems == []
+
+
+def test_a_library_that_cannot_render_keys_is_a_page_that_says_where(browser: Browser, server: app.AppServer) -> None:
+    page = browser.new_context(locale="en-US").new_page()
+    page.route("**/api/pitch**", lambda route: route.fulfill(status=404, body="no such endpoint"))
+    page.goto(server.url + "pop.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    page.evaluate("Woodshed.app.transposeTo(2)")
+    expect(page.get_by_test_id("pitch-cannot")).to_contain_text("The recording keeps its key.")
+    expect(page.get_by_test_id("pitch-switch")).to_have_count(0)

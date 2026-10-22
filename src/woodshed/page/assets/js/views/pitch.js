@@ -43,8 +43,8 @@
 
     // What the page says about the recording's key: none, cannot, off, drums, preparing, on, failed.
     function status(s) {
-      if (!s.transpose) return { state: "none" };
-      if (reason) return { state: "cannot", why: reason === "asking" ? "library" : reason };
+      if (!s.transpose || reason === "asking") return { state: "none" }; // the library not heard yet: nothing said
+      if (reason) return { state: "cannot", why: reason };
       if (!wanted(s)) return { state: "off" };
       if (!pitched(s.track)) return { state: "drums" };
       const key = keyOf(s.transpose);
