@@ -34,7 +34,7 @@
       song.bars.forEach((bar, u) => {
         let pos = 0;
         bar.chords.forEach((c, k) => {
-          const name = c.pc + "/" + c.quality;
+          const name = W.chords.key(c);
           const i = meta.first_beat + u * per + pos;
           if (name !== prev && i >= 0 && i < meta.beats.length) out.push({ t: meta.beats[i], bar: u, index: k, chord: c });
           prev = name;

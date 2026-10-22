@@ -66,7 +66,7 @@
       const list = app.sections();
       const firstOne = list.find((x, j) => j < k && x.role === sec.role);
       if (!firstOne) return null;
-      const chords = (u) => (song.bars[u] ? song.bars[u].chords : []).map((c) => c.pc + c.quality).join(" ");
+      const chords = (u) => (song.bars[u] ? song.bars[u].chords : []).map((c) => W.chords.key(c)).join(" ");
       // The shorter laid along the longer where they agree best: a chorus with two more bars in
       // front is not "different" for that.
       const [short, long] = sec.end - sec.start <= firstOne.end - firstOne.start ? [sec, firstOne] : [firstOne, sec];

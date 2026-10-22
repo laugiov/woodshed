@@ -45,10 +45,15 @@
     const m = /^([A-G])([b#]?)(.*)$/.exec(name);
     const el = W.h("span", { class: cls || "cn", translate: "no" });
     if (!m) return W.append(el, [name]);
-    const acc = m[2] === "b" ? "♭" : m[2] === "#" ? "♯" : "";
-    return W.append(el, [m[1], acc ? W.h("span", { class: "acc" }, acc) : null, m[3]]);
+    const sign = (x) => (x === "b" ? "♭" : x === "#" ? "♯" : "");
+    const acc = sign(m[2]);
+    // A slash bass ("D/F#") gets its own sign too.
+    const slash = /^(.*)\/([A-G])([b#]?)$/.exec(m[3]);
+    const rest = slash ? [slash[1], "/", slash[2], sign(slash[3]) ? W.h("span", { class: "acc" }, sign(slash[3])) : null] : [m[3]];
+    return W.append(el, [m[1], acc ? W.h("span", { class: "acc" }, acc) : null, ...rest]);
   };
-  W.prettyText = (name) => name.replace(/^([A-G])b/, "$1♭").replace(/^([A-G])#/, "$1♯");
+  W.prettyText = (name) =>
+    name.replace(/^([A-G])b/, "$1♭").replace(/^([A-G])#/, "$1♯").replace(/\/([A-G])b$/, "/$1♭").replace(/\/([A-G])#$/, "/$1♯");
 
   // 75.4 -> "1:15", or "1:15.4" with tenths. Rounded first, so 9.96 s reads "0:10.0".
   W.fmt = function fmt(t, tenths) {

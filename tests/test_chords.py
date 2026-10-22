@@ -83,3 +83,50 @@ def test_the_page_reads_the_same_table() -> None:
     )
     shipped = page.split("window.Woodshed.CHORD_TABLE = ", 1)[1].rstrip().rstrip(";")
     assert json.loads(shipped) == json.loads(table), "run python3 scripts/chord_table.py"
+
+
+STRINGS = [40, 45, 50, 55, 59, 64]  # E2 A2 D3 G3 B3 E4
+FIFTH_OPTIONAL = {"9", "m9", "maj9", "add9", "madd9"}
+
+
+def movable_shape(pc: int, quality: str) -> list[int]:
+    """The page's choice (core/instruments.js): the playable movable form lowest on the neck."""
+    forms = chords.MOVABLE[quality]
+    found = []
+    for string, form in forms.items():
+        root_fret = (pc - (4 if string == "E" else 9)) % 12
+        for r in (root_fret, root_fret + 12):  # up an octave when a finger would sit below the nut
+            if all(o is None or r + o >= 0 for o in form):
+                frets = [-1 if o is None else r + o for o in form]
+                fretted = [f for f in frets if f > 0]
+                found.append((min(fretted) if fretted else 0, frets))
+                break
+    return min(found)[1]
+
+
+def sounded(frets: list[int]) -> set[int]:
+    return {(STRINGS[i] + f) % 12 for i, f in enumerate(frets) if f >= 0}
+
+
+def playable(frets: list[int], chord: chords.Chord) -> bool:
+    fretted = [f for f in frets if f > 0]
+    tones = {(chord.pc + i) % 12 for i in chords.intervals(chord.quality)}
+    needed = tones - ({(chord.pc + 7) % 12} if chord.quality in FIFTH_OPTIONAL else set())
+    if chord.bass is not None:
+        tones.add(chord.bass)
+        needed.add(chord.bass)
+    span_ok = not fretted or max(fretted) - min(fretted) <= 4
+    return span_ok and (not fretted or min(fretted) <= 9) and needed <= sounded(frets) <= tones
+
+
+@pytest.mark.parametrize("quality", list(chords.QUALITIES))
+def test_every_typed_quality_has_a_playable_guitar_shape_in_every_key(quality: str) -> None:
+    for pc in range(12):
+        frets = movable_shape(pc, quality)
+        assert playable(frets, chords.Chord(pc, quality)), (theory.SHARP_NAMES[pc] + quality, frets)
+
+
+def test_the_open_shapes_of_typed_chords_sound_their_chord() -> None:
+    for name, frets in chords.OPEN.items():
+        chord = chords.parse(name)
+        assert isinstance(chord, chords.Chord) and playable(frets, chord), (name, frets)

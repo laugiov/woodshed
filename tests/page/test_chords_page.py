@@ -41,3 +41,10 @@ def test_typed_chords_are_named_and_numbered_as_the_library_does(open_page: Any)
     # The same chord only with the same bass.
     assert o.js("Woodshed.current.same(Woodshed.chords.parse('D'), Woodshed.chords.parse('D/F#'))") is False
     assert o.js("Woodshed.current.same(Woodshed.chords.parse('D/F#'), Woodshed.chords.parse('D/Gb'))") is True
+
+
+def test_a_slash_bass_gets_a_real_sharp_or_flat(open_page: Any) -> None:
+    o = open_page("pop")
+    assert o.js("Woodshed.chordNode('D/F#').textContent") == "D/F♯"
+    assert o.js("Woodshed.chordNode('Bb/Ab').querySelectorAll('.acc').length") == 2
+    assert o.js("Woodshed.prettyText('Gb/Db')") == "G♭/D♭"

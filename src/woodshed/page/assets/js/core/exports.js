@@ -3,7 +3,11 @@
 (function () {
   "use strict";
   const W = window.Woodshed;
-  const LAB_QUALITY = { "": "maj", m: "min", 7: "7", m7: "min7" };
+  // A chord's qualities come from one table (core/chord-table.js): the analysis's four keep the forms
+  // woodshed.exports writes, a typed one adds its own (Harte for .lab, a MusicXML kind and degrees).
+  const QUALITIES = W.CHORD_TABLE.qualities;
+  const hasBass = (c) => c.bass !== undefined && c.bass !== null;
+  const mod12 = (x) => ((x % 12) + 12) % 12;
   const SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const CONTROL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
   // Text inside a ChordPro directive: one line, no braces (as woodshed.exports.directive_text).
@@ -14,7 +18,13 @@
     const out = JSON.parse(JSON.stringify(song.song));
     out.bars = song.bars.map((bar, u) => ({
       ...out.bars[u],
-      chords: bar.chords.map((c) => ({ pc: c.pc, quality: c.quality, beats: c.beats, doubt: c.fixed ? null : c.doubt })),
+      chords: bar.chords.map((c) => ({
+        pc: c.pc,
+        quality: c.quality,
+        ...(hasBass(c) ? { bass: c.bass } : {}),
+        beats: c.beats,
+        doubt: c.fixed ? null : c.doubt,
+      })),
     }));
     return out;
   }
@@ -209,7 +219,8 @@
     d.bars.forEach((bar, u) => {
       let b = u * per;
       for (const c of bar.chords) {
-        const label = c.pc < 0 ? "N" : SHARP[c.pc] + ":" + LAB_QUALITY[c.quality];
+        // Harte syntax: a slash bass as its degree above the root (D/F# is D:maj/3).
+        const label = c.pc < 0 ? "N" : SHARP[c.pc] + ":" + QUALITIES[c.quality].harte + (hasBass(c) ? "/" + W.chords.degree(c.bass - c.pc) : "");
         const start = Math.max(0, song.beatTime(b));
         const end = Math.min(d.duration, song.beatTime(b + c.beats)); // never past the end of the file
         if (past || start >= d.duration) {
@@ -281,9 +292,9 @@
     const chords = [];
     for (const [b, n, c] of spans(d)) {
       if (c.pc < 0) continue;
-      const third = c.quality.startsWith("m") ? 3 : 4;
-      const intervals = [0, third, 7, ...(c.quality.endsWith("7") ? [10] : [])];
-      for (const i of intervals) note(chords, 0, 53 + ((((c.pc - 5) % 12) + 12) % 12) + i, b * PPQ, n * PPQ - 10, 80);
+      const low = 53 + mod12(c.pc - 5);
+      for (const i of QUALITIES[c.quality].intervals) note(chords, 0, low + i, b * PPQ, n * PPQ - 10, 80);
+      if (hasBass(c)) note(chords, 0, low - (mod12(c.pc - c.bass) || 12), b * PPQ, n * PPQ - 10, 80); // below the chord
     }
     const bass = [];
     const drums = [];
@@ -310,7 +321,7 @@
         }
       }
     } else {
-      for (const [b, n, c] of spans(d)) if (c.pc >= 0) note(bass, 1, 36 + c.pc, b * PPQ, n * PPQ - 10, 90);
+      for (const [b, n, c] of spans(d)) if (c.pc >= 0) note(bass, 1, 36 + (hasBass(c) ? c.bass : c.pc), b * PPQ, n * PPQ - 10, 90);
     }
     const tracks = [
       track(meta, Array.from(d.title).slice(0, 120).join("")),
@@ -322,7 +333,22 @@
   }
 
   // MusicXML, as woodshed.exports.musicxml: chord symbols over the bars, and the bass line.
-  const KIND = { "": "major", m: "minor", 7: "dominant", m7: "minor-seventh" };
+  // A typed quality names itself (text="Dsus4" style) and adds its degrees; a slash bass follows the kind.
+  function harmonyXml(c, spelled) {
+    const q = QUALITIES[c.quality];
+    const [step, alter] = spelled(c.pc);
+    const typed = !["", "m", "7", "m7"].includes(c.quality);
+    let xml = "<harmony><root><root-step>" + step + "</root-step>" + (alter ? "<root-alter>" + alter + "</root-alter>" : "") + "</root>";
+    xml += "<kind" + (typed ? ' text="' + xmlText(c.quality) + '"' : "") + ">" + q.musicxml.kind + "</kind>";
+    if (hasBass(c)) {
+      const [bassStep, bassAlter] = spelled(c.bass);
+      xml += "<bass><bass-step>" + bassStep + "</bass-step>" + (bassAlter ? "<bass-alter>" + bassAlter + "</bass-alter>" : "") + "</bass>";
+    }
+    for (const [value, alterBy, type] of q.musicxml.degrees) {
+      xml += "<degree><degree-value>" + value + "</degree-value><degree-alter>" + alterBy + "</degree-alter><degree-type>" + type + "</degree-type></degree>";
+    }
+    return xml;
+  }
   const STEPS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const xmlText = (text) => text.replace(CONTROL, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   function musicxml(song) {
@@ -375,8 +401,7 @@
       let offset = 0;
       for (const c of bar.chords) {
         if (c.pc >= 0) {
-          const [step, alter] = spelled(c.pc);
-          xml.push("<harmony><root><root-step>" + step + "</root-step>" + (alter ? "<root-alter>" + alter + "</root-alter>" : "") + "</root><kind>" + KIND[c.quality] + "</kind>");
+          xml.push(harmonyXml(c, spelled));
           xml.push(offset ? "<offset>" + offset * SLOTS + "</offset></harmony>" : "</harmony>");
         }
         offset += c.beats;

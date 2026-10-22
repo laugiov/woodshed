@@ -258,7 +258,9 @@ All thresholds carry their measurements in comments. The bass tab and the drum g
 
 **Guitar shapes.** `src/woodshed/shapes.json` holds open shapes and two easy barres. It is the single source for the page's chord diagrams and for capo difficulty in `src/woodshed/theory.py` (`suggest_capo`). `src/woodshed/view.py` ships the shapes to the page.
 
-`theory.py` also does spelling (sharps or flats by key), roman numerals and named progressions. The page holds no theory. `view.py` precomputes, for all 12 transpositions, the key name, the capo and the spelling of each root. The page only looks names up.
+`theory.py` also does spelling (sharps or flats by key), roman numerals and named progressions. The page holds almost no theory. `view.py` precomputes, for all 12 transpositions, the key name, the capo and the spelling of each root. The page only looks names up.
+
+**Chords the band types.** The analysis writes four qualities ("", m, 7, m7). A band can type any chord of `src/woodshed/chords.json` on its chart: sus2, sus4, 7sus4, maj7, 6, m6, 9, m9, maj9, add9, madd9, 5, dim, dim7, m7b5, aug, with or without a slash bass (D/F#). That table is the one place a quality is defined: its intervals, its roman-numeral case and mark, its MusicXML kind and degrees, its Harte form for `.lab`, the open shapes of typed chords and a movable E-form and A-form per quality. `src/woodshed/chords.py` parses what a musician types (the library checks with it what a page sends) and `page/assets/js/core/chords.js` does the same in the page; `tests/chord_cases.json` holds the cases both must read alike. The page gets the table as `core/chord-table.js`, generated from the JSON by `scripts/chord_table.py` (a test checks they agree): pages built earlier receive it with their next code refresh, their data untouched. Names still come from the view tables (the bass note too); a typed quality takes the root's numeral with its own case and mark, and a slash bass its degree above the root ("I/3"). `tests/test_chords.py` checks that every movable shape plays its chord in every key.
 
 ---
 

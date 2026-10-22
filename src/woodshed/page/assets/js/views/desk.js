@@ -89,12 +89,14 @@
     const { song, store } = app;
     const parts = song.parts;
     // The shape the guitar panel draws for a chord, in the voicing and capo chosen: stage mode shows it too.
+    // funkVoicings keys a chord by its moved root, quality and bass.
+    const funkKey = (c, t) => c.pc + t + c.quality + (I.bassOf(c, t) === null ? "" : "/" + (((I.bassOf(c, t) % 12) + 12) % 12));
     app.shapeFor = (c, s) => {
       if (c.pc < 0) return null;
       const t = s.transpose;
-      if (s.pos === "barre") return I.barreShape(c.pc + t, c.quality);
-      if (s.pos === "funk") return I.funkVoicings(song.distinctChords().map((d) => ({ pc: d.pc + t, quality: d.quality })))[c.pc + t + c.quality] || null;
-      return I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality);
+      if (s.pos === "barre") return I.barreShape(c.pc + t, c.quality, I.bassOf(c, t));
+      if (s.pos === "funk") return I.funkVoicings(song.distinctChords().map((d) => ({ pc: d.pc + t, quality: d.quality, bass: I.bassOf(d, t) })))[funkKey(c, t)] || null;
+      return I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality, I.bassOf(c, t - s.capo));
     };
     app.guitarDiagram = guitarDiagram;
     const curBar = (s) => Math.floor(s.beat / song.per);
@@ -104,23 +106,23 @@
       const cur = song.chordAtBeat(s.beat);
       const chords = song.distinctChords();
       const t = s.transpose;
-      const funk = s.pos === "funk" ? I.funkVoicings(chords.map((c) => ({ pc: c.pc + t, quality: c.quality }))) : null;
+      const funk = s.pos === "funk" ? I.funkVoicings(chords.map((c) => ({ pc: c.pc + t, quality: c.quality, bass: I.bassOf(c, t) }))) : null;
       const cards = chords.map((c) => {
         let shape;
         let label;
         let sub;
         if (s.pos === "open") {
-          shape = I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality);
+          shape = I.openOrBarre(song.view.shapes, c.pc + t - s.capo, c.quality, I.bassOf(c, t - s.capo));
           label = app.nameFor(c, s.capo, s);
           sub = s.capo ? W.nodes(W.t("sounds {chord}"), { chord: chordNode(app.nameFor(c, 0, s)) }) : "";
           // No open shape for this chord here: a barre, said so.
-          if (!I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality)) sub = [sub, sub ? " · " : "", h("span", { class: "barre-tag" }, W.t("barre"))];
+          if (!I.tableShape(song.view.shapes, c.pc + t - s.capo, c.quality, I.bassOf(c, t - s.capo))) sub = [sub, sub ? " · " : "", h("span", { class: "barre-tag" }, W.t("barre"))];
         } else if (s.pos === "barre") {
-          shape = I.barreShape(c.pc + t, c.quality);
+          shape = I.barreShape(c.pc + t, c.quality, I.bassOf(c, t));
           label = app.nameFor(c, 0, s);
           sub = W.t("no capo");
         } else {
-          shape = funk[c.pc + t + c.quality]; // keyed as funkVoicings builds it
+          shape = funk[funkKey(c, t)]; // keyed as funkVoicings builds it
           label = app.nameFor(c, 0, s);
           sub = W.t("strings 3-2-1");
         }
@@ -142,7 +144,7 @@
       // One line: the capo the page chooses when it transposes (theory.suggest_capo: chords weighted
       // by how long they last, a high capo only when clearly easier), with the barre chords it saves,
       // and a button to put it on.
-      const barresAt = (k) => chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - k, c.quality)).length;
+      const barresAt = (k) => chords.filter((c) => !I.tableShape(song.view.shapes, c.pc + t - k, c.quality, I.bassOf(c, t - k))).length;
       const best = song.capoFor(t);
       const counts = { [best]: barresAt(best), 0: barresAt(0) };
       let useBest = null;
@@ -268,8 +270,8 @@
     function keys(s) {
       const cur = song.chordAtBeat(s.beat);
       const up = song.upcoming(s.beat, 1)[0];
-      const on = new Set(cur.pc >= 0 ? I.keysMidi(cur.pc + s.transpose, cur.quality) : []);
-      const ghost = new Set(up ? I.keysMidi(up.pc + s.transpose, up.quality) : []);
+      const on = new Set(cur.pc >= 0 ? I.keysMidi(cur.pc + s.transpose, cur.quality, false, I.bassOf(cur, s.transpose)) : []);
+      const ghost = new Set(up ? I.keysMidi(up.pc + s.transpose, up.quality, false, I.bassOf(up, s.transpose)) : []);
       const out = [
         h(
           "div",
@@ -430,7 +432,7 @@
       const c = song.chordAtBeat(s.beat);
       const next = song.upcoming(s.beat, 1)[0];
       const shift = s.pos === "open" ? s.capo : 0;
-      const shows = s.inst === "guitar" && !s.stage ? [c, next].map((x) => (x && x.pc >= 0 ? x.pc + x.quality : "")).join("|") + "|" + [s.pos, s.capo, s.transpose, s.corrections].join("|") : "";
+      const shows = s.inst === "guitar" && !s.stage ? [c, next].map((x) => (x && x.pc >= 0 ? W.chords.key(x) : "")).join("|") + "|" + [s.pos, s.capo, s.transpose, s.corrections].join("|") : "";
       if (shows === dockShown) return;
       dockShown = shows;
       const cards = shows
@@ -450,7 +452,7 @@
       if (DOCK_KEYS.some((k) => changed.has(k))) renderDockShapes(s);
       const u = curBar(s);
       const c = song.chordAtBeat(s.beat);
-      const chordKey = c.pc + c.quality;
+      const chordKey = W.chords.key(c);
       const full = ["transpose", "capo", "inst", "pos", "voiceType", "corrections"].some((k) => changed.has(k)) || (s.inst === "bass" && (changed.has("loop") || changed.has("loopOn")));
       const perBar = s.inst === "bass" || s.inst === "piano";
       const perChord = s.inst === "guitar" || s.inst === "piano";

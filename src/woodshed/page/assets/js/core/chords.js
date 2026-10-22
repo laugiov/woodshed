@@ -63,6 +63,8 @@
 
   W.chords = {
     parse,
+    // One identity for a chord everywhere: D and D/F# differ.
+    key: (c) => c.pc + "|" + c.quality + "|" + (c.bass === undefined || c.bass === null ? "" : c.bass),
     NO_CHORD,
     qualities: () => Object.keys(QUALITIES),
     intervals: (quality) => QUALITIES[quality].intervals.slice(),

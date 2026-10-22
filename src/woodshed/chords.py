@@ -21,6 +21,8 @@ QUALITIES: dict[str, dict[str, Any]] = _TABLE["qualities"]
 ALIASES: dict[str, str] = _TABLE["aliases"]
 REFUSALS: dict[str, str] = _TABLE["refusals"]
 DEGREES: list[str] = _TABLE["degrees"]
+MOVABLE: dict[str, dict[str, list[int | None]]] = {q: f for q, f in _TABLE["movable"].items() if q != "description"}
+OPEN: dict[str, list[int]] = {n: f for n, f in _TABLE["open"].items() if n != "description"}
 
 HINTS: dict[str, str] = _TABLE["hints"]  # "{root}" is the root as typed
 SPACES = re.compile(r"[ \t\r\n\u00a0]+")  # the same class as core/chords.js

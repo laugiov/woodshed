@@ -244,7 +244,7 @@
       const [u, k] = button.getAttribute("data-ref").split("_").map(Number);
       const chord = song.bars[u].chords[k];
       const s = app.store.get();
-      const same = (a, b) => !!a && !!b && a.pc === b.pc && a.quality === b.quality;
+      const same = song.same;
       const analysed = app.analysedChord(chord.doubt.id) || chord;
       const alts = chord.doubt.alternatives.slice();
       if (!alts.some((a) => same(a, analysed))) alts.push({ pc: analysed.pc, quality: analysed.quality, share: null });

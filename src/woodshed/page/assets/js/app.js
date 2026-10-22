@@ -65,7 +65,7 @@
         if (s.pos === "funk") return W.t("funk triad on strings 3-2-1");
         if (s.pos === "barre") return W.t("barre chord, no capo");
         // In the Open voicing a chord with no open shape is played as a barre: said as the diagram shows it.
-        return I.tableShape(song.view.shapes, c.pc + s.transpose, c.quality) ? W.t("open shape") : W.t("barre shape");
+        return I.tableShape(song.view.shapes, c.pc + s.transpose, c.quality, I.bassOf(c, s.transpose)) ? W.t("open shape") : W.t("barre shape");
       }
       if (s.inst === "drums" && song.parts && song.parts.groove) {
         const g = song.parts.groove;
@@ -326,7 +326,7 @@
       const out = [];
       for (const c of bar.chords) {
         const last = out[out.length - 1];
-        if (last && last.pc === c.pc && last.quality === c.quality) {
+        if (last && song.same(last, c)) {
           last.beats += c.beats;
           // A correction to the chord before it in the bar: the merged chord carries its doubt, so
           // the correction can still be opened, changed or taken back.
@@ -339,6 +339,9 @@
     // The chords as analysed: every correction is applied to these, so a chart after a reload is
     // the same as the chart before it, however many times a doubt was corrected.
     const original = song.bars.map((b) => b.chords.map((c) => ({ ...c })));
+    // The analysis's doubts: picks are checked against these, not against the chart now (a bar the band
+    // typed has no doubt left, but its picks are kept for when the typed chords are taken back).
+    const analysedDoubts = new Set(original.flat().filter((c) => c.doubt).map((c) => String(c.doubt.id)));
     function applyFixes() {
       song.bars.forEach((bar, u) => {
         bar.chords = original[u].map((c) => ({ ...c }));
@@ -369,7 +372,7 @@
     function validFixes(stored) {
       const out = {};
       if (!stored || typeof stored !== "object" || Array.isArray(stored)) return out;
-      const ids = new Set(song.doubts().map((d) => String(d.chord.doubt.id)));
+      const ids = analysedDoubts;
       for (const [id, fix] of Object.entries(stored)) {
         const valid = ids.has(id) && Array.isArray(fix) && Number.isInteger(fix[0]) && fix[0] >= 0 && fix[0] <= 11 && QUALITIES.has(fix[1]);
         if (valid) out[id] = [fix[0], fix[1]];
@@ -388,7 +391,7 @@
         const removed = JSON.parse(localStorage.getItem(storageKey + ":removed") || "{}");
         // Only this analysis's doubts, each with a fix as this version writes them: a damaged entry
         // would make the library refuse every share.
-        const ids = new Set(song.doubts().map((d) => String(d.chord.doubt.id)));
+        const ids = analysedDoubts;
         const was = validFixes(removed);
         pendingRemovals = new Map(
           Object.keys(removed && typeof removed === "object" && !Array.isArray(removed) ? removed : {})
@@ -474,7 +477,7 @@
     const keysSound = () => (store.get().chordSound === "rhodes" ? "rhodes" : "piano");
     app.hearKeys = (c) => {
       const inst = keysSound();
-      const midis = I.keysMidi(c.pc + store.get().transpose, c.quality, true);
+      const midis = I.keysMidi(c.pc + store.get().transpose, c.quality, true, I.bassOf(c, store.get().transpose));
       sounds.play([inst], { [inst]: midis }, (t) => midis.forEach((m) => sounds.note(inst, m, t, 2.4, 0.5, null, 0.3)));
     };
     // The notes heard on the record in bar u, over the chord's root.
@@ -511,7 +514,7 @@
     };
     app.hearArpeggio = (c) => {
       const inst = keysSound();
-      const midis = I.keysMidi(c.pc + store.get().transpose, c.quality, true);
+      const midis = I.keysMidi(c.pc + store.get().transpose, c.quality, true, I.bassOf(c, store.get().transpose));
       sounds.play([inst], { [inst]: midis }, (t) => midis.forEach((m, i) => sounds.note(inst, m, t + i * 0.42, 1.3, 0.55, null, 0.3)));
     };
     app.hearRiff = (u) => {
@@ -548,7 +551,7 @@
       const s = store.get();
       const guitar = s.chordSound === "guitar";
       const inst = guitar ? "guitar" : keysSound();
-      const midis = guitar ? I.fingeredMidi(I.openOrBarre(song.view.shapes, alt.pc + s.transpose, alt.quality), 0) : I.keysMidi(alt.pc + s.transpose, alt.quality, false);
+      const midis = guitar ? I.fingeredMidi(I.openOrBarre(song.view.shapes, alt.pc + s.transpose, alt.quality, I.bassOf(alt, s.transpose)), 0) : I.keysMidi(alt.pc + s.transpose, alt.quality, false, I.bassOf(alt, s.transpose));
       const beat = 60 / s.bpm;
       sounds.play([inst], { [inst]: midis }, (t) => {
         transport.pause();
