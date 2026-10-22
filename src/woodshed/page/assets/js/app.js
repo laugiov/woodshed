@@ -244,20 +244,17 @@
         const failed = song.tracks.find((t) => t.id === id);
         store.set({ track: transport.track });
         app.toast(W.t("Could not read {file}. Still playing: {track}.", { file: failed.file, track: W.t(kept.label) }));
+        return ok;
       }
-      return ok;
-    };
-    app.stemOf = (inst) => STEM_OF[inst];
-    // A track chosen by hand (Your part): a step card that plays another track is no longer the one
-    // in use; step 3 plays no track of its own and stays.
-    app.chooseTrack = async function chooseTrack(id) {
-      const ok = await app.setTrack(id);
+      // Another track than the marked step card plays (Your part, the Tracks menu): that card is no
+      // longer the one in use; step 3 plays no track of its own and stays.
       const s = store.get();
       const stem = STEM_OF[s.inst];
       const plays = { 1: "mix", 2: "solo-" + stem, 4: "minus-" + stem }[s.step];
-      if (ok && plays && plays !== id) store.set({ step: null });
+      if (plays && plays !== id && store.get().track === id) store.set({ step: null });
       return ok;
     };
+    app.stemOf = (inst) => STEM_OF[inst];
     app.setInstrument = function setInstrument(inst) {
       store.set({ inst });
       const s = store.get();

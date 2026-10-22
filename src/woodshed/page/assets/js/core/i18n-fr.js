@@ -418,6 +418,7 @@
     "Your part alone": "Ta partie seule",
     "Without your part": "Sans ta partie",
     "Your part (FLAC)": "Ta partie (FLAC)",
+    "(opens in a new tab)": "(s'ouvre dans un nouvel onglet)",
     "The mix without your part (FLAC)": "Le mix sans ta partie (FLAC)",
     "lossless, about 10 MB per minute of song": "sans perte, environ 10 Mo par minute de morceau",
     "Guitars and keys are one track: your part holds both, and the mix without it leaves both out.": "Guitares et claviers sont une seule piste : ta partie contient les deux, et le mix sans elle les retire tous les deux.",

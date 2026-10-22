@@ -91,6 +91,10 @@ def test_a_step_that_plays_another_track_is_no_longer_marked(open_page: Any) -> 
     o.js("Woodshed.app.setStep(2, true)")
     page.get_by_test_id("part-alone").click()  # the track step 2 plays: it stays
     expect(page.get_by_test_id("step-2")).to_have_class("step on")
+    o.js("Woodshed.app.setStep(4, true)")
+    page.get_by_test_id("tracks").click()
+    page.get_by_test_id("track-mix").click()  # the dock's Tracks menu: the same rule
+    expect(page.locator(".step.on")).to_have_count(0)
 
 
 def test_from_disk_the_files_open_and_the_page_says_where_they_are(open_page: Any) -> None:

@@ -429,12 +429,12 @@
           const shared = stem === "other"; // guitars and keys: one separated track until they are split
           const who = shared ? "guitars and keys" : s.inst; // file names stay in English
           const title = String(song.song.title || "song").replace(/[\\/:*?"<>|]+/g, " ").trim();
-          const choice = (id, testid, label) => h("button", { type: "button", "data-track": id, "data-testid": testid, "aria-pressed": "false", onclick: () => app.chooseTrack(id) }, label);
+          const choice = (id, testid, label) => h("button", { type: "button", "data-track": id, "data-testid": testid, "aria-pressed": "false", onclick: () => app.setTrack(id) }, label);
           // Served, the files download under names that say what they are; from disk a browser does
           // not download a file:// link: it opens it, and the page says the files are already there.
           const file = (id, name, testid, label) => {
             const where = W.t("This file is already next to this page, in its audio folder: {file}.", { file: fileOf(id).split("/").pop() });
-            return h("a", { href: fileOf(id), download: served ? title + " - " + name + ".flac" : null, target: "_blank", rel: "noopener", "data-testid": testid, onclick: served ? null : () => app.toast(where) }, download(), label);
+            return h("a", { href: fileOf(id), download: served ? title + " - " + name + ".flac" : null, target: "_blank", rel: "noopener", "data-testid": testid, "aria-label": served ? null : label + " " + W.t("(opens in a new tab)"), onclick: served ? null : () => app.toast(where) }, download(), label);
           };
           clear(
             box,
