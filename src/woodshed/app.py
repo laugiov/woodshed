@@ -1577,7 +1577,7 @@ class AppServer(ThreadingHTTPServer):
                 main.untrusted_told = True
                 print(
                     "woodshed app: a device does not trust the certificate yet, or opened an http:// address: "
-                    "install the certificate's root on it (README: Phones on the stand)",
+                    "install the certificate's root on it (README: Phones on the music stand)",
                     file=sys.stderr,
                     flush=True,
                 )
