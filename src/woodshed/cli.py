@@ -122,6 +122,14 @@ def app_parser() -> argparse.ArgumentParser:
         "--uploads-from-network", action="store_true",
         help="let other devices add songs too (in Docker: the published port comes through the network)",
     )  # fmt: skip
+    parser.add_argument(
+        "--cert", type=Path, default=os.environ.get("WOODSHED_CERT") or None, metavar="FILE",
+        help="serve the band's phones over HTTPS with this certificate (made with mkcert, say); with --key",
+    )  # fmt: skip
+    parser.add_argument(
+        "--key", type=Path, default=os.environ.get("WOODSHED_KEY") or None, metavar="FILE",
+        help="the certificate's private key, outside the library folder; with --cert",
+    )  # fmt: skip
     return parser
 
 
@@ -132,16 +140,21 @@ def run_app(argv: Sequence[str]) -> int:
 
     if args.host not in LOOPBACK and not args.allow_network:
         parser.error(f"--host {args.host} opens the library to the network: add --allow-network if that is meant")
+    if (args.cert is None) != (args.key is None):
+        parser.error("--cert and --key go together (or WOODSHED_CERT and WOODSHED_KEY)")
     from woodshed.run import Options
 
     opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False)
     try:
         serve(
             args.library, opts, args.host, args.port, open_browser=not args.no_open,
-            uploads_from_network=args.uploads_from_network,
+            uploads_from_network=args.uploads_from_network, tls=(args.cert, args.key) if args.cert else None,
         )  # fmt: skip
     except KeyboardInterrupt:
         print("woodshed app: stopped", file=sys.stderr)
+    except WoodshedError as exc:  # a certificate that cannot be used: said before anything starts
+        print(f"woodshed app: {exc}", file=sys.stderr)
+        return EXIT_ERROR
     except OSError as exc:  # the port is taken, the folder cannot be written...
         print(f"woodshed app: {exc}", file=sys.stderr)
         if isinstance(exc, PermissionError) and os.environ.get("WOODSHED_CONTAINER") == "1":

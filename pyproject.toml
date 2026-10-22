@@ -58,6 +58,7 @@ dev = [
     "types-jsonschema",
     "pytest-playwright>=0.7",
     "pytest-xdist>=3.6",
+    "cryptography>=42",  # test certificates for the HTTPS door (tests/test_https.py)
 ]
 
 [tool.hatch.version]

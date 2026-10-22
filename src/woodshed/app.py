@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import http.client
 import ipaddress
 import json
 import math
@@ -28,6 +29,8 @@ import shutil
 import signal
 import socket
 import socketserver
+import ssl
+import sys
 import threading
 import time
 import traceback
@@ -56,6 +59,7 @@ from woodshed.run import (
     stems_extra_installed,
     update_page_code,
 )
+from woodshed.tls import Tls
 
 MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
@@ -1477,11 +1481,21 @@ class AppServer(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"
 
     def __init__(
-        self, library: Library, host: str = "127.0.0.1", port: int = 0, uploads_from_network: bool = False
+        self,
+        library: Library,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        uploads_from_network: bool = False,
+        tls: Tls | None = None,
     ) -> None:
         # In a container every request comes through the bridge: uploads must then be allowed from
         # the network explicitly (docker run -p 127.0.0.1:8000:8000 keeps them to this computer).
         self.uploads_from_network = uploads_from_network
+        # HTTPS where the phones come in: this listener when it is on the network, else the doors;
+        # this computer's own 127.0.0.1 stays plain HTTP (a secure context already).
+        self.tls = tls
+        self.secure = tls is not None and host not in LOOPBACK
+        self.untrusted_told = False
         self.live = Live()  # before binding: a taken port closes the server inside __init__
         self.doors: list[Door] = []
         self.doors_lock = threading.Lock()
@@ -1496,6 +1510,7 @@ class AppServer(ThreadingHTTPServer):
         bound = self.server_address[1]
         self.port = int(bound)
         self.names = {"127.0.0.1", "localhost", "[::1]"} | ({host} if host not in ("0.0.0.0", "::") else set())
+        self.names |= set(tls.names) if tls else set()  # a certificate made for mylaptop.local: that name too
         self.main = self  # the server a door belongs to: itself
         self.accepting = True
 
@@ -1542,19 +1557,45 @@ class AppServer(ThreadingHTTPServer):
 
     @property
     def url(self) -> str:
-        return f"http://127.0.0.1:{self.port}/"
+        return f"https://localhost:{self.port}/" if self.secure else f"http://127.0.0.1:{self.port}/"
+
+    def get_request(self) -> tuple[socket.socket, Any]:
+        sock, address = super().get_request()
+        if self.secure and self.tls:
+            # The handshake happens on the request's own thread, under the handler's timeout: a slow
+            # or refusing phone never holds the accept loop.
+            sock = self.tls.context.wrap_socket(sock, server_side=True, do_handshake_on_connect=False)
+        return sock, address
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        error = sys.exc_info()[1]
+        if isinstance(error, ssl.SSLError):
+            main = self.main
+            if not main.untrusted_told:  # said once: the organiser has a phone to set up, not a log to read
+                main.untrusted_told = True
+                print(
+                    "woodshed app: a device does not trust the certificate yet, or opened an http:// address: "
+                    "install the certificate's root on it (README: Phones on the stand)",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            return
+        if isinstance(error, (ConnectionResetError, BrokenPipeError, TimeoutError)):
+            return  # a phone gone mid-request
+        super().handle_error(request, client_address)
 
     def lan_urls(self) -> list[str]:
         """The addresses the phones type, looked up once (a name lookup can take seconds)."""
+        scheme = "https" if self.tls else "http"
         if self.doors:
-            return [f"http://{door.address}:{self.port}/" for door in self.doors]
+            return [f"{scheme}://{door.address}:{self.port}/" for door in self.doors]
         if not self.network:
             return []
         if self._addresses is None:
             self._addresses = (
                 public_urls()
                 if os.environ.get("WOODSHED_PUBLIC_URL")
-                else ([] if in_container() else [f"http://{a}:{self.port}/" for a in lan_addresses()])
+                else ([] if in_container() else [f"{scheme}://{a}:{self.port}/" for a in lan_addresses()])
             )
         return self._addresses
 
@@ -1577,6 +1618,8 @@ class Door(AppServer):
         self.address = address
         self.accepting = True
         self.started = False
+        self.tls = main.tls
+        self.secure = main.tls is not None
         ThreadingHTTPServer.__init__(self, (address, main.port), Handler)
         self.library, self.live, self.token, self.assets = main.library, main.live, main.token, main.assets
         self.uploads_from_network = False  # the phones play, lead and follow; songs come from this computer
@@ -1599,18 +1642,29 @@ class Door(AppServer):
 
 def running_here(port: int) -> bool:
     """Is woodshed already answering on this port (opened twice from the menu or the Dock)?"""
+    return running_url(port) is not None
+
+
+def running_url(port: int) -> str | None:
+    """The address of the woodshed answering on this port, over HTTP or HTTPS (--cert), if one does."""
     import urllib.error
     import urllib.request
 
-    no_proxy = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # this computer, never a proxy
-    try:
-        with no_proxy.open(f"http://127.0.0.1:{port}/api/token", timeout=1.5) as answer:
-            return isinstance(json.loads(answer.read(4096)).get("token"), str)
-    except urllib.error.HTTPError as exc:  # another service answered: its answer is closed, not woodshed
-        exc.close()
-        return False
-    except (OSError, ValueError, AttributeError):
-        return False
+    this_computer = ssl.create_default_context()
+    this_computer.check_hostname = False  # 127.0.0.1 asking itself: the certificate is for the phones
+    this_computer.verify_mode = ssl.CERT_NONE
+    handlers = (urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=this_computer))
+    no_proxy = urllib.request.build_opener(*handlers)  # this computer, never a proxy
+    for url in (f"http://127.0.0.1:{port}/", f"https://localhost:{port}/"):
+        try:
+            with no_proxy.open(url.replace("localhost", "127.0.0.1") + "api/token", timeout=1.5) as answer:
+                if isinstance(json.loads(answer.read(4096)).get("token"), str):
+                    return url
+        except urllib.error.HTTPError as exc:  # another service answered: its answer is closed, not woodshed
+            exc.close()
+        except (OSError, ValueError, AttributeError, http.client.HTTPException):
+            pass
+    return None
 
 
 def serve(
@@ -1620,8 +1674,13 @@ def serve(
     port: int = 8000,
     open_browser: bool = True,
     uploads_from_network: bool = False,
+    tls: tuple[Path, Path] | None = None,
 ) -> None:
     import webbrowser
+
+    from woodshed import tls as tls_files
+
+    secure = tls_files.load(*tls, root) if tls else None  # before anything starts: a wrong file is said at once
 
     if host not in LOOPBACK:
         # The token stops other web sites, not other devices: anyone who can reach the port reads
@@ -1651,14 +1710,14 @@ def serve(
     try:  # a stop at any point, start included, leaves the songs in progress to resume
         library = Library(root, opts)
         try:
-            server = AppServer(library, host, port, uploads_from_network)
+            server = AppServer(library, host, port, uploads_from_network, tls=secure)
         except OSError as exc:
             if exc.errno not in (errno.EADDRINUSE, 10048) or not running_here(port):  # 10048: Windows
                 raise
             # Started again while it runs (the menu, the Dock): the running one is shown, and this
             # one touches nothing of the library (`finally` below has no library to stop).
             library = None
-            url = f"http://127.0.0.1:{port}/"
+            url = running_url(port) or f"http://127.0.0.1:{port}/"
             print(f"woodshed app: already running at {url}", flush=True)
             if open_browser:
                 webbrowser.open(url)
