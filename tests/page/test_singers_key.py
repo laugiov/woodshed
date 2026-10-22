@@ -83,7 +83,12 @@ def test_the_bassist_turns_it_on_and_the_track_is_swapped_in_place(browser: Brow
     assert playing_file(page, "solo-drums") == "audio/solo-drums.flac"
     # The downloads stay the originals.
     expect(page.get_by_test_id("part-download-alone")).to_have_attribute("href", "audio/solo-bass.flac")
-    switch.click()  # off: the originals again
+    page.evaluate("Woodshed.app.transposeTo(0)")  # the recorded key: the originals, no mark
+    until(page, "Woodshed.app.transport.fileOf('mix') === 'audio/mix.flac'")
+    expect(page.get_by_test_id("key-mark")).to_be_hidden()
+    page.evaluate("Woodshed.app.transposeTo(2)")
+    until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 20)
+    page.get_by_test_id("pitch-switch").click()  # off: the originals again
     until(page, "Woodshed.app.transport.fileOf('mix') === 'audio/mix.flac'")
     expect(page.get_by_test_id("key-mark")).to_be_hidden()
     assert problems == []
@@ -175,3 +180,37 @@ def test_on_a_phone_the_switch_fits(browser: Browser, server: app.AppServer, lan
     assert box and box["height"] >= 44
     assert page.evaluate("document.documentElement.scrollWidth") <= 390
     assert problems == []
+
+
+def test_a_render_the_library_could_not_make_is_asked_again_on_retry(
+    browser: Browser, server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    problems: list[str] = []
+    monkeypatch.setenv("FAKE_FFMPEG_FAIL", "1")
+    page = opened(browser, server.url + "pop.woodshed/index.html", problems)
+    page.evaluate("Woodshed.app.setInstrument('bass'); Woodshed.app.transposeTo(2)")
+    page.get_by_test_id("pitch-switch").click()
+    expect(page.get_by_test_id("pitch-retry")).to_be_visible(timeout=15_000)
+    expect(page.get_by_test_id("pitch-line")).to_have_text("The recording could not be changed to this key.")
+    monkeypatch.delenv("FAKE_FFMPEG_FAIL")
+    page.get_by_test_id("pitch-retry").click()
+    until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 20)
+    assert [p for p in problems if "was interrupted while the page was loading" not in p] == []  # Firefox, band stream
+
+
+def test_a_busy_library_is_asked_again(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = opened(browser, server.url + "pop.woodshed/index.html", problems)
+    busy = {"left": 2}
+
+    def handle(route: Any) -> None:
+        if route.request.method == "POST" and busy["left"] > 0:
+            busy["left"] -= 1
+            route.fulfill(status=429, content_type="application/json", body='{"error": "busy"}')
+        else:
+            route.continue_()
+
+    page.route("**/api/pitch", handle)
+    page.evaluate("Woodshed.app.setInstrument('voice'); Woodshed.app.transposeTo(2)")
+    until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 30)
+    assert problems == [p for p in problems if "429" in p]

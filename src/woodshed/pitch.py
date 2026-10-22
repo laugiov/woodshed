@@ -11,11 +11,13 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +36,7 @@ UNPITCHED = frozenset({"solo-drums"})  # nothing to transpose: plays as recorded
 FORMANTS_KEPT = frozenset({"mix", "solo-vocals", "minus-bass", "minus-drums", "minus-other"})
 BLOCK = 1 << 18
 SLOWEST = 10.0  # a render longer than 10x the track's duration is stuck: killed
+LEAST = 60.0  # seconds a render may always take
 
 
 class Cancelled(Exception):
@@ -106,11 +109,13 @@ def render(
     ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
     formant = "preserved" if track in FORMANTS_KEPT else "shifted"
     shift = f"rubberband=pitch={2 ** (semitones / 12):.10f}:pitchq=quality:channels=together:formant={formant}"
-    cmd = [*prefix, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src.resolve())]
-    cmd += ["-af", shift, "-threads", "1", "-c:a", "pcm_f32le", str(wav.resolve())]
+    cmd = [*prefix, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "1"]
+    cmd += ["-i", str(src.resolve()), "-af", shift, "-threads", "1", "-c:a", "pcm_f32le", str(wav.resolve())]
+    log = dst.with_name(f".{dst.stem}.{token}.log")  # ffmpeg's errors: a file, never a pipe that fills up
     try:
-        deadline = time.monotonic() + max(60.0, SLOWEST * sf.info(str(src)).duration)
-        child = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=flags)
+        deadline = time.monotonic() + max(LEAST, SLOWEST * sf.info(str(src)).duration)
+        with open(log, "wb") as errors:
+            child = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=errors, creationflags=flags)
         on_child(child)
         while True:
             try:
@@ -119,13 +124,14 @@ def render(
             except subprocess.TimeoutExpired:
                 if should_stop() or time.monotonic() > deadline:
                     child.kill()
-                    child.communicate()
+                    child.wait()
                     if should_stop():
                         raise Cancelled("stopped") from None
                     raise WoodshedError("changing the key took too long") from None
-        error = child.communicate()[1].decode("utf-8", "replace")  # closes the pipe too
         if child.returncode != 0:
+            error = log.read_text(encoding="utf-8", errors="replace")
             last = (error.strip().splitlines() or ["no reason given"])[-1]
+            last = re.sub(r"(?:[A-Za-z]:)?[\\/]\S*[\\/]", "", last)  # file names, never this computer's folders
             raise WoodshedError(f"ffmpeg could not change the key: {last}")
         # The level back to the original's, never above the common ceiling: no clipped sample.
         source_rms, _ = _rms_and_peak(src)
@@ -147,7 +153,7 @@ def render(
         os.replace(part, dst)
     finally:
         on_child(None)
-        for leftover in (wav, part):
+        for leftover in (wav, part, log):
             with contextlib.suppress(OSError):
                 leftover.unlink()
 
@@ -217,14 +223,18 @@ class Renders:
 
     # What the pages ask.
 
-    def ask(self, page: str, track: str, semitones: int, priority: int = WAITED) -> str:
-        """Queue one track in one key; its state now: ready, queued, running."""
+    def ask(self, page: str, track: str, semitones: int, priority: int = WAITED, force: bool = False) -> str:
+        """Queue one track in one key; its state now: ready, queued, running. `force`: render it again (a
+        file the browser could not play)."""
         audio_dir = self.root / page / "audio"
         src, dst = audio_dir / f"{track}.flac", audio_dir / KEY_DIR / key_dir(semitones) / f"{track}.flac"
         key = key_dir(semitones)
         with self.cond:
             self.used[(page, key)] = time.monotonic()
             self.failed.pop((page, key, track), None)
+            if force and dst.is_file() and not (self.running and self.running.page == page):
+                with contextlib.suppress(OSError):
+                    dst.unlink()
             if dst.is_file():
                 return "ready"
             if self.running and (self.running.page, self.running.track, self.running.semitones) == (
@@ -239,12 +249,22 @@ class Renders:
                     return "queued"
             if len(self.queue) >= MAX_QUEUED:
                 raise Full("too many renders asked: try again in a minute")
-            if shutil.disk_usage(self.root).free < src.stat().st_size * 2 + self.free_margin:
+            try:
+                seconds = sf.info(str(src)).duration
+            except (RuntimeError, OSError):
+                raise WoodshedError("this track cannot be read") from None
+            # The float WAV in the middle is about four times the FLAC.
+            if shutil.disk_usage(self.root).free < src.stat().st_size * 5 + self.free_margin:
                 raise WoodshedError("not enough free disk to render this track")
-            self.queue.append(Render(page, track, semitones, priority, fingerprint(src), sf.info(str(src)).duration))
+            self.queue.append(Render(page, track, semitones, priority, fingerprint(src), seconds))
             self._prune(page, keep_also=key)
             self.cond.notify_all()
             return "queued"
+
+    def note_band(self, page: str, key: str) -> None:
+        """The band's key known again (after a restart): kept before any pruning."""
+        with self.cond:
+            self.band.setdefault(page, key)
 
     def touch(self, page: str, key: str) -> None:
         """A rendered file served: its key is in use."""
@@ -367,6 +387,10 @@ class Renders:
                 reason = str(exc).replace(str(self.root), "the library").replace(str(Path.home()), "~")
                 with self.cond:
                     self.failed[(job.page, key_dir(job.semitones), job.track)] = reason
+            except Exception:  # a bug, or a file soundfile cannot read: this render fails, the worker lives on
+                traceback.print_exc()
+                with self.cond:
+                    self.failed[(job.page, key_dir(job.semitones), job.track)] = "unexpected error"
             finally:
                 with self.cond:
                     self.running = None

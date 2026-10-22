@@ -774,9 +774,18 @@ class Library:
         with contextlib.suppress(OSError):
             note.write_text(job.message, encoding="utf-8")
 
+    def _page_quick(self, folder: Any) -> str:
+        """A page folder of the library, checked without reading every page (polled by phones)."""
+        if not isinstance(folder, str):
+            raise ValueError("page: a page folder of the library")
+        ok = folder.endswith(".woodshed") and "/" not in folder and "\\" not in folder and not folder.startswith(".")
+        if not ok or not (self.root / folder / MANIFEST).is_file():
+            raise ValueError("page: a page folder of the library")
+        return folder
+
     def pitch_state(self, page: Any) -> dict[str, Any]:
         """For a song page: can this library change the recording's key, and where its renders are."""
-        folder = self._page(page)
+        folder = self._page_quick(page)
         state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch}
         return state | (
             self.renders.state(folder)
@@ -788,7 +797,7 @@ class Library:
         """{page, track, semitones}: one of the page's tracks in another key, queued for rendering."""
         if not isinstance(data, dict):
             raise ValueError("an object with page, track and semitones")
-        folder = self._page(data.get("page"))
+        folder = self._page_quick(data.get("page"))
         track, semitones = data.get("track"), data.get("semitones")
         if type(semitones) is not int or not -6 <= semitones <= 6 or semitones == 0:
             raise ValueError("semitones: -6 to 6, not 0")
@@ -800,9 +809,10 @@ class Library:
             raise PermissionError("this library cannot change the key")
         band = self._stored(folder)["band"].get("transpose")
         if type(band) is int and band:  # after a restart: the band's key is known again before any pruning
-            self.renders.band.setdefault(folder, pitch.key_dir(band))
+            self.renders.note_band(folder, pitch.key_dir(band))
         waited = data.get("wait") is True  # the track the page plays: ahead of the role's others
-        return {"state": self.renders.ask(folder, str(track), semitones, pitch.WAITED if waited else pitch.ROLE)}
+        priority = pitch.WAITED if waited else pitch.ROLE
+        return {"state": self.renders.ask(folder, str(track), semitones, priority, force=data.get("force") is True)}
 
     def interrupted(self) -> None:
         """The app is stopping: the song in progress did not fail, it is resumed next time."""

@@ -170,7 +170,7 @@
     // The same track from another file (the recording in another key, rendered by the library), at
     // the same position without stopping, as a switch of track does. Resolves false (the old file
     // still playing) when the new one cannot be read.
-    function setFile(id, file) {
+    function setFile(id, file, still = () => true) {
       switching = switching.then(async () => {
         if (files[id] === file) return true;
         if (id !== current) {
@@ -187,6 +187,7 @@
           delete els[id + "|" + file];
           return false;
         }
+        if (!still()) return true; // asked for a key no longer wanted: the old file plays on
         to.currentTime = from.currentTime;
         files[id] = file;
         if (!from.paused) {

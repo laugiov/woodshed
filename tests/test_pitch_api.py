@@ -15,6 +15,7 @@ from tests.test_app import request
 from woodshed import app, pitch
 from woodshed.run import MANIFEST, Options
 
+pytestmark = worker.pytestmark
 fake_ffmpeg = worker.fake_ffmpeg  # an ffmpeg on PATH that copies instead of rendering
 library = worker.library
 

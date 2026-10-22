@@ -39,6 +39,9 @@ time.sleep(float(os.environ.get("FAKE_FFMPEG_SECONDS", "0")))
 if os.environ.get("FAKE_FFMPEG_FAIL"):
     sys.stderr.write("Error opening " + src + ": broken\\n")
     sys.exit(1)
+if os.environ.get("FAKE_FFMPEG_GARBAGE"):
+    open(args[-1], "wb").write(b"not a wav file")
+    sys.exit(0)
 data, rate = sf.read(src, dtype="float32")
 sf.write(args[-1], data, rate, subtype="FLOAT", format="WAV")
 """
@@ -59,6 +62,8 @@ def fake_ffmpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pat
     yield log
     pitch.available.cache_clear()
 
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the fake ffmpeg is a script with a shebang")
 
 TRACKS = ("mix", "solo-vocals", "minus-vocals", "solo-drums", "solo-bass")
 
@@ -222,3 +227,34 @@ def test_without_the_rubberband_filter_there_is_no_render(fake_ffmpeg: Path, mon
     monkeypatch.setenv("FAKE_RUBBERBAND", "0")
     pitch.available.cache_clear()
     assert not pitch.available()
+
+
+def test_an_unreadable_render_fails_and_the_worker_lives_on(
+    renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("FAKE_FFMPEG_GARBAGE", "1")
+    renders.ask("One.woodshed", "mix", 2)
+    until(lambda: bool(renders.state("One.woodshed")["failed"]))
+    monkeypatch.delenv("FAKE_FFMPEG_GARBAGE")
+    renders.ask("One.woodshed", "mix", 2)  # Retry: the worker is still there
+    until(lambda: rendered(renders, "One.woodshed", "up2", "mix").is_file())
+
+
+def test_a_stuck_render_is_killed(renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_FFMPEG_SECONDS", "30")
+    monkeypatch.setattr(pitch, "LEAST", 1.0)
+    monkeypatch.setattr(pitch, "SLOWEST", 0.1)
+    started = time.monotonic()
+    renders.ask("One.woodshed", "mix", 2)
+    until(lambda: bool(renders.state("One.woodshed")["failed"]), 15)
+    assert time.monotonic() - started < 10
+    assert "too long" in renders.state("One.woodshed")["failed"]["up2"]["mix"]
+
+
+def test_a_file_the_browser_cannot_play_is_rendered_again_when_asked(renders: pitch.Renders) -> None:
+    dst = rendered(renders, "One.woodshed", "up2", "mix")
+    dst.parent.mkdir(parents=True)
+    dst.write_bytes(b"broken")
+    assert renders.ask("One.woodshed", "mix", 2) == "ready"
+    assert renders.ask("One.woodshed", "mix", 2, force=True) == "queued"
+    until(lambda: dst.is_file() and dst.read_bytes()[:4] == b"fLaC")
