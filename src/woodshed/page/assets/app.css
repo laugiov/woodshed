@@ -530,6 +530,22 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 @media (max-width: 900px) { .desk-col { position: static; } }
 .desk-head { align-items: flex-start; }
 .desk-head .keyrow { margin: 0; }
+
+/* Your part (views/desk.js): the instrument alone, left out or in the mix, and its files. */
+.your-part { display: grid; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--sheet); }
+.your-part:empty { display: none; }
+.your-part .part-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.your-part .seg-ctl.part button { padding: 7px 12px; font-size: 14px; }
+.your-part .part-files { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+.your-part .part-files a { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; }
+.your-part .part-files a:hover, .your-part .part-files a:focus-visible { text-decoration: underline; }
+.your-part .part-size { font-size: 12px; color: var(--muted); }
+.your-part .part-note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.your-part .part-note:empty { display: none; }
+@media (pointer: coarse) {
+  .your-part .seg-ctl.part button { min-height: 44px; }
+  .your-part .part-files a { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 22px; }
+}
 .shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
 .shape-card { max-width: 112px; }
 .strip .mute.off { background: var(--sheet); border-color: var(--line); color: var(--muted); }

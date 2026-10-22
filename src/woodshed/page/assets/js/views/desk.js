@@ -410,8 +410,58 @@
       ];
     }
 
+    // Your part (spec 006): the instrument alone, left out or in the full mix, and its two files.
+    // Drawn when the instrument or the language changes; the choice playing is marked in place, so a
+    // focused button keeps the focus while the panel under it draws itself again at every bar.
+    const served = location.protocol === "http:" || location.protocol === "https:";
+    const FILE_NAMES = { bass: "bass", drums: "drums", voice: "voice" }; // file names stay in English
+    let partShown = "";
+    function renderPart(s) {
+      const box = $("yourPart");
+      const stem = app.stemOf(s.inst);
+      const fileOf = (id) => (song.tracks.find((t) => t.id === id) || {}).file;
+      const shown = s.inst + "|" + W.lang();
+      if (shown !== partShown) {
+        partShown = shown;
+        if (!fileOf("solo-" + stem) || !fileOf("minus-" + stem)) {
+          clear(box, h("p", { class: "part-note" }, W.t("Your part's track comes with the separated instruments: analyse the song with them.")));
+        } else {
+          const shared = stem === "other"; // guitars and keys: one separated track until they are split
+          const who = shared ? "guitars and keys" : FILE_NAMES[s.inst];
+          const title = String(song.song.title || "song").replace(/[\\/:*?"<>|]+/g, " ").trim();
+          const choice = (id, testid, label) => h("button", { type: "button", "data-track": id, "data-testid": testid, "aria-pressed": "false", onclick: () => app.chooseTrack(id) }, label);
+          // Served, the files download under names that say what they are; from disk a browser does
+          // not download a file:// link: it opens it, and the files are already next to the page.
+          const file = (id, name, testid, ...label) => h("a", { href: fileOf(id), download: served ? title + " - " + name + ".flac" : null, target: "_blank", rel: "noopener", "data-testid": testid }, ...label);
+          clear(
+            box,
+            h("div", { class: "part-row" },
+              h("span", { class: "label", id: "yourPartLabel" }, W.t("Your part")),
+              h("div", { class: "seg-ctl part", role: "group", "aria-labelledby": "yourPartLabel" },
+                choice("mix", "part-mix", W.t("Full mix")), choice("solo-" + stem, "part-alone", W.t("Alone")), choice("minus-" + stem, "part-without", W.t("Without")))),
+            h("div", { class: "part-files" },
+              file("solo-" + stem, who + " alone", "part-download-alone", h("span", { "aria-hidden": "true" }, "⤓ "), W.t("Your part (FLAC)")),
+              file("minus-" + stem, "without " + who, "part-download-without", W.t("The mix without your part (FLAC)")),
+              h("span", { class: "part-size" }, W.t("lossless, about 10 MB per minute"))),
+            served ? null : h("p", { class: "part-note" }, W.t("Opened from disk: these files are next to this page, in its audio folder ({files}).", { files: fileOf("solo-" + stem).split("/").pop() + ", " + fileOf("minus-" + stem).split("/").pop() })),
+            shared ? h("p", { class: "part-note" }, W.t("Guitars and keys are one track: Alone and Without hold both.")) : null,
+            s.inst === "voice" ? h("p", { class: "part-note" }, W.t("Separated by software: some traces of the other instruments can remain.")) : null,
+            h("p", { class: "part-note", "data-part": "key" }),
+          );
+        }
+      }
+      for (const b of box.querySelectorAll("[data-track]")) {
+        const on = b.getAttribute("data-track") === s.track;
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", String(on));
+      }
+      const key = box.querySelector("[data-part=key]");
+      if (key) key.textContent = s.transpose ? W.t("The recording keeps its key.") : ""; // empty: hidden by CSS
+    }
+
     function render(s) {
       $("deskTitle").textContent = TITLES()[s.inst];
+      renderPart(s);
       $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
       const body = { guitar, bass, piano: keys, drums, voice }[s.inst](s);
       clear($("desk"), body);
@@ -450,6 +500,7 @@
     const DOCK_KEYS = ["beat", "inst", "stage", "pos", "capo", "transpose", "corrections"];
     store.on((s, changed) => {
       if (DOCK_KEYS.some((k) => changed.has(k))) renderDockShapes(s);
+      if (changed.has("track") || changed.has("transpose")) renderPart(s);
       const u = curBar(s);
       const c = song.chordAtBeat(s.beat);
       const chordKey = W.chords.key(c);

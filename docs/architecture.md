@@ -375,6 +375,8 @@ The load order is fixed in `template.html`, and a test checks that every script 
 - `views/`: `header.js`, `chart.js`, `desk.js`, `dock.js`, `band.js`, `words.js` (the words dialog)
 - `app.js` last, to wire it together
 
+**Your part** (`views/desk.js`, `#yourPart` above each instrument panel) plays `mix`, `solo-<stem>` or `minus-<stem>` through `app.chooseTrack`, which also unmarks a step card that plays another track (step 3 plays none and stays). It is drawn when the instrument or the language changes and marked in place on a track change, so a focused button survives the panel's redraw at every bar. Its links are the page's own files: served they carry a `download` name, from disk they open in a new tab (browsers do not download a file:// link).
+
 `core/state.js` is the store, and it is small: a frozen state object, `set(patch)` merges and tells listeners which keys changed, `on(fn)` subscribes. Views read from it and subscribe. Nothing else holds state.
 
 ### English or French, dark or light

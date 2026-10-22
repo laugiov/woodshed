@@ -413,6 +413,18 @@
     "Tracks isolated on this computer. One plays at a time, so they never drift apart.":
       "Pistes séparées sur cet ordinateur. Une seule joue à la fois : elles ne se décalent jamais.",
     "Only the full mix: this page was made without stems.": "Seulement le mix complet : cette page a été faite sans pistes séparées.",
+    // Your part (views/desk.js)
+    "Your part": "Ta partie",
+    Alone: "Seule",
+    Without: "Sans",
+    "Your part (FLAC)": "Ta partie (FLAC)",
+    "The mix without your part (FLAC)": "Le mix sans ta partie (FLAC)",
+    "lossless, about 10 MB per minute": "sans perte, environ 10 Mo par minute",
+    "Guitars and keys are one track: Alone and Without hold both.": "Guitares et claviers sont une seule piste : Seule et Sans les contiennent tous les deux.",
+    "Separated by software: some traces of the other instruments can remain.": "Séparée par logiciel : des traces des autres instruments peuvent rester.",
+    "The recording keeps its key.": "L'enregistrement garde sa tonalité.",
+    "Opened from disk: these files are next to this page, in its audio folder ({files}).": "Ouverte depuis le disque : ces fichiers sont à côté de la page, dans son dossier audio ({files}).",
+    "Your part's track comes with the separated instruments: analyse the song with them.": "La piste de ta partie vient avec les instruments séparés : analyse le morceau avec eux.",
     // The tracks (tracks.track_list), said through W.t
     "Full mix": "Mix complet",
     "Without drums": "Sans la batterie",
