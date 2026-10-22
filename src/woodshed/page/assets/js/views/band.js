@@ -341,6 +341,7 @@
       document.body.classList.toggle("following", mode === "follow");
       renderBand();
       if (message) app.toast(message);
+      if (app.awakeCheck) app.awakeCheck(); // the screen stays on while the band plays
     }
 
     // The next song of the set.

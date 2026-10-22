@@ -335,6 +335,38 @@ can play, lead and follow, not add songs, and the button lets them out again. Fr
 With Docker, publish the port to the network instead: in `compose.yaml`, `"8000:8000"` in place of
 `"127.0.0.1:8000:8000"`.
 
+**Phones on the music stand.** While a phone follows, leads or shows the stage view, woodshed keeps
+its screen on: with the browser's Screen Wake Lock on a secure page, otherwise with a tiny silent
+video playing in the page (it starts at the first touch after a song change). It is best effort:
+the phone's system decides, Low Power Mode or Battery Saver can refuse it, and the video costs
+battery, so plug the phones in for a long rehearsal. A follower whose screen may still lock sees one
+line saying where to turn its sleep off (Settings → Auto-Lock → Never on an iPhone, Screen timeout
+on Android).
+
+**HTTPS for the phones (optional).** Over the Wi-Fi's plain `http://` address, phones have no Screen
+Wake Lock. Served over HTTPS they do. With [mkcert](https://github.com/FiloSottile/mkcert) on the
+computer: `mkcert -install`, then `mkcert 192.168.1.20 localhost 127.0.0.1` with this computer's
+address on the band's network (a name such as `mylaptop.local` works too), and start
+`woodshed app --cert 192.168.1.20+2.pem --key 192.168.1.20+2-key.pem` (or set `WOODSHED_CERT` and
+`WOODSHED_KEY`). Keep both files outside the library folder: woodshed refuses a key it would serve.
+The library page then shows `https://` addresses and code. Each phone must trust mkcert's root,
+`rootCA.pem` from `mkcert -CAROOT` (share that file only, never `rootCA-key.pem`):
+
+- iPhone: send it by AirDrop or mail, install the profile in Settings (General → VPN & Device
+  Management on recent iOS), then General → About → Certificate Trust Settings: turn on full trust.
+- Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate
+  (the menu names vary; a screen lock is required, and the file may need a `.crt` name). Chrome
+  trusts it; Firefox for Android does not by default. A "network may be monitored" notice appears.
+
+Remove the root from the phones after the gig: anything that trusts it trusts every certificate
+your mkcert makes. The address in the certificate must be the one the phones type: give the
+computer a fixed address on the router, or make a new certificate after joining another network. An
+old `http://` bookmark no longer answers; the computer itself still opens `http://127.0.0.1:8000`.
+
+**No Wi-Fi in the room.** Turn on a phone's hotspot, join it from the computer and the other phones,
+and let the band's phones join again: the library page shows the address on that network (not last
+time's).
+
 **The words.** In the library, a song with its parts offers **add the words**; on its page, **Add the
 words** next to the chart. Paste them (part names like `[Chorus]` help), press **Place the words**:
 a minute later the page shows the chords above the words. From the command line, or for a page

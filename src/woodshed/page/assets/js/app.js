@@ -843,6 +843,69 @@
     });
     const dock = views[3];
     for (const v of views) v.render(store.get());
+
+    // Awake on the music stand (spec 008): while following, leading or on stage. Said only when the
+    // phone may lock: under the Follow banner a line worded for its system, else a toast once.
+    const awakeLine = $("awakeLine");
+    const stored = (key) => {
+      try {
+        return localStorage.getItem(key);
+      } catch (err) {
+        return null;
+      }
+    };
+    const keep = (key) => {
+      try {
+        localStorage.setItem(key, "1");
+      } catch (err) {
+        /* this visit only */
+      }
+    };
+    let cameBack = false; // the page was hidden while a mode was on: the screen probably locked
+    let sayTimer = 0;
+    const awake = W.createAwake(() => {
+      clearTimeout(sayTimer);
+      sayTimer = setTimeout(sayAwake, 1500); // a lock or a video takes a moment: no line that flickers
+    });
+    const bandMode = () => (W.band ? W.band.mode() : "alone");
+    function screenAdvice() {
+      const ua = navigator.userAgent;
+      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return W.t("Screen locking? Settings → Auto-Lock → Never.");
+      if (/Android/.test(ua)) return W.t("Screen going dark? Settings → Screen timeout → the longest.");
+      return W.t("Screen locking? Turn off its sleep while you play.");
+    }
+    function sayAwake() {
+      const mode = bandMode();
+      const atRisk = awake.wanted() && (!awake.holding() || cameBack);
+      const line = mode === "follow" && atRisk && !stored("woodshed:awakeLineClosed");
+      if (line && awakeLine.hidden) {
+        W.clear(awakeLine, h("span", null, screenAdvice()), h("button", {
+          type: "button", "aria-label": W.t("Close"), "data-testid": "awake-close",
+          onclick: () => {
+            keep("woodshed:awakeLineClosed");
+            awakeLine.hidden = true;
+          },
+        }, "✕"));
+      }
+      awakeLine.hidden = !line;
+      // Leading or on stage: a toast, once per device, never over another one.
+      if (mode !== "follow" && atRisk && !stored("woodshed:awakeTold") && $("toast").hidden) {
+        app.toast(screenAdvice());
+        keep("woodshed:awakeTold");
+      }
+    }
+    app.awakeCheck = () => {
+      awake.want(bandMode() !== "alone" || !!store.get().stage);
+      sayAwake();
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && awake.wanted()) cameBack = true;
+      else if (!document.hidden) setTimeout(sayAwake, 300);
+    });
+    store.on((s, changed) => changed.has("stage") && app.awakeCheck());
+    app.awakeCheck();
+    W.awake = awake;
+
     // The other language, chosen while playing: every view says it again, the music goes on.
     W.onLang.push(() => {
       $("toast").hidden = true; // said in the other language

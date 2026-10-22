@@ -99,6 +99,8 @@ TYPES = {
     ".musicxml": "application/vnd.recordare.musicxml+xml",
     ".cho": "text/plain; charset=utf-8",
     ".lab": "text/plain; charset=utf-8",
+    ".mp4": "video/mp4",  # the tiny videos that keep a phone awake (core/awake.js)
+    ".webm": "video/webm",
 }
 
 

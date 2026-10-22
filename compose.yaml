@@ -15,6 +15,10 @@ services:
     # The address the band's phones type, shown on the library page (the app cannot see it from
     # inside the container): this computer's address on the network, for example
     # environment: [WOODSHED_PUBLIC_URL=http://192.168.1.20:8000]
+    # HTTPS for the phones (README: Phones on the music stand): put the certificate and its key in a
+    # ./certs folder (not inside ./woodshed), add the volume "./certs:/certs:ro" and
+    # environment: [WOODSHED_PUBLIC_URL=https://192.168.1.20:8000, WOODSHED_CERT=/certs/cert.pem,
+    # WOODSHED_KEY=/certs/key.pem]. The key must be readable by the user below (chmod 640).
     # The ./woodshed folder below must be writable by this user. On Linux, if your user id is not 1000
     # (`id -u`), start with: WOODSHED_UID=$(id -u) WOODSHED_GID=$(id -g) docker compose up -d
     user: "${WOODSHED_UID:-1000}:${WOODSHED_GID:-1000}"
