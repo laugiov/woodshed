@@ -75,12 +75,12 @@ never hides inside a lyric line.
 
 Change the key and everything follows: the chart, the shapes, the tab, the keyboard.
 
-**Your part.** Each panel opens on **Your part**: **Full mix**, **Alone** (your instrument's separated track)
-or **Without** (the song without it, to play over), switched while the music plays, the loop and the tempo kept.
-Two links take the files home, lossless as the page plays them (about 10 MB per minute): served by `woodshed app`
-they download as `<song> - bass alone.flac` and `<song> - without bass.flac`; a page opened from disk opens them,
-and they are already in its `audio` folder. Guitars and keys share one separated track. The tracks carry the
-page's common gain, not the original file's level.
+**Your part.** Each panel opens on **Listen to**: **Full mix**, **Your part alone** (your instrument's
+separated track) or **Without your part** (the song to play over), switched while the music plays, the loop and
+the tempo kept. Two links take the files home, lossless as the page plays them (about 10 MB per minute of song):
+served by `woodshed app` they download as `<song> - bass alone.flac` and `<song> - without bass.flac`; a page
+opened from disk opens them, and says they are already in its `audio` folder. Guitars and keys share one
+separated track. The tracks carry the page's common gain, not the original file's level.
 
 **For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
 words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,

@@ -62,10 +62,16 @@ def test_switching_keeps_the_loop_the_tempo_the_trainer_and_the_focus(open_page:
     before = o.js(
         "(({loop, bpm, trainer, countIn, step}) => ({loop, bpm, trainer, countIn, step}))(Woodshed.app.store.get())"
     )
+    page.get_by_test_id("play").click()
+    until(page, "Woodshed.debug().playing === true && Woodshed.app.store.get().time > 0.3")
+    at = o.js("Woodshed.app.store.get().time")
     alone = page.get_by_test_id("part-alone")
     alone.focus()
     alone.press("Enter")
     until(page, "Woodshed.app.store.get().track === 'solo-bass'")
+    page.wait_for_timeout(300)
+    assert o.js("Woodshed.debug().playing") is True  # the music goes on
+    assert o.js("Woodshed.app.store.get().time") >= at  # from where it was, not from the start
     for beat in (4, 8, 12):  # the bass panel draws itself again at every bar
         o.js("(b) => Woodshed.app.store.set({ beat: b })", beat)
     assert o.js("document.activeElement && document.activeElement.dataset.testid") == "part-alone"
@@ -94,7 +100,12 @@ def test_from_disk_the_files_open_and_the_page_says_where_they_are(open_page: An
     expect(link).to_have_attribute("href", "audio/solo-bass.flac")
     expect(link).to_have_attribute("target", "_blank")  # the rehearsal page stays
     expect(link).not_to_have_attribute("download", re.compile(".*"))  # a file:// link is opened, not downloaded
-    expect(o.page.get_by_test_id("your-part")).to_contain_text("in its audio folder (solo-bass.flac, minus-bass.flac)")
+    with o.page.expect_popup() as popup:
+        link.click()
+    popup.value.close()
+    expect(o.page.get_by_test_id("toast")).to_contain_text(
+        "already next to this page, in its audio folder: solo-bass.flac"
+    )
 
 
 @pytest.fixture
@@ -134,7 +145,9 @@ def test_what_each_part_says(open_page: Any) -> None:
     part = o.page.get_by_test_id("your-part")
     o.js("Woodshed.app.setInstrument('guitar')")
     expect(part).to_contain_text("Guitars and keys are one track")
-    expect(part).to_contain_text("lossless, about 10 MB per minute")
+    expect(part).to_contain_text("lossless, about 10 MB per minute of song")
+    expect(part.get_by_role("group", name="Listen to")).to_be_visible()
+    expect(part.get_by_test_id("part-mix")).to_have_attribute("aria-pressed", "true")
     expect(part).not_to_contain_text("keeps its key")
     o.js("Woodshed.app.transposeTo(2)")
     expect(part).to_contain_text("The recording keeps its key.")
@@ -194,7 +207,8 @@ def test_each_device_keeps_its_own_part_in_the_band(browser: Browser, band_serve
 
 
 @pytest.mark.parametrize("lang", ["en", "fr"])
-def test_on_a_phone_the_part_fits_and_is_easy_to_touch(browser: Browser, pages_root: str, lang: str) -> None:
+@pytest.mark.parametrize("inst", ["guitar", "bass", "piano", "drums", "voice"])
+def test_on_a_phone_the_part_fits_and_is_easy_to_touch(browser: Browser, pages_root: str, lang: str, inst: str) -> None:
     folder = built("pop", True, pages_root)
     context = browser.new_context(
         viewport={"width": 390, "height": 844},
@@ -206,14 +220,18 @@ def test_on_a_phone_the_part_fits_and_is_easy_to_touch(browser: Browser, pages_r
     page.add_init_script(f"try {{ localStorage.setItem('woodshed:lang', '{lang}'); }} catch (e) {{}}")
     page.goto((folder / "index.html").as_uri())
     until(page, "window.Woodshed && window.Woodshed.ready === true")
-    page.evaluate("Woodshed.app.setInstrument('guitar')")
+    page.evaluate("(i) => Woodshed.app.setInstrument(i)", inst)
     part = page.get_by_test_id("your-part")
     part.scroll_into_view_if_needed()
-    expect(part).to_contain_text("Ta partie" if lang == "fr" else "Your part")
+    expect(part).to_contain_text("Ta partie seule" if lang == "fr" else "Your part alone")
     if lang == "fr":
         expect(part).to_contain_text("Le mix sans ta partie (FLAC)")
     for target in part.locator("button, a").all():
         box = target.bounding_box()
         assert box and box["height"] >= 44, target.inner_text()
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    wide = page.evaluate(
+        "[...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > 390.5)"
+        ".map((e) => e.className || e.tagName).slice(0, 5)"
+    )
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390, wide
     context.close()

@@ -250,12 +250,13 @@
     app.stemOf = (inst) => STEM_OF[inst];
     // A track chosen by hand (Your part): a step card that plays another track is no longer the one
     // in use; step 3 plays no track of its own and stays.
-    app.chooseTrack = function chooseTrack(id) {
+    app.chooseTrack = async function chooseTrack(id) {
+      const ok = await app.setTrack(id);
       const s = store.get();
       const stem = STEM_OF[s.inst];
       const plays = { 1: "mix", 2: "solo-" + stem, 4: "minus-" + stem }[s.step];
-      if (plays && plays !== id) store.set({ step: null });
-      return app.setTrack(id);
+      if (ok && plays && plays !== id) store.set({ step: null });
+      return ok;
     };
     app.setInstrument = function setInstrument(inst) {
       store.set({ inst });
