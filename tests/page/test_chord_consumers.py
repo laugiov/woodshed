@@ -7,7 +7,7 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from tests.test_chords import movable_shape
+from tests.test_chords import movable_form
 from woodshed import chords
 
 STRINGS = [40, 45, 50, 55, 59, 64]
@@ -16,10 +16,8 @@ STRINGS = [40, 45, 50, 55, 59, 64]
 def test_movable_shapes_are_the_ones_python_checks_for_every_quality_and_key(open_page: Any) -> None:
     o = open_page("pop")
     for quality in chords.QUALITIES:
-        got = o.js(
-            f"[...Array(12).keys()].map((pc) => Woodshed.instruments.movableShape(pc, {json.dumps(quality)}).frets)"
-        )
-        assert got == [movable_shape(pc, quality) for pc in range(12)], quality
+        got = o.js(f"[...Array(12).keys()].map((pc) => Woodshed.instruments.movableShape(pc, {json.dumps(quality)}))")
+        assert got == [movable_form(pc, quality) for pc in range(12)], quality  # frets, barre and first string
 
 
 def test_typed_chords_find_their_open_shapes_and_a_slash_chord_falls_back_on_its_chord(open_page: Any) -> None:
@@ -40,6 +38,8 @@ def test_keys_and_triads_play_the_typed_chord(open_page: Any) -> None:
     assert {n % 12 for n in g9} == {7, 11, 5, 9} and len(g9) == 4  # five-note chord: the fifth left out
     d_fs = o.js("Woodshed.instruments.keysMidi(2, '', true, 6)")
     assert d_fs[0] % 12 == 6 and d_fs[0] < min(d_fs[1:])  # the slash bass in the left hand, below
+    drawn = o.js("Woodshed.instruments.keysMidi(2, '', false, 6)")
+    assert 54 in drawn and min(drawn) >= 48  # and lit on the keys panel
     assert o.js("Woodshed.instruments.triadOf(0, 'maj7')") == [0, 4, 11]
     assert o.js("Woodshed.instruments.triadOf(2, 'sus4')") == [2, 7, 9]
     assert o.js("Woodshed.instruments.triadOf(9, 'm')") == [9, 0, 4]  # the analysis's: unchanged

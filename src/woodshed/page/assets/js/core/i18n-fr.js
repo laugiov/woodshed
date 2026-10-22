@@ -510,6 +510,7 @@
     "add the words": "ajouter les paroles",
     "In the set": "Dans le set",
     Parts: "Parties",
+    "shape at fret {n}": "position en case {n}",
     "Made by an older woodshed: analyse it again for the new page":
       "Fait par une version plus ancienne de woodshed : analyse-le à nouveau pour avoir la nouvelle page",
     "1 to check": "1 à vérifier",

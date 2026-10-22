@@ -137,7 +137,9 @@
       // Within the two octaves the keys panel draws (48-71): a ninth or a seventh above it folds down.
       v = [...new Set((all.length > 4 ? all.filter((i) => i !== 7) : all).map((i) => (n0 + i > 71 ? n0 + i - 12 : n0 + i)))].sort((a, b) => a - b);
     }
-    if (!isNone(bass)) return [n0 - 12 - mod12(r - bass), ...v]; // the bass note below the hand
+    // A slash bass below the hand, heard; drawn (withBass false: the keys panel's two octaves) at the
+    // panel's bottom octave.
+    if (!isNone(bass)) return withBass ? [n0 - 12 - mod12(r - bass), ...v] : [...new Set([48 + mod12(bass), ...v])];
     return withBass ? [n0 - 12, ...v] : v;
   }
 

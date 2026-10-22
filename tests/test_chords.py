@@ -89,6 +89,26 @@ STRINGS = [40, 45, 50, 55, 59, 64]  # E2 A2 D3 G3 B3 E4
 FIFTH_OPTIONAL = {"9", "m9", "maj9", "add9", "madd9"}
 
 
+def movable_form(pc: int, quality: str) -> dict[str, object]:
+    """core/instruments.js movableShape: the frets, the barre (a form whose strings all sound from the
+    root's string on, none below its fret, two or more at it) and the string the form starts on."""
+    forms = chords.MOVABLE[quality]
+    found = []
+    for string, form in forms.items():
+        root_fret = (pc - (4 if string == "E" else 9)) % 12
+        for r in (root_fret, root_fret + 12):
+            if all(o is None or r + o >= 0 for o in form):
+                frets = [-1 if o is None else r + o for o in form]
+                fretted = [f for f in frets if f > 0]
+                low = min(fretted) if fretted else 0
+                stretch = 3 if fretted and max(fretted) - low >= 4 else 0
+                start = 0 if string == "E" else 1
+                full = all(o is not None and o >= 0 for o in form[start:]) and sum(o == 0 for o in form) > 1
+                found.append((low + stretch, {"frets": frets, "barre": r if r > 0 and full else 0, "from": start}))
+                break
+    return min(found, key=lambda x: x[0])[1]
+
+
 def movable_shape(pc: int, quality: str) -> list[int]:
     """The page's choice (core/instruments.js): the movable form lowest on the neck, a stretch of four
     frets or more counted as three frets higher."""
