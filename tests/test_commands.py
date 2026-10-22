@@ -670,6 +670,8 @@ def test_a_page_the_library_cannot_update_is_said_stale(tmp_path: Path, cache: P
     assert lib.update_pages() == []  # its data is not what this page code reads
     stale = {p["folder"]: p.get("stale", False) for p in lib.pages()}
     assert stale == {"pop.woodshed": True, "waltz.woodshed": False}  # the home page says to analyse it again
+    assert cli.main([str(synth.write("pop", tmp_path).wav), "--no-stems", "--no-open", "-o", str(library)]) == 0
+    assert not {p["folder"]: p["stale"] for p in lib.pages()}["pop.woodshed"]  # analysed again: said no more
 
 
 def test_a_refresh_cut_short_leaves_the_page_as_it_was(

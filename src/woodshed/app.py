@@ -152,7 +152,8 @@ class Library:
             info["complete"] = data.get("complete") is True
             # Complete but still on older page code after the start's update: its data is in a format this
             # code does not read, so only a new analysis gives it this version's page.
-            info["stale"] = manifest.parent.name in self.stale
+            # Refused at the start, and still older now: a new analysis since clears it.
+            info["stale"] = manifest.parent.name in self.stale and _older(manifest)
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             band = self._stored(manifest.parent.name)["band"]
