@@ -75,10 +75,10 @@ never hides inside a lyric line.
 
 Change the key and everything follows: the chart, the shapes, the tab, the keyboard.
 
-**For singers.** Pick **Voice**: the page opens on the words, with the next part named. Paste the
-words (**+ Add the words**), pick your voice type and **Transpose to** the key it suggests, then
-**Keep it for the band**: every device opens the song in your key, and the page reminds you that
-the recording stays in its own. Tap a line's time to sing from there; stage mode shows the words
+**For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
+words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,
+then, in the library, **Keep E♭ for the band** (the button names your key): every device opens the
+song in it, and the page reminds you that the recording stays in its own. Tap a line's time to sing from there; stage mode shows the words
 big, your line lit, and the next part coming. The ChordPro export is in the key the page shows, the band's key included.
 
 ### A method, not just a chart
@@ -136,7 +136,7 @@ becomes a practice page: first with the full mix after a few seconds, then with 
 track. Export any song to **ChordPro** with its words and parts (OnSong, SongbookPro), **MIDI**,
 **MusicXML** (MuseScore), a
 chord timeline (`.lab`) or **JSON**, or print a compact chart for the music stand: about two A4 pages
-for a song with its words, each part kept on one page, the song's guitar shapes on top when Guitar
+for a song with its words, each part kept on one page when it fits, the song's guitar shapes on top when Guitar
 is picked.
 
 **Share a song**: zip its `.woodshed` folder and send it. Unzipped, `index.html` opens in any
@@ -395,7 +395,8 @@ you don't have the rights to.
   benchmark yet): on "Let It Be" (the album version, its first 2:55) against the Isophonics
   reference, chords 84.5 % right (major/minor), beats and downbeats found at 0.97 (F-measure); on a
   funk cover, the drum groove's kick and snare matched 9 bars out of 10. The bass notes' octave was
-  checked on the separated tracks of real recordings. The bass tab note by note is not measured yet: it is marked experimental in the
+  checked on the separated tracks of real recordings. These recordings and references are
+  copyrighted, so they are not in the repository. The bass tab note by note is not measured yet: it is marked experimental in the
   page, as the drum groove, and both say when the read is unsure ("no clear groove", "no bass heard
   in this bar"). Check them by ear.
 - Chords are triads by default; `--sevenths` adds 7 and m7 chords, less reliably.
