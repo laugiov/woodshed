@@ -13,7 +13,7 @@ import pytest
 
 from tests import synth
 from tests.test_app import request
-from woodshed import analysis, app, cli
+from woodshed import analysis, app, cli, stems
 from woodshed.build import DATA_BLOCK
 from woodshed.model import Song
 from woodshed.run import MANIFEST, Options, Reporter, first_pass
@@ -139,11 +139,11 @@ def test_a_page_with_parts_is_never_rebuilt_without_them(
     with pytest.raises(ValueError, match=r"^the bar lines of this song need the stems extra$"):
         lib.move_bars({"page": "pop.woodshed", "bar_phase": 1})
     monkeypatch.setattr(app, "stems_extra_installed", lambda: True)
-    monkeypatch.setattr(app.stems, "cached", lambda src: None)
+    monkeypatch.setattr(stems, "cached", lambda src: None)
     with pytest.raises(ValueError, match=r"^the separated tracks are no longer in the cache: add the song again$"):
         lib.move_bars({"page": "pop.woodshed", "bar_phase": 1})
     queued: list[Any] = []
-    monkeypatch.setattr(app.stems, "cached", lambda src: object())
+    monkeypatch.setattr(stems, "cached", lambda src: object())
     monkeypatch.setattr(lib.queue, "put", queued.append)
     lib.move_bars({"page": "pop.woodshed", "bar_phase": 1})
     assert queued[0][2].use_stems is True  # even when the library itself runs without the stems
