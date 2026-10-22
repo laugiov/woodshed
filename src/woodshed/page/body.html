@@ -82,7 +82,7 @@
     <button class="play" id="playBtn" type="button" data-testid="play" aria-label="Play">▶</button>
     <div class="wavebox">
       <canvas class="wave" id="wave" data-testid="wave" aria-label="Song waveform with sections, click to jump" role="img"></canvas>
-      <div class="wave-meta"><span id="posInfo" data-testid="position"></span><span id="loopInfo" data-testid="loop-info"></span></div>
+      <div class="wave-meta"><span id="posInfo" data-testid="position"></span><span id="keyMark" class="key-mark" data-testid="key-mark" hidden></span><span id="loopInfo" data-testid="loop-info"></span></div>
     </div>
     <div class="dock-tools" id="dockTools">
       <div class="grp"><button class="btn" id="loopBtn" type="button" data-testid="loop" title="Loop the selected bars, or the current pass (L)">⟲ Loop</button><button class="btn" id="trainBtn" type="button" data-testid="trainer" title="Starts at 70% of the song's tempo and adds 5 BPM each loop">Trainer</button></div>

@@ -424,7 +424,7 @@
       if (shown !== partShown) {
         partShown = shown;
         if (!fileOf("solo-" + stem) || !fileOf("minus-" + stem)) {
-          clear(box, h("p", { class: "part-note" }, W.t("Your part's track comes with the separated instruments: analyse the song with them.")));
+          clear(box, h("p", { class: "part-note" }, W.t("Your part's track comes with the separated instruments: analyse the song with them.")), h("div", { class: "pitch-row", "data-part": "pitch" }));
         } else {
           const shared = stem === "other"; // guitars and keys: one separated track until they are split
           const who = shared ? "guitars and keys" : s.inst; // file names stay in English
@@ -442,13 +442,13 @@
               h("span", { class: "label", id: "yourPartLabel" }, W.t("Listen to")),
               h("div", { class: "seg-ctl part", role: "group", "aria-labelledby": "yourPartLabel" },
                 choice("mix", "part-mix", W.t("Full mix")), choice("solo-" + stem, "part-alone", W.t("Your part alone")), choice("minus-" + stem, "part-without", W.t("Without your part")))),
+            h("div", { class: "pitch-row", "data-part": "pitch" }), // views/pitch.js: the recording in the chart's key
             h("div", { class: "part-files" },
               file("solo-" + stem, who + " alone", "part-download-alone", W.t("Your part (FLAC)")),
               file("minus-" + stem, "without " + who, "part-download-without", W.t("The mix without your part (FLAC)")),
               h("span", { class: "part-size" }, W.t("lossless, about 10 MB per minute of song"))),
             shared ? h("p", { class: "part-note" }, W.t("Guitars and keys are one track: your part holds both, and the mix without it leaves both out.")) : null,
             s.inst === "voice" ? h("p", { class: "part-note" }, W.t("Separated by software: some traces of the other instruments can remain.")) : null,
-            h("p", { class: "part-note", "data-part": "key" }),
           );
         }
       }
@@ -457,8 +457,7 @@
         b.classList.toggle("on", on);
         b.setAttribute("aria-pressed", String(on));
       }
-      const key = box.querySelector("[data-part=key]");
-      if (key) key.textContent = s.transpose ? W.t("The recording keeps its key.") : ""; // empty: hidden by CSS
+      if (app.renderPitch) app.renderPitch(); // the switch row, drawn by views/pitch.js
     }
 
     // The panel grows, never shrinks, while one instrument is shown (the rhythm grid and the shapes

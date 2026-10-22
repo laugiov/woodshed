@@ -281,10 +281,13 @@ class Renders:
         """For the page: each key's tracks, ready, queued, running or failed, and when each key's queue ends."""
         with self.cond:
             keys: dict[str, dict[str, str]] = {}
+            versions: dict[str, dict[str, int]] = {}  # a file rendered again gets a new URL: no browser's old copy
             folder = self.root / page / "audio" / KEY_DIR
             for d in sorted(folder.glob("*")) if folder.is_dir() else []:
                 for f in d.glob("*.flac"):
                     keys.setdefault(d.name, {})[f.stem] = "ready"
+                    with contextlib.suppress(OSError):
+                        versions.setdefault(d.name, {})[f.stem] = f.stat().st_mtime_ns // 1_000_000
             ahead = 0.0
             eta: dict[str, float] = {}
             if self.running:
@@ -302,7 +305,7 @@ class Renders:
                 if p == page:
                     keys.setdefault(key, {})[track] = "failed"
                     failed.setdefault(key, {})[track] = why
-            return {"keys": keys, "failed": failed, "eta": {k: round(v) for k, v in eta.items()}}
+            return {"keys": keys, "versions": versions, "failed": failed, "eta": {k: round(v) for k, v in eta.items()}}
 
     def stop(self) -> None:
         with self.cond:

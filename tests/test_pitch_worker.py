@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import time
 from collections.abc import Callable, Iterator
@@ -23,6 +24,11 @@ if "-filters" in args:
     if os.environ.get("FAKE_RUBBERBAND", "1") == "1":
         print(" ..C rubberband        A->A       Apply time-stretching and pitch-shifting.")
     sys.exit(0)
+if not any("rubberband" in a for a in args):  # decoding a song: the real ffmpeg, when there is one
+    real = os.environ.get("FAKE_REAL_FFMPEG")
+    if not real:
+        sys.exit(1)
+    os.execv(real, [real, *args])
 log = os.environ.get("FAKE_FFMPEG_LOG")
 src = args[args.index("-i") + 1]
 if log:
@@ -46,6 +52,7 @@ def fake_ffmpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pat
     shim.write_text(FAKE.format(python=sys.executable), encoding="utf-8")
     shim.chmod(0o755)
     log = tmp_path / "ffmpeg.log"
+    monkeypatch.setenv("FAKE_REAL_FFMPEG", shutil.which("ffmpeg") or "")
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_FFMPEG_LOG", str(log))
     pitch.available.cache_clear()

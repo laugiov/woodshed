@@ -44,6 +44,7 @@
       view: "concert", step: 1, loop: null, loopOn: false, trainer: false, countIn: false, bpm: songBpm,
       voiceType: null, stage: false, track: "mix", corrections: 0, click: false, chordSound: "guitar",
       sheet: null, // "grid" or "lyrics"; null: as suits the instrument
+      pitchStatus: null, // the recording in the chart's key (views/pitch.js): none, off, preparing, on...
       bandKey: null, // the key the band plays this song in (semitones), once the library said; null: no library
       bandNote: "", // the leader's note on this song
       wordsElsewhere: false, // a phone of the band: words are added from the computer
@@ -92,7 +93,8 @@
     const transport = W.createTransport(song.tracks, {
       onTime: (t) => store.set({ time: t, beat: song.beatAt(t), playing: transport.playing || app.counting() }),
       onEnded: () => store.set({ playing: false }),
-      onError: (err, trackId) => {
+      onError: (err, trackId, file) => {
+        if (file && file.indexOf("audio/key/") === 0 && app.pitchFailed) return app.pitchFailed(trackId, file); // a rendered key: the original again
         if (!trackId) {
           app.toast(W.t("The browser blocked playback: press play again."));
           return;
@@ -265,7 +267,9 @@
     app.transposeTo = function transposeTo(t) {
       const transpose = Math.max(-6, Math.min(6, t));
       store.set({ transpose, capo: song.capoFor(transpose) });
-      app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: W.prettyText(song.keyName(transpose)) }));
+      const name = W.prettyText(song.keyName(transpose));
+      if (transpose && app.pitchFollows && app.pitchFollows()) app.toast(W.t("Transposed to {key}: the chart, the shapes and the recording follow.", { key: name }));
+      else app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: name }));
     };
     // The band's key for this song (served by woodshed app): every device opens in it, and a change
     // made on one device reaches the others. A device already in that key just takes note of it.
@@ -276,8 +280,9 @@
       store.set({ bandKey: t, bandNote: band.note || "" });
       if (!fresh || t === s.transpose) return;
       store.set({ transpose: t, capo: song.capoFor(t) });
+      const follows = app.pitchFollows && app.pitchFollows();
       app.toast(t
-        ? W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) })
+        ? (follows ? W.t("The band plays this song in {key}: the chords and the recording follow.", { key: W.prettyText(song.keyName(t)) }) : W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) }))
         : W.t("The band plays this song in the recorded key again."));
     };
     app.keepBandKey = async () => {
@@ -826,7 +831,7 @@
     const words = W.views.words(app);
     app.openWords = () => words.open();
     W.views.barLines(app);
-    const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
+    const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app), W.views.pitch(app)];
     const chart = views[1];
     app.chart = chart; // its bars, for the tests and the console
     const editor = W.views.editor(app, chart);

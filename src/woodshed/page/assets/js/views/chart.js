@@ -434,10 +434,18 @@
 
     // In another key than the recording, the page says so while it lasts; served by woodshed app,
     // the key can be kept for the band.
+    // What the chart says of the recording's key follows the singer's-key switch (views/pitch.js).
+    function recordingNote(s, key) {
+      const st = s.pitchStatus || { state: "off" };
+      if (st.state === "on") return W.t("Chords in {key}, the recording too.", { key: key(s.transpose) });
+      if (st.state === "preparing" && st.eta) return W.t("Chords in {key}: the recording follows in about {n} s.", { key: key(s.transpose), n: st.eta });
+      return W.t("Chords in {key}: the recording plays in {original}.", { key: key(s.transpose), original: key(0) });
+    }
+
     function keyNote(s) {
       const key = (t) => W.prettyText(song.keyName(t));
       const out = [s.transpose
-        ? h("span", { class: "hint key-note", "data-testid": "key-note" }, W.t("Chords in {key}: the recording plays in {original}.", { key: key(s.transpose), original: key(0) }))
+        ? h("span", { class: "hint key-note", "data-testid": "key-note" }, recordingNote(s, key))
         : h("span", { class: "hint" }, W.t("Real chords, concert pitch"))];
       if (s.bandKey === null || !app.shareBand) return out;
       if (s.transpose !== s.bandKey) {
@@ -563,6 +571,10 @@
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
       const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere", "editing"].some((k) => changed.has(k));
+      if (!full && changed.has("pitchStatus")) {
+        const note = document.querySelector("[data-testid=key-note]"); // in place: the chart keeps its scroll
+        if (note) note.textContent = recordingNote(s, (t) => W.prettyText(song.keyName(t)));
+      }
       // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
       if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);
       else if (changed.has("beat") || changed.has("loop") || changed.has("loopOn")) paintBars(s);

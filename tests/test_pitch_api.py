@@ -57,6 +57,7 @@ def test_a_page_asks_for_a_track_in_another_key_and_gets_it(server: app.AppServe
         time.sleep(0.1)
     status, headers, body = request(server, "GET", "/One.woodshed/audio/key/up2/mix.flac")
     assert status == 200 and headers["content-type"] == "audio/flac" and body[:4] == b"fLaC"
+    assert headers["cache-control"] == "no-cache"  # rendered again under the same name: never an old copy
     assert ("One.woodshed", "up2") in server.library.renders.used if server.library.renders else False
 
 

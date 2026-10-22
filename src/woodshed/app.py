@@ -779,7 +779,9 @@ class Library:
         folder = self._page(page)
         state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch}
         return state | (
-            self.renders.state(folder) if self.renders is not None else {"keys": {}, "failed": {}, "eta": {}}
+            self.renders.state(folder)
+            if self.renders is not None
+            else {"keys": {}, "versions": {}, "failed": {}, "eta": {}}
         )
 
     def ask_pitch(self, data: Any) -> dict[str, Any]:
@@ -799,7 +801,8 @@ class Library:
         band = self._stored(folder)["band"].get("transpose")
         if type(band) is int and band:  # after a restart: the band's key is known again before any pruning
             self.renders.band.setdefault(folder, pitch.key_dir(band))
-        return {"state": self.renders.ask(folder, str(track), semitones)}
+        waited = data.get("wait") is True  # the track the page plays: ahead of the role's others
+        return {"state": self.renders.ask(folder, str(track), semitones, pitch.WAITED if waited else pitch.ROLE)}
 
     def interrupted(self) -> None:
         """The app is stopping: the song in progress did not fail, it is resumed next time."""
@@ -1503,6 +1506,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(length))
         self.send_header("Accept-Ranges", "bytes")
+        if f"/audio/{pitch.KEY_DIR}/" in "/" + rel:  # a key rendered again keeps its name: never an old copy
+            self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")

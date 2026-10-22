@@ -6,7 +6,8 @@
   const EDGE = 0.05; // a loop never reaches the very end of the file, where "ended" would stop it
 
   W.createTransport = function createTransport(tracks, { onTime, onEnded, onError, onLoop }) {
-    const els = {};
+    const els = {}; // by track id and file: a track can be played from another file (the singer's key)
+    const files = Object.fromEntries(tracks.map((t) => [t.id, t.file])); // the file each track plays from
     let current = tracks[0].id;
     let rate = 1;
     let loop = null; // [start, end] in seconds
@@ -14,16 +15,18 @@
     let timer = 0;
     let switching = Promise.resolve();
 
-    function element(id) {
-      if (!els[id]) {
+    function element(id, file = files[id]) {
+      const key = id + "|" + file;
+      if (!els[key]) {
         const t = tracks.find((x) => x.id === id);
         if (!t) throw new Error(W.t("No track {id}", { id }));
         const el = document.createElement("audio");
         el.preload = id === current ? "auto" : "none";
-        el.src = t.file;
+        el.src = file;
         el.setAttribute("data-track", id);
+        el.setAttribute("data-file", file);
         el.addEventListener("ended", () => {
-          if (el !== els[current]) return;
+          if (el !== active()) return;
           if (loop) {
             el.currentTime = loop[0];
             el.play().catch(() => {});
@@ -33,13 +36,13 @@
           stopWatching();
           onEnded && onEnded();
         });
-        el.addEventListener("error", () => onError && onError(new Error(W.t("The track {file} could not be read.", { file: t.file })), id));
+        el.addEventListener("error", () => onError && onError(new Error(W.t("The track {file} could not be read.", { file })), id, file));
         // Throttled tabs run no animation frames: timeupdate still checks the loop.
-        el.addEventListener("timeupdate", () => el === els[current] && checkLoop(el));
+        el.addEventListener("timeupdate", () => el === active() && checkLoop(el));
         document.body.appendChild(el);
-        els[id] = el;
+        els[key] = el;
       }
-      return els[id];
+      return els[key];
     }
 
     const active = () => element(current);
@@ -164,10 +167,49 @@
       return switching;
     }
 
+    // The same track from another file (the recording in another key, rendered by the library), at
+    // the same position without stopping, as a switch of track does. Resolves false (the old file
+    // still playing) when the new one cannot be read.
+    function setFile(id, file) {
+      switching = switching.then(async () => {
+        if (files[id] === file) return true;
+        if (id !== current) {
+          files[id] = file; // played from it when the track is chosen
+          return true;
+        }
+        const from = active();
+        const to = element(id, file); // the old file plays on until the new one can take over
+        to.preload = "auto";
+        applyRate(to);
+        to.currentTime = from.currentTime;
+        if (!(await ready(to))) {
+          to.remove(); // a file that failed is asked afresh next time, not from a broken element
+          delete els[id + "|" + file];
+          return false;
+        }
+        to.currentTime = from.currentTime;
+        files[id] = file;
+        if (!from.paused) {
+          try {
+            await to.play();
+          } catch (err) {
+            onError && onError(err);
+          }
+          watch();
+        }
+        from.pause();
+        from.preload = "none";
+        return true;
+      });
+      return switching;
+    }
+
     return {
       play,
       pause,
       setTrack,
+      setFile,
+      fileOf: (id) => files[id],
       get playing() {
         return !active().paused;
       },
