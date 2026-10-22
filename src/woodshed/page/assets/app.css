@@ -837,3 +837,10 @@ body.following #playBtn { opacity: 0.45; }
 .bar.edited::after { content: none; }
 .bar.edited { box-shadow: inset 0 3px 0 var(--accent); }
 body.editing .chart-hint { display: none; }
+/* Moving the bar lines (views/barlines.js). */
+.bars-dialog h2 small { font: 400 14px var(--font-body); color: var(--muted); }
+.bars-dialog .beats-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 8px; margin: 10px 0; }
+.bars-dialog .beats-pick button { min-height: 56px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--sheet); color: var(--ink); font-family: var(--font-chord); font-weight: 700; font-size: 26px; display: grid; place-items: center; cursor: pointer; }
+.bars-dialog .beats-pick button small { font: 500 11px var(--font-body); color: var(--muted); }
+.bars-dialog .beats-pick button.on { border-color: var(--accent); background: var(--accent-soft); }
+.bars-dialog .read { color: var(--muted); font-size: 14px; }

@@ -433,6 +433,7 @@
                 app.toast(W.t("The parts are the analysis's again."), { label: W.t("Undo"), run: undo });
               } }, W.t("Parts back to the analysis"))
             : null,
+          h("button", { type: "button", class: "btn", "data-testid": "bar-lines", "aria-haspopup": "dialog", onclick: () => app.openBarLines() }, W.t("Bar lines…")),
           h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-all", onclick: untypeAll }, W.t("Back to the analysis…")),
           h("button", { type: "button", class: "btn primary", "data-testid": "edit-done", onclick: () => store.set({ editing: false }) }, W.t("Done"))),
       );

@@ -814,6 +814,7 @@
     app.setStage = (on, full) => setStage(on, full);
     const words = W.views.words(app);
     app.openWords = () => words.open();
+    W.views.barLines(app);
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app)];
     const chart = views[1];
     app.chart = chart; // its bars, for the tests and the console
