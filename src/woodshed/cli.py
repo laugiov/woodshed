@@ -113,6 +113,9 @@ def app_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-open", action="store_true", help="do not open the browser")
     parser.add_argument("--no-stems", action="store_true", help="analyse the mix only")
+    parser.add_argument(
+        "--no-pitch", action="store_true", help="never render a song's tracks in another key (the singer's key)"
+    )
     parser.add_argument("--offline", action="store_true", help="never download models")
     parser.add_argument(
         "--allow-network", action="store_true",
@@ -144,7 +147,7 @@ def run_app(argv: Sequence[str]) -> int:
         parser.error("--cert and --key go together (or WOODSHED_CERT and WOODSHED_KEY)")
     from woodshed.run import Options
 
-    opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False)
+    opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False, pitch=not args.no_pitch)
     try:
         serve(
             args.library, opts, args.host, args.port, open_browser=not args.no_open,

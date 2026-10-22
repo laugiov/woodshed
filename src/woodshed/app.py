@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import audio, lyrics, stems
+from woodshed import audio, lyrics, pitch, stems
 from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
@@ -156,6 +156,12 @@ class Library:
         self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
         self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
         self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
+        # The recording in another key (spec 007): rendered one track at a time, never during an analysis.
+        self.renders = (
+            pitch.Renders(self.root, busy=lambda: self.running is not None, free_margin=FREE_MARGIN)
+            if opts.pitch and pitch.available()
+            else None
+        )
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -464,7 +470,11 @@ class Library:
                 band.pop("note", None)
             stored["band"] = band
             rev = self._write(folder, stored)
-            return {"band": band, "rev": rev}
+        if self.renders is not None and "transpose" in change:  # the band's key, ready on every device
+            audio_dir = self.root / folder / "audio"
+            voice = [t for t in ("mix", "solo-vocals", "minus-vocals") if (audio_dir / f"{t}.flac").is_file()]
+            self.renders.set_band_key(folder, int(band.get("transpose", 0)), voice)
+        return {"band": band, "rev": rev}
 
     def _write(self, folder: str, stored: dict[str, Any]) -> int:
         """Under the lock: the page's corrections and band choices, with the next revision."""
@@ -675,6 +685,8 @@ class Library:
                 continue
             report = JobReporter(job)
             note = self.attempt(path)
+            if self.renders is not None:  # the page's files are rebuilt: its renders are of the old ones
+                self.renders.cancel_page(job.page or folder_name(path.stem))
             with self.lock:
                 if self.stopping.is_set():
                     return
@@ -762,8 +774,37 @@ class Library:
         with contextlib.suppress(OSError):
             note.write_text(job.message, encoding="utf-8")
 
+    def pitch_state(self, page: Any) -> dict[str, Any]:
+        """For a song page: can this library change the recording's key, and where its renders are."""
+        folder = self._page(page)
+        state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch}
+        return state | (
+            self.renders.state(folder) if self.renders is not None else {"keys": {}, "failed": {}, "eta": {}}
+        )
+
+    def ask_pitch(self, data: Any) -> dict[str, Any]:
+        """{page, track, semitones}: one of the page's tracks in another key, queued for rendering."""
+        if not isinstance(data, dict):
+            raise ValueError("an object with page, track and semitones")
+        folder = self._page(data.get("page"))
+        track, semitones = data.get("track"), data.get("semitones")
+        if type(semitones) is not int or not -6 <= semitones <= 6 or semitones == 0:
+            raise ValueError("semitones: -6 to 6, not 0")
+        audio_dir = self.root / folder / "audio"
+        known = isinstance(track, str) and re.fullmatch(r"mix|(solo|minus)-[a-z]{1,16}", track) is not None
+        if not known or track in pitch.UNPITCHED or not (audio_dir / f"{track}.flac").is_file():
+            raise ValueError("track: one of the page's pitched tracks")
+        if self.renders is None:
+            raise PermissionError("this library cannot change the key")
+        band = self._stored(folder)["band"].get("transpose")
+        if type(band) is int and band:  # after a restart: the band's key is known again before any pruning
+            self.renders.band.setdefault(folder, pitch.key_dir(band))
+        return {"state": self.renders.ask(folder, str(track), semitones)}
+
     def interrupted(self) -> None:
         """The app is stopping: the song in progress did not fail, it is resumed next time."""
+        if self.renders is not None:
+            self.renders.stop()  # a render's ffmpeg child stops with the app
         with self.lock:
             self.stopping.set()
             if self.running is not None:
@@ -1205,6 +1246,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.OK, {"token": self.server.token})
         elif path == "/api/setlist":
             self._json(HTTPStatus.OK, {"songs": self.server.library.setlist()})
+        elif path == "/api/pitch":
+            try:
+                page = parse_qs(urlsplit(self.path).query).get("page", [""])[0]
+                self._json(HTTPStatus.OK, self.server.library.pitch_state(page))
+            except ValueError as exc:
+                self._error(HTTPStatus.BAD_REQUEST, str(exc))
         elif path == "/api/corrections":
             query = parse_qs(urlsplit(self.path).query)
             try:
@@ -1238,7 +1285,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
-        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band"):
+        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band", "/api/pitch"):
             self._small_json_post(url.path)
             return
         if url.path == "/api/network":
@@ -1310,7 +1357,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
         limits |= {"/api/edits": CORRECTIONS_BYTES, "/api/bars": 4096}
-        limits |= {"/api/band": 4096, "/api/network": 4096}
+        limits |= {"/api/band": 4096, "/api/network": 4096, "/api/pitch": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
         if chunked or not 0 < length <= limit:
@@ -1348,6 +1395,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, saved)
             elif path == "/api/lyrics":
                 self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.add_words(data)))
+            elif path == "/api/pitch":
+                try:
+                    self._json(HTTPStatus.ACCEPTED, self.server.library.ask_pitch(data))
+                except pitch.Full as exc:
+                    self._error(HTTPStatus.TOO_MANY_REQUESTS, str(exc))
             elif path == "/api/bars":
                 self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.move_bars(data, self.server.live.playing)))
             elif path == "/api/network":
@@ -1422,6 +1474,11 @@ class Handler(BaseHTTPRequestHandler):
         if hidden or not target.is_relative_to(root) or not target.is_file():
             self._error(HTTPStatus.NOT_FOUND, "not found")
             return
+        renders = self.server.library.renders
+        if renders is not None and root == self.server.library.root:
+            parts = Path(rel).parts
+            if len(parts) > 4 and parts[1:3] == ("audio", pitch.KEY_DIR):
+                renders.touch(parts[0], parts[3])  # a phone plays this key: never pruned under it
         kind = TYPES.get(target.suffix.lower()) or mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         size = target.stat().st_size
         start, end = 0, size - 1
