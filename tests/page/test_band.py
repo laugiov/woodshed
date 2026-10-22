@@ -433,12 +433,21 @@ def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server:
         page.emulate_media(media="print")
         expect(page.get_by_test_id("set-panel")).to_be_visible()
         expect(page.get_by_test_id("set-summary")).to_be_visible()  # the total at the top
-        title = items.first.locator("a").evaluate("(a) => parseFloat(getComputedStyle(a).fontSize)")
+        # Measured in one go on the live list: the library's poll redraws it, and a row read while it is
+        # replaced has no style (NaN).
+        until(
+            page,
+            "(() => { const li = document.querySelector('[data-testid=set-item]');"
+            " return li && li.isConnected && parseFloat(getComputedStyle(li.querySelector('a')).fontSize) > 0; })()",
+        )
+        title, key, row = page.evaluate(
+            "() => { const li = document.querySelector('[data-testid=set-item]');"
+            " return [parseFloat(getComputedStyle(li.querySelector('a')).fontSize),"
+            " getComputedStyle(li.querySelector('.set-facts .sk')).fontWeight, li.getBoundingClientRect().height]; }"
+        )
         assert title >= 24  # 18 pt
-        key = items.first.locator(".set-facts .sk").evaluate("(s) => getComputedStyle(s).fontWeight")
         assert int(key) >= 700
         # Facts on the title's row: a song without a note takes one line, some 25 songs an A4 page.
-        row = items.first.evaluate("(li) => li.getBoundingClientRect().height")
         assert row <= 42
         expect(page.get_by_test_id("library")).to_be_hidden()
         expect(page.get_by_test_id("band-network")).to_be_hidden()
