@@ -1655,6 +1655,7 @@ def running_url(port: int) -> str | None:
     this_computer = ssl.create_default_context()
     this_computer.check_hostname = False  # 127.0.0.1 asking itself: the certificate is for the phones
     this_computer.verify_mode = ssl.CERT_NONE
+
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *args: Any, **kwargs: Any) -> None:
             return None  # woodshed answers itself: another service's redirect is not followed
