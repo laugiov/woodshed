@@ -520,8 +520,8 @@ def test_a_removal_made_offline_reaches_the_band_when_the_app_answers_again(
 
 def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
-    phone = {"viewport": {"width": 390, "height": 844}, "has_touch": True, "is_mobile": True, "locale": "en-US"}
-    context = browser.new_context(**phone)
+    size: Any = {"width": 390, "height": 844}
+    context = browser.new_context(viewport=size, has_touch=True, is_mobile=True, locale="en-US")
     page = context.new_page()  # a phone: no hover, so the buttons' titles are never seen
     # Firefox's automation layer warns about its own layout calls (chrome://juggler): not the page.
     page.on(
