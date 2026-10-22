@@ -40,6 +40,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from woodshed import audio, lyrics
+from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
@@ -71,6 +72,14 @@ CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never ser
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
 NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
 DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
+# The band's typed chords and part names (core/edits.js), by the beat they start on.
+EDITS_BARS_MAX = 1000
+EDITS_PARTS_MAX = 200
+EDIT_CHORDS_MAX = 64  # chords in one typed bar
+LABEL_MAX = 24
+PART_NAME_MAX = 40  # code points
+BEAT_INDEX = re.compile(r"-?[0-9]{1,6}")
+UNSAFE = re.compile("[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]")  # control and direction overrides
 KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
 TYPES = {
     ".flac": "audio/flac",
@@ -137,6 +146,7 @@ class Library:
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
         self.doubt_ids: dict[str, tuple[int, tuple[str, set[str]] | None]] = {}  # folder -> (stamp, (key, ids))
+        self.doubt_beats: dict[str, tuple[int, tuple[str, dict[str, set[int]]] | None]] = {}  # as doubt_ids
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -225,7 +235,46 @@ class Library:
         if found is None:
             return None
         key, ids = found
-        return len(ids - set(self._stored(page.name)["by_key"].get(key, {})))
+        stored = self._stored(page.name)
+        left = ids - set(stored["by_key"].get(key, {}))
+        spans = self._doubt_beats(page)
+        if spans is not None and left:
+            grid, beats_of = spans
+            typed = stored["edits"].get(grid, {}).get("bars", {})
+            covered = {int(at) + k for at, e in typed.items() for k in range(sum(n for n, _ in e["chords"]))}
+            left = {d for d in left if beats_of.get(d, set()).isdisjoint(covered)}
+        return len(left)
+
+    def _doubt_beats(self, page: Path) -> tuple[str, dict[str, set[int]]] | None:
+        """A page's beat grid key and, per chord to check, the beats it covers (as song.beats counts them):
+        a typed bar over any of them settles it."""
+        index = page / "index.html"
+        try:
+            stamp = index.stat().st_mtime_ns
+        except OSError:
+            return None
+        cached = self.doubt_beats.get(page.name)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        found: tuple[str, dict[str, set[int]]] | None
+        try:
+            block = DATA_BLOCK.search(index.read_text(encoding="utf-8"))
+            if block is None:
+                raise ValueError("not a woodshed page")
+            song = json.loads(block.group(1))["song"]
+            per, first = song["beats_per_bar"], song["first_beat"]
+            beats_of: dict[str, set[int]] = {}
+            for u, bar in enumerate(song["bars"]):
+                at = first + u * per
+                for c in bar["chords"]:
+                    if c.get("doubt") and c["doubt"].get("kind") == "chord":
+                        beats_of[str(c["doubt"]["id"])] = set(range(at, at + c["beats"]))
+                    at += c["beats"]
+            found = (beats_key(song), beats_of)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            found = None
+        self.doubt_beats[page.name] = (stamp, found)
+        return found
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
@@ -270,7 +319,7 @@ class Library:
 
     def _stored(self, folder: str) -> dict[str, Any]:
         """What the library holds for a page; an entry damaged by hand is skipped, the others kept."""
-        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}}
+        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}, "edits": {}}
         try:
             data = json.loads(self._corrections_file(folder).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -290,22 +339,44 @@ class Library:
                 out["removed"][key] = _checked_removed(gone)
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
+        kept = data.get("edits")
+        for key, entry in kept.items() if isinstance(kept, dict) else []:
+            try:
+                checked = _checked_edits({"key": key, "bars": entry["bars"], "parts": entry["parts"]})
+                gone = _checked_edits(
+                    {"key": key, "bars": entry["removed_bars"], "parts": entry["removed_parts"]}, removals=True
+                )
+                out["edits"][key] = {
+                    "bars": checked["bars"],
+                    "parts": checked["parts"],
+                    "removed_bars": gone["bars"],
+                    "removed_parts": gone["parts"],
+                    "at": float(entry.get("at", 0)),
+                }
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
         return out
 
-    def corrections(self, folder: Any, key: Any) -> dict[str, Any]:
+    def corrections(self, folder: Any, key: Any, edits: Any = None) -> dict[str, Any]:
         folder = self._page(folder)
         if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
             raise ValueError("key: the analysis the corrections belong to")
         stored = self._stored(folder)
         rev = max(stored["rev"], self.revisions.get(folder, 0))
         removed = stored["removed"].get(key, {})
-        return {
+        answer = {
             "key": key,
             "fixes": stored["by_key"].get(key, {}),
             "rev": rev,
             "band": stored["band"],
             "removed": removed,
         }
+        if edits is not None:  # the typed chords and parts of this beat grid (core/edits.js)
+            if not isinstance(edits, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", edits):
+                raise ValueError("edits: the beat grid the edits belong to")
+            entry = stored["edits"].get(edits, {})
+            answer["edits"] = {k: entry.get(k, {}) for k in ("bars", "parts", "removed_bars", "removed_parts")}
+        return answer
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
@@ -320,14 +391,9 @@ class Library:
             # device still holding the old fix drops it instead of sharing it again.
             # Each removal keeps the fix it removed: a device drops its copy only when it is that one,
             # so a newer correction made offline is not lost to an older removal.
-            merged = dict(stored["by_key"].get(key, {}))
-            removed = dict(stored["removed"].get(key, {}))
-            for doubt, fix in checked["fixes"].items():
-                if fix is None:  # said again (a device sharing it twice): the fix first removed is kept
-                    removed[doubt] = merged.pop(doubt, removed.get(doubt))
-                else:
-                    merged[doubt] = fix
-                    removed.pop(doubt, None)
+            merged, removed = _merge_keyed(
+                stored["by_key"].get(key, {}), stored["removed"].get(key, {}), checked["fixes"]
+            )
             if len(removed) > CORRECTIONS_MAX:
                 raise ValueError("fixes: chords by doubt id")
             if len(merged) > CORRECTIONS_MAX:
@@ -341,6 +407,41 @@ class Library:
                 stored["at"].pop(old, None)
             rev = self._write(folder, stored)
             return {"key": key, "fixes": merged, "rev": rev, "band": stored["band"], "removed": removed}
+
+    def set_edits(self, data: Any) -> dict[str, Any]:
+        """The band's typed bars and part names for one beat grid, merged entry by entry like the picks."""
+        if not isinstance(data, dict):
+            raise ValueError("edits: a JSON object")
+        folder = self._page(data.get("page"))
+        checked = _checked_edits(data, removals=True)
+        key = checked["key"]
+        with self.lock:
+            stored = self._stored(folder)
+            entry = stored["edits"].get(key, {})
+            bars, removed_bars = _merge_keyed(entry.get("bars", {}), entry.get("removed_bars", {}), checked["bars"])
+            parts, removed_parts = _merge_keyed(
+                entry.get("parts", {}), entry.get("removed_parts", {}), checked["parts"]
+            )
+            if (
+                max(len(bars), len(removed_bars)) > EDITS_BARS_MAX
+                or max(len(parts), len(removed_parts)) > EDITS_PARTS_MAX
+            ):
+                raise ValueError("edits: too many typed bars or parts")
+            stored["edits"][key] = {
+                "bars": bars,
+                "parts": parts,
+                "removed_bars": removed_bars,
+                "removed_parts": removed_parts,
+                "at": time.time(),
+            }
+            for old in sorted(stored["edits"], key=lambda k: stored["edits"][k]["at"])[:-CORRECTIONS_KEYS]:
+                stored["edits"].pop(old)  # the beat grids of long ago
+            rev = self._write(folder, stored)
+            return {
+                "key": key,
+                **{k: stored["edits"][key][k] for k in ("bars", "parts", "removed_bars", "removed_parts")},
+                "rev": rev,
+            }
 
     def set_band(self, data: Any) -> dict[str, Any]:
         """The band's own choices for a song, from any device: the key it plays in, the leader's note."""
@@ -378,6 +479,8 @@ class Library:
         }
         if stored["band"]:
             body["band"] = stored["band"]
+        if stored.get("edits"):
+            body["edits"] = stored["edits"]
         target = self._corrections_file(folder)
         target.parent.mkdir(exist_ok=True)
         tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}")
@@ -619,6 +722,15 @@ def _as_js(value: Any) -> Any:
     return value
 
 
+def _fnv1a(text: str) -> str:
+    """fnv1a in app.js, over UTF-16 code units as charCodeAt reads them."""
+    h = 0x811C9DC5
+    units = text.encode("utf-16-le")
+    for i in range(0, len(units), 2):
+        h = ((h ^ int.from_bytes(units[i : i + 2], "little")) * 0x01000193) & 0xFFFFFFFF
+    return format(h, "x")
+
+
 def analysis_key(song: dict[str, Any]) -> str:
     """The key the page keeps its corrections under (fnv1a in app.js): what a correction depends on,
     the chords, their doubts and the beats."""
@@ -626,12 +738,85 @@ def analysis_key(song: dict[str, Any]) -> str:
         [[c["pc"], c["quality"], c["beats"], c["doubt"]["id"] if c.get("doubt") else None] for c in b["chords"]]
         for b in song["bars"]
     ]
-    text = json.dumps(_as_js([chords, song["beats"]]), separators=(",", ":"), ensure_ascii=False)
-    h = 0x811C9DC5
-    units = text.encode("utf-16-le")
-    for i in range(0, len(units), 2):  # charCodeAt: UTF-16 code units
-        h = ((h ^ int.from_bytes(units[i : i + 2], "little")) * 0x01000193) & 0xFFFFFFFF
-    return format(h, "x")
+    return _fnv1a(json.dumps(_as_js([chords, song["beats"]]), separators=(",", ":"), ensure_ascii=False))
+
+
+def beats_key(song: dict[str, Any]) -> str:
+    """The key the page keeps typed chords and parts under (core/edits.js): the beats alone, in whole
+    milliseconds, so a new analysis on the same beats (the bar lines moved) keeps them."""
+    return _fnv1a(json.dumps([math.floor(t * 1000 + 0.5) for t in song["beats"]], separators=(",", ":")))
+
+
+def _merge_keyed(
+    current: dict[str, Any], removed: dict[str, Any], changes: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Two devices changing one store at once: both kept, the later value of an entry wins. None takes
+    an entry back and remembers what it took back (said again, the first removal is kept), so a device
+    still holding that value drops it instead of sharing it again, and keeps a newer one of its own."""
+    merged, gone = dict(current), dict(removed)
+    for k, value in changes.items():
+        if value is None:
+            gone[k] = merged.pop(k, gone.get(k))
+        else:
+            merged[k] = value
+            gone.pop(k, None)
+    return merged, gone
+
+
+def _checked_edits(data: Any, removals: bool = False) -> dict[str, Any]:
+    """{"key", "bars", "parts"} as core/edits.js writes them; with `removals`, null takes an entry back."""
+    key = data.get("key")
+    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
+        raise ValueError("key: the beat grid the edits belong to")
+    bars, parts = data.get("bars", {}), data.get("parts", {})
+    if (
+        not isinstance(bars, dict)
+        or len(bars) > EDITS_BARS_MAX
+        or not isinstance(parts, dict)
+        or len(parts) > EDITS_PARTS_MAX
+    ):
+        raise ValueError("edits: typed bars and parts by beat")
+    out: dict[str, Any] = {"key": key, "bars": {}, "parts": {}}
+    for at, bar in bars.items():
+        if not BEAT_INDEX.fullmatch(at):
+            raise ValueError("bars: by the beat they start on")
+        if bar is None and removals:
+            out["bars"][at] = None
+            continue
+        chords = bar.get("chords") if isinstance(bar, dict) else None
+        t = bar.get("t") if isinstance(bar, dict) else None
+        if not isinstance(chords, list) or not 0 < len(chords) <= EDIT_CHORDS_MAX:
+            raise ValueError("bars: chords as [beats, label]")
+        if not isinstance(t, (int, float)) or isinstance(t, bool) or not 0 <= t < 86400:
+            raise ValueError("bars: the time of the bar")
+        kept = []
+        for chord in chords:
+            n, label = chord if isinstance(chord, list) and len(chord) == 2 else (None, None)
+            if type(n) is not int or not 0 < n <= EDIT_CHORDS_MAX:
+                raise ValueError("bars: chords as [beats, label]")
+            if (
+                not isinstance(label, str)
+                or len(label) > LABEL_MAX
+                or isinstance(chord_grammar.parse(label), chord_grammar.Refusal)
+            ):
+                raise ValueError("bars: chords as written on a chart")
+            kept.append([n, label])
+        out["bars"][at] = {"chords": kept, "t": float(t)}
+    for at, part in parts.items():
+        if not BEAT_INDEX.fullmatch(at):
+            raise ValueError("parts: by the beat they start on")
+        if part is None and removals:
+            out["parts"][at] = None
+        elif part == {"join": True}:
+            out["parts"][at] = {"join": True}
+        elif isinstance(part, dict) and set(part) == {"name"} and isinstance(part["name"], str):
+            name = UNSAFE.sub("", part["name"]).strip()
+            if not name or len(part["name"]) > PART_NAME_MAX:
+                raise ValueError("parts: a name of 1 to 40 characters")
+            out["parts"][at] = {"name": name}
+        else:
+            raise ValueError("parts: a name or a join")
+    return out
 
 
 def _checked_band(data: Any) -> dict[str, Any]:
@@ -935,7 +1120,8 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 page, key = query.get("page", [""])[0], query.get("key", [""])[0]
-                self._json(HTTPStatus.OK, self.server.library.corrections(page, key))
+                grid = query.get("edits", [None])[0]
+                self._json(HTTPStatus.OK, self.server.library.corrections(page, key, grid))
             except ValueError as exc:
                 self._error(HTTPStatus.BAD_REQUEST, str(exc))
         elif path == "/api/live":
@@ -963,7 +1149,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
-        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/band"):
+        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band"):
             self._small_json_post(url.path)
             return
         if url.path == "/api/network":
@@ -1028,6 +1214,7 @@ class Handler(BaseHTTPRequestHandler):
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
+        limits |= {"/api/edits": CORRECTIONS_BYTES}
         limits |= {"/api/band": 4096, "/api/network": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
@@ -1055,6 +1242,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/corrections":
                 saved = self.server.library.set_corrections(data)
                 self.server.live.corrected(data["page"], saved["rev"])
+                self._json(HTTPStatus.OK, saved)
+            elif path == "/api/edits":
+                saved = self.server.library.set_edits(data)
+                self.server.live.corrected(data["page"], saved["rev"])  # every device draws the chart again
                 self._json(HTTPStatus.OK, saved)
             elif path == "/api/band":
                 saved = self.server.library.set_band(data)
