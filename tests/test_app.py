@@ -142,9 +142,11 @@ def test_with_stems_the_page_is_listed_before_the_separation_ends(
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             state = json.loads(request(srv, "GET", "/api/songs")[2])
-            if state["songs"]:
+            # The page is listed a moment before the job says it separates: both are waited for.
+            if state["songs"] and state["jobs"][0]["status"] == "separating":
                 break
             time.sleep(0.2)
+        # The separation is held at the gate: the page is there, not complete, while it runs.
         assert state["songs"][0]["complete"] is False and state["jobs"][0]["status"] == "separating"
         gate.set()
         state = wait_done(srv)
