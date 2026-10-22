@@ -40,7 +40,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from woodshed import audio, lyrics
-from woodshed.build import DATA_BLOCK, folder_name
+from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
 from woodshed.run import (
@@ -149,6 +149,10 @@ class Library:
             except (OSError, ValueError, KeyError, TypeError):
                 continue
             info["complete"] = data.get("complete") is True
+            # Complete but still on older page code after the start's update: its data is in a format this
+            # code does not read, so only a new analysis gives it this version's page.
+            settings = data.get("settings")
+            info["stale"] = info["complete"] and isinstance(settings, dict) and settings.get("page") != page_revision()
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             band = self._stored(manifest.parent.name)["band"]

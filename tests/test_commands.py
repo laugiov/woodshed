@@ -653,6 +653,25 @@ def test_the_library_updates_its_pages_when_it_starts(tmp_path: Path, cache: Pat
     assert lib.update_pages() == []  # up to date now
 
 
+def test_a_page_the_library_cannot_update_is_said_stale(tmp_path: Path, cache: Path) -> None:
+    from woodshed import app
+    from woodshed.run import Options
+    from woodshed.view import VIEW_VERSION
+
+    library = tmp_path / "library"
+    for name in ("pop", "waltz"):
+        assert cli.main([str(synth.write(name, tmp_path).wav), "--no-stems", "--no-open", "-o", str(library)]) == 0
+    old = library / "pop.woodshed"
+    _as_built_by_an_older_woodshed(old)
+    index = old / "index.html"
+    text = index.read_text(encoding="utf-8")
+    index.write_text(text.replace(f'"view_version":{VIEW_VERSION}', f'"view_version":{VIEW_VERSION - 1}'), "utf-8")
+    lib = app.Library(library, Options(use_stems=False, open_page=False))
+    assert lib.update_pages() == []  # its data is not what this page code reads
+    stale = {p["folder"]: p.get("stale", False) for p in lib.pages()}
+    assert stale == {"pop.woodshed": True, "waltz.woodshed": False}  # the home page says to analyse it again
+
+
 def test_a_refresh_cut_short_leaves_the_page_as_it_was(
     tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
