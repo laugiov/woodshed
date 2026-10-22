@@ -58,8 +58,9 @@
     return out;
   }
 
-  // `played`: the slots the drums' rule keeps, drawn solid; the others faint and small.
-  function rhythmGrid(label, shares, per, id, played) {
+  // `played`: the slots the drums' rule keeps, drawn solid; the others faint and small, or not at
+  // all when `onlyPlayed` (a read with no clear groove: nothing to make a drummer see one).
+  function rhythmGrid(label, shares, per, id, onlyPlayed) {
     const counts = I.counts(per);
     return h(
       "div",
@@ -70,7 +71,7 @@
         h("span", { class: "rl" }, name),
         row.map((v, i) => {
           const hit = on ? on[i] : null;
-          const size = v < 0.1 ? 0 : hit === false ? 4 + Math.round(v * 6) : 6 + Math.round(v * 12);
+          const size = v < 0.1 || (onlyPlayed && hit === false) ? 0 : hit === false ? 4 + Math.round(v * 6) : 6 + Math.round(v * 12);
           const opacity = hit === false ? 0.3 : 0.25 + v * 0.75;
           return h(
             "span",
@@ -223,8 +224,24 @@
       if (s.loopOn && s.loop) {
         const [a, b] = s.loop;
         const last = Math.min(b, a + 15);
+        // Bars with no bass are one line, not blocks of empty tab: "Bars 1–4: no bass heard."
         const bars = [];
-        for (let v = a; v <= last; v++) bars.push(...bassTab(v, s, W.t("Bar {n}", { n: v + 1 })));
+        let silent = [];
+        const flush = () => {
+          if (!silent.length) return;
+          const [from, to] = [silent[0] + 1, silent[silent.length - 1] + 1];
+          bars.push(h("p", { class: "hint", "data-testid": "bass-silent" }, from === to ? W.t("Bar {n}: no bass heard.", { n: from }) : W.t("Bars {from}–{to}: no bass heard.", { from, to })));
+          silent = [];
+        };
+        for (let v = a; v <= last; v++) {
+          if (!(parts.bass[v] || []).some(Boolean)) {
+            silent.push(v);
+            continue;
+          }
+          flush();
+          bars.push(...bassTab(v, s, W.t("Bar {n}", { n: v + 1 })));
+        }
+        flush();
         return [
           h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(last < b ? W.t("Bars {from}–{to}, the first sixteen of the loop {tag}", { from: a + 1, to: last + 1 }) : W.t("Bars {from}–{to}, looped {tag}", { from: a + 1, to: last + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
           bars,
@@ -302,7 +319,7 @@
       return [
         h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Main groove {tag}"), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
         song.per === 4 && hits.clear ? h("div", { class: "staffbox", id: "drumStaff", "data-testid": "drum-staff", "aria-label": W.t("Drum notation of the main groove") }) : null,
-        rhythmGrid([[W.t("Hi-hat"), g.hat, hits.hat], [W.t("Snare"), g.snare, hits.snare], [W.t("Kick"), g.kick, hits.kick]], null, song.per, "grooveGrid"),
+        rhythmGrid([[W.t("Hi-hat"), g.hat, hits.hat], [W.t("Snare"), g.snare, hits.snare], [W.t("Kick"), g.kick, hits.kick]], null, song.per, "grooveGrid", !hits.clear),
         h("div", { class: "legend-row" }, h("span", null, W.t("Solid dot: played in more than half the bars; faint: now and then")), song.per === 4 && hits.clear ? h("span", null, W.t("Notation: hits played in more than half the bars")) : null),
         h(
           "div",
@@ -318,11 +335,13 @@
     // bars. What no bar mostly plays is said, not invented; an agreement only for what is played.
     function grooveText(g, pct) {
       const hits = I.grooveHits(g);
-      const said = [W.t("Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.", { bars: g.bars })];
+      const said = [W.t("Read from the drum track, isolated on this computer, over the {bars} bars of {total} where the drums play.", { bars: g.bars, total: song.bars.length })];
       const [kick, snare, hat] = ["kick", "snare", "hat"].map((k) => I.playedText(hits[k], song.per));
       if (!hits.clear) {
-        said.push(W.t("No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here."));
-        if (hat) said.push(W.t("Hi-hat on {hits}.", { hits: hat })); // a steady hi-hat is still a steady hi-hat
+        // A steady hi-hat over no steady kick nor snare: said as it is, not as "no groove at all".
+        said.push(hat
+          ? W.t("No kick or snare groove: neither comes back in most bars. Hi-hat on {hits}. Trust your ears for the rest.", { hits: hat })
+          : W.t("No clear groove: no kick nor snare comes back in most bars, so none is written down. Trust your ears here."));
         return said.join(" ");
       }
       said.push(kick ? W.t("Kick on {hits}.", { hits: kick }) : W.t("No kick in more than half the bars."));

@@ -228,7 +228,7 @@
     "No words placed from here: the text pasted may stop before the song does.": "Plus de paroles placées à partir d'ici : le texte collé s'arrête peut-être avant le morceau.",
     "If a phone cannot open it: your computer may have asked whether woodshed (or Python) may accept incoming connections; allow it on private networks.":
       "Si un téléphone ne l'ouvre pas : ton ordinateur a peut-être demandé si woodshed (ou Python) peut accepter des connexions entrantes ; autorise-le sur les réseaux privés.",
-    "Next: {part}": "Ensuite : {part}",
+    "Next part: {part}": "Partie suivante : {part}",
     "next": "ensuite",
     "Tap: back to the start of this part. Twice: the part before.": "Une fois : retour au début de cette partie. Deux fois : la partie d'avant.",
     "Back to the analysis": "Revenir à l'analyse",
@@ -334,6 +334,8 @@
     "Transcribed from the isolated bass track, at the pitch heard: onsets only, a note lasts until the next one. Faint notes are less certain.":
       "Transcrit d'après la piste de basse séparée, à la hauteur entendue : les attaques seulement, une note dure jusqu'à la suivante. Les notes pâles sont moins sûres.",
     "Bars {from}–{to}, the first sixteen of the loop {tag}": "Mesures {from} à {to}, les seize premières de la boucle {tag}",
+    "Bar {n}: no bass heard.": "Mesure {n} : pas de basse entendue.",
+    "Bars {from}–{to}: no bass heard.": "Mesures {from} à {to} : pas de basse entendue.",
     "Bars {from}–{to}, looped {tag}": "Mesures {from} à {to}, en boucle {tag}",
     "Now: {chord} in root position. Orange outline: the next chord, {next}.":
       "Maintenant : {chord} en position fondamentale. Contour orange : l'accord suivant, {next}.",
@@ -357,8 +359,10 @@
     "Notation: hits played in more than half the bars": "Notation : frappes jouées dans plus de la moitié des mesures",
     "▶ Hear the groove": "▶ Écouter le groove",
     "▶ Groove with the band": "▶ Groove avec le groupe",
-    "Read from the drum track, isolated on this computer, over the {bars} bars where the drums play.":
-      "Lu sur la piste de batterie, séparée sur cet ordinateur, sur les {bars} mesures où la batterie joue.",
+    "Read from the drum track, isolated on this computer, over the {bars} bars of {total} where the drums play.":
+      "Lu sur la piste de batterie, séparée sur cet ordinateur, sur les {bars} mesures (sur {total}) où la batterie joue.",
+    "No kick or snare groove: neither comes back in most bars. Hi-hat on {hits}. Trust your ears for the rest.":
+      "Pas de groove de grosse caisse ni de caisse claire : ni l'une ni l'autre ne revient dans la plupart des mesures. Charley sur {hits}. Fie-toi à ton oreille pour le reste.",
     "Kick on {hits}.": "Grosse caisse sur {hits}.",
     "Snare on {hits}.": "Caisse claire sur {hits}.",
     "No kick in more than half the bars.": "Pas de grosse caisse dans plus de la moitié des mesures.",

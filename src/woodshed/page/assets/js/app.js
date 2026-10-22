@@ -743,9 +743,9 @@
         return;
       }
       // Space plays or pauses, whatever button has the focus (a page-turner pedal sends Space, and a
-      // click on Trainer must not make Space toggle it); in a menu or the doubt pop it presses the
-      // button, as a keyboard user expects there.
-      if (k === " " && !e.target.closest(".menu, #pop")) {
+      // click on Trainer must not make Space toggle it); in a menu, the doubt pop or on the language
+      // and theme buttons it presses the button, as a keyboard user expects there.
+      if (k === " " && !e.target.closest(".menu, #pop, .prefs")) {
         e.preventDefault();
         app.togglePlay();
       } else if (k === "ArrowRight" || k === "PageDown") {
@@ -890,7 +890,7 @@
     // Firefox presses a focused button when Space is released: Space played or paused already.
     document.addEventListener("keyup", (e) => {
       const button = e.key === " " && e.target.closest && e.target.closest("button");
-      if (button && !button.closest(".menu, #pop, dialog")) e.preventDefault();
+      if (button && !button.closest(".menu, #pop, dialog, .prefs")) e.preventDefault();
     });
     function renderStagePlay(s) {
       $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones

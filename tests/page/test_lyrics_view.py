@@ -227,7 +227,7 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
     if variant in ("lyrics-stacked", "lyrics-midline"):
         # One chord a word: the chords before it on a row of their own, bar by bar.
         assert not re.search(r"\] *\[[^\]]*\]\w", text) and "][" not in text
-        assert re.search(r"^\[[^\]]+\]$", text, re.M)  # a chord row above the line
+        assert re.search(r"^\| \[[^\]]+\] \|$", text, re.M)  # a chord row above the line, framed by bar lines
         assert "{comment: check by ear: " in text and "(" in text.split("check by ear: ")[1].split("}")[0]
 
 

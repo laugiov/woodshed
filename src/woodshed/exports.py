@@ -197,7 +197,8 @@ def _sung(
                 bars.append([])
                 last = p["bar"]
             bars[-1].append(name(p))
-        return [" | ".join(" ".join(b) for b in bars[i : i + 4]) for i in range(0, len(bars), 4)]
+        # Framed by bar lines, as every chord row: "| [D] | [C#m] [E] |".
+        return ["| " + " | ".join(" ".join(b) for b in bars[i : i + 4]) + " |" for i in range(0, len(bars), 4)]
 
     begin = {li: min(s for s, _ in ws if s == s) for li, ws in timed.items()}
     finish = {li: max(e for _, e in ws if e == e) for li, ws in timed.items()}

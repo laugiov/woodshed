@@ -832,7 +832,7 @@ def test_a_drum_read_with_no_steady_hit_says_so_instead_of_inventing_one(open_pa
     o = open_page("pop", variant="groove-loose")
     o.page.get_by_test_id("inst-drums").click()
     text = o.page.locator("#desk").inner_text()
-    assert "No clear groove" in text and "Trust your ears" in text
+    assert "No kick or snare groove" in text and "Trust your ears" in text  # its hi-hat is steady
     assert "kick on" not in text.lower() and "snare on" not in text.lower()
 
 
@@ -1030,6 +1030,7 @@ def test_the_drum_text_notation_and_grid_tell_one_story(open_page: Any, groove: 
     if groove == "diffuse":
         assert "No clear groove" in text and "Kick on" not in text
         expect(played).to_have_count(0)  # nothing drawn as played
+        expect(o.page.locator("#grooveGrid .dot")).to_have_count(0)  # nor faintly: no groove to see
         expect(o.page.get_by_test_id("drum-staff")).to_have_count(0)  # no notation of a groove not there
     else:
         assert "Kick on 1 and the & of 3" in text and "Snare on 2 and 4" in text
@@ -1151,7 +1152,7 @@ def _row(on: dict[int, float], rest: float = 0.0) -> list[float]:
         # The Rival Within: kick and snare under half the bars, a steady hi-hat on the beats.
         ({"kick": _row({0: 0.4, 4: 0.49, 8: 0.4, 12: 0.42}), "snare": _row({0: 0.39, 4: 0.29, 8: 0.35, 12: 0.34}),
           "hat": _row({0: 0.82, 4: 0.65, 8: 0.72, 12: 0.64}, 0.1)},
-         "Trust your ears here. Hi-hat on 1, 2, 3 and 4."),
+         "No kick or snare groove: neither comes back in most bars. Hi-hat on 1, 2, 3 and 4."),
     ],
 )  # fmt: skip
 def test_the_drum_text_says_a_pattern_as_a_drummer_does(open_page: Any, groove: dict[str, Any], said: str) -> None:
@@ -1198,7 +1199,7 @@ def test_stage_mode_says_what_comes_and_what_the_buttons_do(open_page: Any) -> N
     expect(o.page.get_by_test_id("stage-prev")).to_have_attribute(
         "title", "Tap: back to the start of this part. Twice: the part before."
     )
-    expect(o.page.get_by_test_id("stage-coming")).to_contain_text("Next: ")  # stopped: the next part named
+    expect(o.page.get_by_test_id("stage-coming")).to_contain_text("Next part: ")  # stopped: the next part named
     o.page.get_by_test_id("stage-exit").click()
     o.page.get_by_test_id("inst-guitar").click()
     o.js("Woodshed.app.seekBar(1)")
@@ -1209,8 +1210,8 @@ def test_stage_mode_says_what_comes_and_what_the_buttons_do(open_page: Any) -> N
 def test_on_a_touch_screen_the_small_buttons_are_finger_sized(browser: Any, pages_root: str) -> None:
     from tests.page.conftest import built
 
-    context = browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True, locale="en-US")
-    page = context.new_page()
+    context = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, locale="en-US")
+    page = context.new_page()  # a phone: the narrowest header
     page.goto((built("pop", True, pages_root) / "index.html").as_uri())
     for _ in range(100):
         if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
@@ -1218,6 +1219,13 @@ def test_on_a_touch_screen_the_small_buttons_are_finger_sized(browser: Any, page
         page.wait_for_timeout(25)
     box = page.get_by_test_id("theme").first.bounding_box()
     assert box is not None and box["height"] >= 44 and box["width"] >= 44
+    # The bigger buttons cover neither the logo nor the title.
+    prefs = page.locator(".prefs").first.bounding_box()
+    logo = page.get_by_test_id("logo").bounding_box()
+    title = page.get_by_test_id("title").bounding_box()
+    assert prefs and logo and title
+    assert logo["x"] + logo["width"] <= prefs["x"] or logo["y"] >= prefs["y"] + prefs["height"]
+    assert title["y"] >= prefs["y"] + prefs["height"] - 1
     context.close()
 
 
@@ -1230,3 +1238,39 @@ def test_the_fit_key_button_names_the_key(open_page: Any) -> None:
         if fit.count():
             break
     expect(fit).to_have_text(re.compile(r"^Transpose to [A-G][♯♭]?m? \([+-]\d+\)$"))  # not "Transpose down"
+
+
+def test_space_on_the_language_or_theme_button_presses_it(open_page: Any) -> None:
+    o = open_page("pop")
+    o.page.get_by_test_id("lang-fr").focus()
+    o.page.keyboard.press("Space")
+    expect(o.page.locator("html")).to_have_attribute("lang", "fr")  # the button, as a keyboard user expects
+    assert o.js("Woodshed.app.store.get().playing") is False  # not the music
+    o.page.get_by_test_id("lang-en").focus()
+    o.page.keyboard.press("Space")
+    expect(o.page.locator("html")).to_have_attribute("lang", "en")
+
+
+@pytest.mark.parametrize("name", ["pop", "ballad", "rock"])
+def test_on_paper_bar_numbers_sit_under_the_chords_and_no_screen_badge_is_printed(open_page: Any, name: str) -> None:
+    o = open_page(name)
+    o.js("Woodshed.app.seekBar(1)")  # a bar lit as playing on screen
+    o.page.emulate_media(media="print")
+    expect(o.page.get_by_test_id("spots").or_(o.page.locator(".okfact"))).to_be_hidden()
+    overlaps = o.js(
+        "[...document.querySelectorAll('.bar[data-bar]')].filter((b) => {"
+        " const n = b.querySelector('.num'), c = b.querySelector('.ch'); if (!n || !c) return false;"
+        " const x = n.getBoundingClientRect(), y = c.getBoundingClientRect();"
+        " return x.top < y.bottom - 1 && x.left < y.right && y.left < x.right; }).length"
+    )
+    assert overlaps == 0
+    lit = o.js("getComputedStyle(document.querySelector('.bar.cur')).backgroundColor")
+    assert lit in ("rgba(0, 0, 0, 0)", "transparent")
+
+
+def test_a_looped_passage_says_its_bars_without_bass_in_one_line(open_page: Any) -> None:
+    o = open_page("pop", variant="bass-doubts")  # bar 2 has no bass
+    o.page.get_by_test_id("inst-bass").click()
+    o.js("Woodshed.app.store.set({loop: [0, 3], loopOn: true})")
+    expect(o.page.get_by_test_id("bass-tab")).to_have_count(3)  # bars 1, 3 and 4
+    expect(o.page.get_by_test_id("bass-silent")).to_have_text("Bar 2: no bass heard.")

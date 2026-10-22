@@ -53,6 +53,7 @@
   .home .set-facts .sk, .home .set-facts .sb { font-weight: 700; }
   .home .set-facts .band-key { color: #000; }
   .home .set-note { color: #000; font-style: italic; font-size: 13pt; }
+  .home .set-note-input { border: 0; outline: none; color: #000; background: none; font-size: 13pt; font-style: italic; }
 }
 .net-switch.on { background: var(--accent-soft); border-color: var(--accent); }
 .net-on { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; margin-top: 12px; }
@@ -143,7 +144,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 /* A finger needs 44 px: the theme and language buttons on a touch screen. */
 @media (pointer: coarse) {
   .btn.icon, .seg-ctl.lang button { min-height: 44px; min-width: 44px; }
-  .brandrow { min-height: 44px; padding-right: 150px; } /* the bigger buttons never over the title */
 }
 .st-shapes .next small { display: block; font: 600 11px var(--font-body); color: var(--muted); text-align: center; }
 .song h1 { margin: 2px 0 0; font-family: var(--font-chord); font-weight: 600; font-size: clamp(26px, 4vw, 38px); line-height: 1.05; text-wrap: balance; }
@@ -572,7 +572,10 @@ body.following #playBtn { opacity: 0.45; }
   .sheet { border: 0; padding: 0; gap: 2px; }
   .line { grid-template-columns: 34px minmax(0, 1fr); gap: 4px; break-inside: avoid; }
   .line-label .t, .lline .t { font-size: 8.5px; }
-  .bar { min-height: 0; padding: 0 5px 11px; }
+  .bar { min-height: 0; padding: 0 5px 12px; align-items: flex-start; }
+  .bar .num, .bar .rn { font-size: 7.5px; bottom: 1px; } /* under the chords, never over them */
+  .warnfact, .okfact { display: none !important; } /* the screen's badges: nothing to click on paper */
+  .sheet .cur, .sheet .inloop, .sheet .cur .nb { background: none !important; box-shadow: none !important; }
   .bar .ch, .ch { font-size: 14px; }
   .lline { grid-template-columns: 34px minmax(0, 1fr); padding: 0 2px; gap: 4px; }
   .lwords { font-size: 12px; line-height: 1.1; }
@@ -667,3 +670,7 @@ body.following #playBtn { opacity: 0.45; }
   .home .library td, .home .library th { padding-left: 4px; padding-right: 4px; }
   .set-head #find { width: 100%; margin-left: 0; }
 }
+
+/* Touch screens: the language and theme buttons are 44 px, so the brand row keeps room for them
+   (after the .brandrow rule above, which it overrides). */
+@media (pointer: coarse) { .brandrow { min-height: 46px; padding-right: 160px; } }

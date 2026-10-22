@@ -149,7 +149,7 @@
       const what = next ? W.partName(next.name) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
       // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
       const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
-      $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next: {part}", { part: what }) : "");
+      $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "");
       renderLyrics(s, list);
     }
 

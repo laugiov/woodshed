@@ -141,7 +141,7 @@
         bars[bars.length - 1].push(chord(p));
       }
       const out = [];
-      for (let i = 0; i < bars.length; i += 4) out.push(bars.slice(i, i + 4).map((b) => b.join(" ")).join(" | "));
+      for (let i = 0; i < bars.length; i += 4) out.push("| " + bars.slice(i, i + 4).map((b) => b.join(" ")).join(" | ") + " |"); // framed, as exports.py
       return out;
     };
     const placed = words.place(words.changes());

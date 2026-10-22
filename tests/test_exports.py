@@ -274,7 +274,7 @@ def test_several_chords_before_one_word_are_written_apart_not_stacked(pop: dict[
     rows = exports.chordpro(song, words).splitlines()
     n = names(song)
     sung = rows.index(f"[{n[1][1]}]late")  # the last chord on the word
-    assert rows[sung - 1] == f"[{n[1][0]}]"  # the first on a chord row of its own, above the line
+    assert rows[sung - 1] == f"| [{n[1][0]}] |"  # the first on a chord row of its own, above the line
     assert not any(re.search(r"\] *\[[^\]]*\]\w", row) for row in rows)  # never two chords on one word
 
 
@@ -285,9 +285,9 @@ def test_bars_of_chords_after_the_words_are_written_four_a_row(pop: dict[str, An
     sec = pop["sections"][0]
     assert sec["end"] - sec["start"] > 5  # more than four bars left after the word
     rows = exports.chordpro(pop, words).splitlines()
-    chord_rows = [r for r in rows if r.startswith("[") and not re.search(r"\][^\s\[|]", r)]
-    assert chord_rows and all(r.count(" | ") <= 3 for r in chord_rows)  # four bars a row at most
-    assert any(" | " in r for r in chord_rows)  # bar by bar
+    chord_rows = [r for r in rows if r.startswith("| [")]
+    assert chord_rows and all(r.endswith(" |") and r.count(" | ") <= 3 for r in chord_rows)  # four bars a row
+    assert any(" | " in r for r in chord_rows)  # bar by bar, every chord row framed the same way
 
 
 def test_chordpro_in_the_key_the_band_plays(pop: dict[str, Any]) -> None:
