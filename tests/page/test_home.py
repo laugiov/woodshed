@@ -217,10 +217,16 @@ def test_a_finger_gets_room_on_the_library_buttons(browser: Any, songs: app.AppS
 
 
 def test_a_page_made_by_an_older_woodshed_says_to_analyse_it_again(page: Page, songs: app.AppServer) -> None:
-    manifest = songs.library.root / "Pop.woodshed" / "woodshed.json"
-    data = json.loads(manifest.read_text(encoding="utf-8"))
-    data["settings"]["page"] = "an older page code"
-    manifest.write_text(json.dumps(data), encoding="utf-8")
+    from woodshed.view import VIEW_VERSION
+
+    folder = songs.library.root / "Pop.woodshed"
+    data = json.loads((folder / "woodshed.json").read_text(encoding="utf-8"))
+    data["settings"].pop("page", None)  # older still: no page revision at all
+    (folder / "woodshed.json").write_text(json.dumps(data), encoding="utf-8")
+    index = folder / "index.html"
+    text = index.read_text(encoding="utf-8")
+    index.write_text(text.replace(f'"view_version":{VIEW_VERSION}', f'"view_version":{VIEW_VERSION - 1}'), "utf-8")
+    assert "Pop.woodshed" not in songs.library.update_pages()  # as at the start: its data is another format
     page.goto(songs.url)
     expect(row_of(page, "Pop").get_by_test_id("song-stale")).to_contain_text("analyse it again")
     expect(row_of(page, "Night Drive").get_by_test_id("song-stale")).to_have_count(0)

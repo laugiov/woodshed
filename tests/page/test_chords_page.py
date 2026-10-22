@@ -18,7 +18,9 @@ def test_the_page_reads_every_case_as_python_does(open_page: Any) -> None:
         if expected == "none":
             assert page == {"pc": -1, "quality": "", "bass": None}, text
         elif "refused" in expected:
-            assert page == {"refused": expected["refused"]}, text
+            refusal = chords.parse(text)
+            assert isinstance(refusal, chords.Refusal)
+            assert page == {"refused": expected["refused"], "hint": refusal.hint}, text
         else:
             assert page == expected, text
 
@@ -31,7 +33,7 @@ def test_typed_chords_are_named_and_numbered_as_the_library_does(open_page: Any)
     for text in typed:
         chord = chords.parse(text)
         assert isinstance(chord, chords.Chord)
-        for transpose in (0, 2, 5):
+        for transpose in (0, 1, 2, 3, 5, 8, 10):  # sharp and flat keys
             name = o.js(f"Woodshed.current.chordName(Woodshed.chords.parse({json.dumps(text)}), {transpose})")
             assert name == chords.name(chord, key, transpose), (text, transpose)
         numeral = o.js(f"Woodshed.current.roman(Woodshed.chords.parse({json.dumps(text)}))")

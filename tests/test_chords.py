@@ -70,6 +70,8 @@ def test_no_chord_and_refusals_say_why() -> None:
     assert chords.name(chords.NO_CHORD, theory.Key(0)) == "N.C."
     refused = chords.parse("Cmaj")
     assert isinstance(refused, chords.Refusal) and "Cmaj7" in refused.hint
+    two = chords.parse("Bb2")
+    assert isinstance(two, chords.Refusal) and two.hint == "Bbsus2 or Bbadd9"  # the root as typed
 
 
 def test_the_page_reads_the_same_table() -> None:

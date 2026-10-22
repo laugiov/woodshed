@@ -414,6 +414,15 @@
   "2": "two",
   "add2": "two"
  },
+ "hints": {
+  "empty": "type a chord, for example G or D/F#",
+  "bar-line": "one bar at a time",
+  "maj-alone": "{root}maj7 or {root}",
+  "two": "{root}sus2 or {root}add9",
+  "six-nine": "{root}6/9 is not drawn here: {root}6",
+  "altered": "altered chords are not drawn here: write the plain chord ({root}7)",
+  "unknown": "not a chord we can draw"
+ },
  "degrees": [
   "1",
   "b2",

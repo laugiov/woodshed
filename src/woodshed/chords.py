@@ -22,15 +22,8 @@ ALIASES: dict[str, str] = _TABLE["aliases"]
 REFUSALS: dict[str, str] = _TABLE["refusals"]
 DEGREES: list[str] = _TABLE["degrees"]
 
-HINTS = {
-    "empty": "type a chord, for example G or D/F#",
-    "bar-line": "one bar at a time",
-    "maj-alone": "Cmaj7 or C",
-    "two": "sus2 or add9",
-    "six-nine": "C6/9 is not drawn here: C6",
-    "altered": "altered chords are not drawn here: write the plain chord (G7)",
-    "unknown": "not a chord we can draw",
-}
+HINTS: dict[str, str] = _TABLE["hints"]  # "{root}" is the root as typed
+SPACES = re.compile(r"[ \t\r\n\u00a0]+")  # the same class as core/chords.js
 
 NO_CHORD_SPELLINGS = frozenset({"N.C.", "NC", "N.C", "N/C"})
 ACCIDENTALS = {"#": 1, "♯": 1, "b": -1, "♭": -1, "": 0}
@@ -70,10 +63,10 @@ def _quality(suffix: str) -> str | None:
 def parse(text: str) -> Chord | Refusal:
     """A chord as written on a chord sheet, or why it is refused (never a guess)."""
 
-    def refuse(code: str) -> Refusal:
-        return Refusal(code, HINTS[code])
+    def refuse(code: str, root: str = "") -> Refusal:
+        return Refusal(code, HINTS[code].format(root=root))
 
-    typed = "".join(str(text).split())
+    typed = SPACES.sub("", str(text))
     if not typed:
         return refuse("empty")
     if "|" in typed:
@@ -86,15 +79,16 @@ def parse(text: str) -> Chord | Refusal:
         return refuse("unknown")
     root, accidental, suffix, bass_text = found.groups()
     pc = (theory.NATURALS[root.upper()] + ACCIDENTALS[accidental]) % 12
+    named = root.upper() + accidental
     quality = _quality(suffix)
     if quality is None:
         code = REFUSALS.get(suffix.lower()) or ("altered" if ALTERED.search(suffix) else "unknown")
-        return refuse(code)
+        return refuse(code, named)
     bass: int | None = None
     if bass_text is not None:
         note = NOTE.fullmatch(bass_text)
         if not note:
-            return refuse("six-nine" if quality == "6" and bass_text == "9" else "unknown")
+            return refuse("six-nine" if quality == "6" and bass_text == "9" else "unknown", named)
         bass = (theory.NATURALS[note.group(1).upper()] + ACCIDENTALS[note.group(2)]) % 12
         if bass == pc:
             bass = None  # C/C is C

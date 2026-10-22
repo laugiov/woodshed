@@ -20,6 +20,7 @@ REQUIRED = (
     "woodshed/song.schema.json",
     "woodshed/view.schema.json",
     "woodshed/shapes.json",
+    "woodshed/chords.json",
     "woodshed/page/template.html",
     "woodshed/page/body.html",
     "woodshed/py.typed",

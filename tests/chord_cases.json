@@ -544,5 +544,147 @@
 {
 "refused": "unknown"
 }
+],
+[
+"Gø",
+{
+"pc": 7,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"G°7",
+{
+"pc": 7,
+"quality": "dim7",
+"bass": null
+}
+],
+[
+"FΔ",
+{
+"pc": 5,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"Cm7(b5)",
+{
+"pc": 0,
+"quality": "m7b5",
+"bass": null
+}
+],
+[
+"C(add9)",
+{
+"pc": 0,
+"quality": "add9",
+"bass": null
+}
+],
+[
+"C♭",
+{
+"pc": 11,
+"quality": "",
+"bass": null
+}
+],
+[
+"C/c",
+{
+"pc": 0,
+"quality": "",
+"bass": null
+}
+],
+[
+"CM",
+{
+"pc": 0,
+"quality": "",
+"bass": null
+}
+],
+[
+"C7b5",
+{
+"refused": "altered"
+}
+],
+[
+"C7#9",
+{
+"refused": "altered"
+}
+],
+[
+"C6 / 9",
+{
+"refused": "six-nine"
+}
+],
+[
+"\tAm7 ",
+{
+"pc": 9,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"A m7",
+{
+"pc": 9,
+"quality": "m7",
+"bass": null
+}
+],
+[
+"C|",
+{
+"refused": "bar-line"
+}
+],
+[
+"Cmmaj7",
+{
+"refused": "unknown"
+}
+],
+[
+"Bbb",
+{
+"refused": "unknown"
+}
+],
+[
+"C / G",
+{
+"pc": 0,
+"quality": "",
+"bass": 7
+}
+],
+[
+"C﻿7",
+{
+"refused": "unknown"
+}
+],
+[
+"Fmaj",
+{
+"refused": "maj-alone"
+}
+],
+[
+"D2",
+{
+"refused": "two"
+}
 ]
 ]

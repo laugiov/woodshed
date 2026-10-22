@@ -135,6 +135,7 @@ class Library:
         self.queue: queue.Queue[tuple[Job, Path, Options, bool, str | None]] = queue.Queue()
         self.lock = threading.Lock()
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
+        self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
         self.doubt_ids: dict[str, tuple[int, tuple[str, set[str]] | None]] = {}  # folder -> (stamp, (key, ids))
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
@@ -151,7 +152,7 @@ class Library:
             info["complete"] = data.get("complete") is True
             # Complete but still on older page code after the start's update: its data is in a format this
             # code does not read, so only a new analysis gives it this version's page.
-            info["stale"] = _stale(manifest)
+            info["stale"] = manifest.parent.name in self.stale
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
             info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
             band = self._stored(manifest.parent.name)["band"]
@@ -175,11 +176,13 @@ class Library:
         for manifest in sorted(self.root.glob(f"*.woodshed/{MANIFEST}")):
             if manifest.parent.is_symlink():
                 continue
+            name = manifest.parent.name
             try:
                 if update_page_code(manifest.parent) is not None:
-                    updated.append(manifest.parent.name)
-                elif _stale(manifest):
-                    name = manifest.parent.name
+                    updated.append(name)
+                    self.stale.discard(name)
+                elif _older(manifest):  # complete, older page code, and refused: its data is another format
+                    self.stale.add(name)
                     print(f"woodshed app: {name}: made by an older woodshed, analyse it again", flush=True)
             except (WoodshedError, OSError) as exc:  # one page held open or not writable: the others still are
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
@@ -787,16 +790,15 @@ def lan_addresses() -> list[str]:
     return sorted(a for a in found if not ipaddress.ip_address(a).is_loopback)
 
 
-def _stale(manifest: Path) -> bool:
-    """A complete page still on older page code: its data is in a format this code does not read, so
-    only a new analysis gives it this version's page."""
+def _older(manifest: Path) -> bool:
+    """A complete page built by other page code (a manifest without it is older still)."""
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
     settings = data.get("settings") if isinstance(data, dict) else None
     built_by = settings.get("page") if isinstance(settings, dict) else None
-    return data.get("complete") is True and isinstance(built_by, str) and built_by != page_revision()
+    return data.get("complete") is True and built_by != page_revision()
 
 
 def _home_network(address: str) -> bool:

@@ -9,6 +9,7 @@
   const QUALITIES = TABLE.qualities;
   const ALIASES = TABLE.aliases;
   const REFUSALS = TABLE.refusals;
+  const SPACES = /[ \t\r\n\u00a0]+/g; // the same class as chords.py
   const NATURALS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const ACCIDENTALS = { "#": 1, "♯": 1, b: -1, "♭": -1, "": 0 };
   const NO_CHORD_SPELLINGS = new Set(["N.C.", "NC", "N.C", "N/C"]);
@@ -30,26 +31,30 @@
     return null;
   }
 
-  // A chord as written on a chord sheet: {pc, quality, bass} (pc -1 for no chord), or {refused: code}.
+  // Why a chord is refused, in words (in English, as the library says it).
+  const refuse = (code, root) => ({ refused: code, hint: TABLE.hints[code].replace(/\{root\}/g, root || "") });
+
+  // A chord as written on a chord sheet: {pc, quality, bass} (pc -1 for no chord), or {refused, hint}.
   function parse(text) {
-    let typed = String(text).replace(/\s+/g, "");
-    if (!typed) return { refused: "empty" };
-    if (typed.includes("|")) return { refused: "bar-line" };
+    let typed = String(text).replace(SPACES, "");
+    if (!typed) return refuse("empty");
+    if (typed.includes("|")) return refuse("bar-line");
     if (NO_CHORD_SPELLINGS.has(typed.toUpperCase())) return NO_CHORD;
     typed = typed.replace(/[()]/g, "");
     const m = CHORD.exec(typed);
-    if (!m) return { refused: "unknown" };
+    if (!m) return refuse("unknown");
     const [, root, accidental, suffix, bassText] = m;
     const pc = (NATURALS[root.toUpperCase()] + ACCIDENTALS[accidental] + 12) % 12;
+    const named = root.toUpperCase() + accidental;
     const quality = qualityOf(suffix);
     if (quality === null) {
       const lower = suffix.toLowerCase();
-      return { refused: has(REFUSALS, lower) ? REFUSALS[lower] : ALTERED.test(suffix) ? "altered" : "unknown" };
+      return refuse(has(REFUSALS, lower) ? REFUSALS[lower] : ALTERED.test(suffix) ? "altered" : "unknown", named);
     }
     let bass = null;
     if (bassText !== undefined) {
       const note = NOTE.exec(bassText);
-      if (!note) return { refused: quality === "6" && bassText === "9" ? "six-nine" : "unknown" };
+      if (!note) return refuse(quality === "6" && bassText === "9" ? "six-nine" : "unknown", named);
       bass = (NATURALS[note[1].toUpperCase()] + ACCIDENTALS[note[2]] + 12) % 12;
       if (bass === pc) bass = null; // C/C is C
     }
