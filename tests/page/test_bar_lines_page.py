@@ -30,9 +30,15 @@ def test_from_disk_the_sheet_gives_the_command(open_page: Any) -> None:
     expect(dialog).to_be_visible()
     expect(page.get_by_test_id("bars-beat")).to_have_count(per)
     expect(page.get_by_test_id("bars-beat").first).to_contain_text("now")
-    expect(page.get_by_test_id("bars-command")).to_contain_text(f"--offset {now}")
+    command = page.get_by_test_id("bars-command")
+    expect(command).to_have_text(f'woodshed "{o.js("Woodshed.current.song.file")}" --bar-phase {now}')
     page.get_by_test_id("bars-beat").nth(1).click()  # beat 2 is the band's one
-    expect(page.get_by_test_id("bars-command")).to_contain_text(f"--offset {(now + 1) % per}")
+    expect(command).to_contain_text(f"--bar-phase {(now + 1) % per}")
+    o.js("""Woodshed.current.song.file = 'say "hi" $HOME.wav'""")  # a name the shell would read
+    page.get_by_test_id("bars-cancel").click()
+    page.get_by_test_id("bar-lines").click()
+    expect(command).to_contain_text(r'woodshed "say \"hi\" \$HOME.wav"')
+    expect(page.get_by_test_id("bars-copy")).to_be_visible()
     expect(page.get_by_test_id("bars-move")).to_have_count(0)  # nothing to send from disk
     page.get_by_test_id("bars-cancel").click()
     expect(dialog).to_be_hidden()
@@ -53,10 +59,12 @@ def library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[app.App
 
 def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, library: app.AppServer) -> None:
     page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="en-US").new_page()
+    other = browser.new_context(viewport={"width": 390, "height": 800}, locale="en-US").new_page()  # a band phone
     problems: list[str] = []
     page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
-    page.goto(library.url + "pop.woodshed/index.html")
-    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    for p in (page, other):
+        p.goto(library.url + "pop.woodshed/index.html")
+        until(p, "window.Woodshed && window.Woodshed.ready === true")
     per = page.evaluate("Woodshed.current.per")
     first = page.evaluate("Woodshed.current.song.first_beat")
     page.evaluate("Woodshed.app.typeBars([2], [[4, 'Dsus4']])")  # typed before the move, on beats
@@ -66,6 +74,8 @@ def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, libra
     expect(page.get_by_test_id("bars-dialog")).to_contain_text("1 typed bar")
     page.get_by_test_id("bars-beat").nth(1).click()
     page.get_by_test_id("bars-move").click()
+    expect(page.get_by_test_id("bars-cancel")).to_have_text("Close")
+    page.get_by_test_id("bars-cancel").click()  # the job goes on without the dialog
     page.wait_for_url("**/pop.woodshed/index.html", wait_until="load", timeout=60_000)
     until(
         page,
@@ -76,4 +86,5 @@ def test_served_the_bar_lines_move_and_typed_chords_stay(browser: Browser, libra
     expect(page.get_by_test_id("toast")).to_contain_text("The bar lines moved")
     assert page.evaluate(f"!!Woodshed.app.typedBars.get('{key}')")  # kept on its beats
     assert page.evaluate("Woodshed.current.bars.some((b) => b.chords.some((c) => c.typed && c.quality === 'sus4'))")
+    until(other, f"window.Woodshed && Woodshed.current.song.first_beat % Woodshed.current.per !== {first % per}", 60)
     assert problems == []

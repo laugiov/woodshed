@@ -199,11 +199,12 @@
     let status = null;
     if (job && job.status === "failed") {
       // The reason of a failure is the library's own, in English.
-      status = h("span", { class: "tag warn" }, job.kind === "words" ? W.t("Words not placed: {why}", { why: job.message }) : W.t("Failed: {why}", { why: job.message }));
+      const failed = { words: "Words not placed: {why}", bars: "Bar lines not moved, the page is as it was: {why}" }[job.kind] || "Failed: {why}";
+      status = h("span", { class: "tag warn" }, W.t(failed, { why: job.message }));
     } else if (working) {
       const percent = job.status === "separating" || job.status === "placing" ? job.percent : null;
       status = h("span", { class: "working" },
-        h("span", null, W.t(STATUS[job.status]) + (percent !== null ? " " + percent + " %" : job.step ? " (" + W.t(job.step) + ")" : "")),
+        h("span", null, (job.kind === "bars" ? W.t("Moving the bar lines") + " · " : "") + W.t(STATUS[job.status]) + (percent !== null ? " " + percent + " %" : job.step ? " (" + W.t(job.step) + ")" : "")),
         h("span", { class: "meter" + (percent === null ? " busy" : "") }, h("i", { style: percent === null ? null : "width:" + Math.max(3, percent) + "%" })));
     } else if (song && song.stale) {
       status = h("span", { class: "tag warn", "data-testid": "song-stale" }, W.t("Made by an older woodshed: analyse it again for the new page"));

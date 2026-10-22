@@ -40,7 +40,7 @@ class Options:
     beats_per_bar: int = 4
     sevenths: bool = False
     bpm: float | None = None
-    offset: int | None = None  # the bar lines the band chose: beats before the first bar line; automatic if None
+    bar_phase: int | None = None  # the bar lines the band chose: beats before the first bar line; automatic if None
 
 
 class Reporter:
@@ -96,7 +96,7 @@ def _analyze(src: Path, opts: Options, report: Reporter, use_stems: bool, separa
         beats_per_bar=opts.beats_per_bar,
         offline=opts.offline,
         bpm=opts.bpm,
-        offset=opts.offset,
+        bar_phase=opts.bar_phase,
         progress=report.progress,
     )
 
@@ -116,7 +116,7 @@ def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
         "sevenths": opts.sevenths,
         "bpm": opts.bpm,
         # Only when chosen: every page built before stays up to date.
-        **({"offset": opts.offset} if opts.offset is not None else {}),
+        **({"bar_phase": opts.bar_phase} if opts.bar_phase is not None else {}),
     }
 
 

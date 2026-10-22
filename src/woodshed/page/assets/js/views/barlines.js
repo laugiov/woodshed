@@ -17,6 +17,11 @@
     let dialog = null;
     let polling = 0;
     let chosen = 1; // the beat of bar 1 the band counts "one" on (1: as it is)
+    let reloading = false;
+    const stop = () => {
+      clearInterval(polling);
+      polling = 0;
+    };
 
     const offsetFor = (beat) => (current + beat - 1) % per;
     const counted = (n, one, many) => (n === 1 ? W.t(one) : W.t(many, { n }));
@@ -33,15 +38,21 @@
       return data.token;
     }
 
+    // The new bar lines are in the page on disk: load it, once the music stops. This device asked
+    // for them (its status says it), or another device did (the band's stream says it: views/band.js).
     function moved(status) {
-      clearInterval(polling);
+      stop();
+      if (reloading) return;
+      reloading = true;
       try {
         sessionStorage.setItem(DONE, "1");
       } catch (err) {
         /* no storage: the new bars show, without the note */
       }
       if (store.get().playing) {
-        say(status, W.t("The bar lines moved. They appear when you stop playing."));
+        const text = W.t("The bar lines moved. They appear when you stop playing.");
+        if (status && dialog.open) say(status, text);
+        else app.toast(text);
         const off = store.on((s) => {
           if (!s.playing) {
             off();
@@ -49,14 +60,23 @@
           }
         });
       } else {
-        say(status, W.t("The bar lines moved. Loading them…"));
+        if (status) say(status, W.t("The bar lines moved. Loading them…"));
         location.reload();
       }
+    }
+    app.barsMoved = () => moved(null);
+
+    // Shown when the dialog is open, else said on the page: closing it does not stop the job.
+    function failed(status, go, text) {
+      stop();
+      go.disabled = false;
+      if (dialog.open) say(status, text, true);
+      else app.toast(text);
     }
 
     // The library's answer about this song's job, until it is done (as views/words.js follows the words).
     function follow(id, status, go) {
-      clearInterval(polling);
+      stop();
       polling = setInterval(async () => {
         let data;
         try {
@@ -65,20 +85,28 @@
           return; // the next tick asks again
         }
         const job = data.jobs.find((j) => j.id === id);
-        if (!job) {
-          clearInterval(polling);
-          go.disabled = false;
-          return say(status, W.t("The library was restarted before the bar lines moved: try again."), true);
-        }
-        if (job.status === "failed") {
-          clearInterval(polling);
-          go.disabled = false;
-          say(status, W.t("The bar lines did not move: {why}", { why: job.message }), true);
-        } else if (job.status === "done") moved(status);
+        if (!job) return failed(status, go, W.t("The library was restarted before the bar lines moved: try again."));
+        if (job.status === "failed") failed(status, go, W.t("The bar lines did not move: {why}", { why: W.t(job.message) }));
+        else if (job.status === "done") moved(status);
         else if (job.status === "queued") say(status, W.t("Waiting for the song being analysed…"));
         else say(status, W.t("Analysing the song again with the new bar lines…"));
       }, 1500);
     }
+
+    // The command that makes the same page again, with the band's bar lines: the settings it was
+    // made with, the file name quoted for the shell.
+    function commandFor(phase) {
+      const a = meta.analysis || {};
+      const quote = (s) => '"' + String(s).replace(/(["$`\\])/g, "\\$1") + '"';
+      const args = ["woodshed", quote(meta.file || meta.title)];
+      if (per !== 4) args.push("--beats-per-bar", String(per));
+      if (a.sevenths) args.push("--sevenths");
+      if (typeof a.bpm_hint === "number") args.push("--bpm", String(a.bpm_hint));
+      if (a.stems === false) args.push("--no-stems");
+      return args.concat("--bar-phase", String(phase)).join(" ");
+    }
+
+    let cancel = null;
 
     async function move(status, go) {
       go.disabled = true;
@@ -87,11 +115,12 @@
         const r = await fetch("/api/bars", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Woodshed-Token": await token() },
-          body: JSON.stringify({ page: folder, offset: offsetFor(chosen) }),
+          body: JSON.stringify({ page: folder, bar_phase: offsetFor(chosen) }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error ? W.t(data.error) : W.t("the library refused it ({status})", { status: r.status }));
         say(status, W.t("Analysing the song again with the new bar lines…"));
+        cancel.textContent = W.t("Close"); // the job goes on without the dialog
         follow(data.id, status, go);
       } catch (err) {
         go.disabled = false;
@@ -103,8 +132,19 @@
       const bars = Object.keys(app.typedBars.values()).length;
       const parts = Object.keys(app.typedParts.values()).length;
       const status = h("p", { class: "status", role: "status", "data-testid": "bars-status" });
-      const command = h("p", { class: "cmd", translate: "no", "data-testid": "bars-command" });
-      const showCommand = () => (command.textContent = 'woodshed "' + (meta.file || meta.title) + '" --offset ' + offsetFor(chosen));
+      const command = h("code", { class: "cmd", translate: "no", "data-testid": "bars-command" });
+      const showCommand = () => (command.textContent = commandFor(offsetFor(chosen)));
+      const copy = h("button", {
+        type: "button", class: "btn", "data-testid": "bars-copy",
+        onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(command.textContent);
+            app.toast(W.t("Command copied."));
+          } catch (err) {
+            getSelection().selectAllChildren(command); // no clipboard here: selected, to copy by hand
+          }
+        },
+      }, W.t("Copy"));
       const go = h("button", { type: "button", class: "btn primary", "data-testid": "bars-move", disabled: "", onclick: () => move(status, go) }, W.t("Move the bar lines"));
       const beats = h(
         "div",
@@ -126,7 +166,7 @@
       showCommand();
       const kept = [counted(bars, "1 typed bar", "{n} typed bars"), counted(parts, "1 part name", "{n} part names")].join(W.t(" and "));
       let how;
-      if (!served) how = [h("p", null, W.t("Opened from disk, the command line moves them, in the folder of the recording:")), command];
+      if (!served) how = [h("p", null, W.t("Opened from disk, the command line moves them, in the folder of the recording:")), h("div", { class: "cmd-row" }, command, copy)];
       else if (store.get().wordsElsewhere) how = [h("p", null, W.t("The bar lines are moved from the computer that runs woodshed."))];
       else {
         how = [
@@ -141,7 +181,7 @@
         beats,
         how,
         h("div", { class: "dialog-actions" },
-          h("button", { type: "button", class: "btn", "data-testid": "bars-cancel", onclick: () => dialog.close() }, W.t("Cancel")),
+          (cancel = h("button", { type: "button", class: "btn", "data-testid": "bars-cancel", onclick: () => dialog.close() }, W.t("Cancel"))),
           served && !store.get().wordsElsewhere ? go : null),
       );
     }
@@ -150,8 +190,8 @@
       if (!dialog) {
         dialog = h("dialog", { class: "words-dialog bars-dialog", "aria-labelledby": "barsTitle", "data-testid": "bars-dialog" });
         document.body.append(dialog);
-        dialog.addEventListener("close", () => clearInterval(polling));
       }
+      if (polling) return dialog.showModal(); // a job runs: its status, as it was left
       chosen = 1;
       render();
       dialog.showModal();

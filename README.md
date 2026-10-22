@@ -116,7 +116,7 @@ beats, F♯ in the bass, then G for 2"), lets you hear each chord and the bar of
 offers to type it on every repeat of that line. Rename the parts as your band calls them, join two,
 or start one on any bar. Bar lines one beat off? **Bar lines…** asks where beat one is and the
 library analyses the song again from its tracks with the bars there, your typed chords staying on
-their beats (from disk: `woodshed "song.mp3" --offset 1`). Shapes, keys, the stage view and every export follow, and each typed bar
+their beats (from disk: `woodshed "song.mp3" --bar-phase 1`). Shapes, keys, the stage view and every export follow, and each typed bar
 or part can go back to the analysis, or the whole chart at once (with an undo). Through the library
 the band's phones get it live.
 

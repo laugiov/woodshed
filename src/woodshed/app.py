@@ -53,6 +53,7 @@ from woodshed.run import (
     first_pass,
     media_files,
     second_pass,
+    stems_extra_installed,
     update_page_code,
 )
 
@@ -60,6 +61,7 @@ MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
 CHUNK = 1024 * 1024
 TOKEN_HEADER = "X-Woodshed-Token"
+LEADER_GONE = 10.0  # seconds without a word from a playing leader (it says where it is every second)
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
 SETLIST_MAX = 500
@@ -147,6 +149,7 @@ class Library:
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
         self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
+        self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -576,21 +579,22 @@ class Library:
     def _options_of(self, given: dict[str, Any]) -> Options:
         """A page's options as its manifest keeps them; each field checked on its own: a page edited by
         hand keeps its good fields."""
-        beats, bpm, offset = given.get("beats_per_bar"), given.get("bpm"), given.get("offset")
+        beats, bpm, phase = given.get("beats_per_bar"), given.get("bpm"), given.get("bar_phase")
         per = beats if isinstance(beats, int) and not isinstance(beats, bool) and 2 <= beats <= 12 else 4
         opts = self.options(
             per,
             given.get("sevenths") is True,
             float(bpm) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and 30 <= bpm <= 300 else None,
         )
-        return replace(opts, offset=offset if type(offset) is int and 0 <= offset < per else None)
+        return replace(opts, bar_phase=phase if type(phase) is int and 0 <= phase < per else None)
 
     def move_bars(self, data: Any, playing: Callable[[str], bool] | None = None) -> Job:
-        """The band's bar lines for a page, {"page", "offset"}: the song analysed again from its file in
-        the library and its separated tracks in the cache. The beats do not move, so the chords and parts
-        the band typed stay where they were; the picks among candidates start over."""
+        """The band's bar lines for a page, {"page", "bar_phase"}: the song analysed again from its file
+        in the library and its separated tracks in the cache. The beats do not move, so the chords and
+        parts the band typed stay where they were; the picks among candidates start over. The errors are
+        fixed sentences: the page says them in the band's language."""
         if not isinstance(data, dict):
-            raise ValueError("an object with page and offset")
+            raise ValueError("an object with page and bar_phase")
         folder = self._page(data.get("page"))
         try:
             manifest = json.loads((self.root / folder / MANIFEST).read_text(encoding="utf-8"))
@@ -598,9 +602,9 @@ class Library:
         except (OSError, ValueError, KeyError, TypeError):
             raise ValueError("this page has no settings to analyse it again with") from None
         opts = self._options_of(given)
-        offset = data.get("offset")
-        if type(offset) is not int or not 0 <= offset < opts.beats_per_bar:
-            raise ValueError(f"offset: 0 to {opts.beats_per_bar - 1}, the beats before the first bar line")
+        phase = data.get("bar_phase")
+        if type(phase) is not int or not 0 <= phase < opts.beats_per_bar:
+            raise ValueError("the bar phase is out of range")
         if playing is not None and playing(folder):
             raise PermissionError("the band is playing this song: stop it first")
         src = next(
@@ -612,15 +616,18 @@ class Library:
             None,
         )
         if src is None:
-            raise ValueError(f'the recording is not in the library: run woodshed "<the file>" --offset {offset}')
-        if given.get("stems") is True and stems.cached(src) is None:
-            raise ValueError("the separated tracks are no longer in the cache: add the song again first")
+            raise ValueError("the recording is no longer in the library: the command line moves them")
+        with_stems = given.get("stems") is True  # a page with parts keeps them, whatever the library runs with
+        if with_stems and not stems_extra_installed():
+            raise ValueError("the bar lines of this song need the stems extra")
+        if with_stems and stems.cached(src) is None:
+            raise ValueError("the separated tracks are no longer in the cache: add the song again")
         with self.lock:
             if any(j.page == folder and j.status not in ("done", "failed") for j in self.jobs.values()):
                 raise PermissionError("this song is already being worked on: try again when it is done")
             job = Job(secrets.token_hex(6), folder, page=folder, kind="bars")
             self.jobs[job.id] = job
-        self.queue.put((job, src, replace(opts, offset=offset), False, None))
+        self.queue.put((job, src, replace(opts, bar_phase=phase, use_stems=with_stems), False, None))
         return job
 
     def _failed(self, src: Path, message: str) -> Job:
@@ -677,10 +684,18 @@ class Library:
                     done = second_pass(done, report)
                 job.status, job.message = "done", "Ready"
                 note.unlink(missing_ok=True)
+                if job.kind == "bars" and self.on_bars is not None:
+                    self.on_bars(job.page)
             except (WoodshedError, OSError) as exc:
                 job.status, job.message = "failed", str(exc)
                 with self.lock:  # one order with interrupted(): a stop never leaves a failure behind
                     if self.stopping.is_set():  # Ctrl-C also stops ffmpeg: not the song's fault
+                        continue
+                    if job.kind == "bars":  # the page is still there, as it was: nothing to keep
+                        note.unlink(missing_ok=True)
+                        job.message = job.message.replace(str(cache_dir()), "the cache").replace(
+                            str(self.root), "the library"
+                        )
                         continue
                     self._keep_failure(note, job)
                     if uploaded and job.page is None:  # nothing came of it: the file does not keep its name taken
@@ -933,6 +948,7 @@ class Live:
         self.followers = 0
         self.closed = False
         self.fixes: dict[str, int] = {}  # page folder -> revision of its corrections, told to followers
+        self.moved: dict[str, int] = {}  # page folder -> how many times its bar lines moved: open pages reload
 
     def corrected(self, folder: str, rev: int) -> None:
         """The chart of a page was corrected: the followers hear it and read it again."""
@@ -940,10 +956,27 @@ class Live:
             self.fixes[folder] = max(self.fixes.get(folder, 0), rev)  # answers can cross: never back
             self._changed()
 
-    def playing(self, folder: str) -> bool:
-        """The band is playing this song now (a new analysis would pull the page from under it)."""
+    def bars_moved(self, folder: str) -> None:
+        """A page's bar lines moved: the devices that have it open load it again."""
         with self.cond:
-            return self.state.get("song") == folder and self.state.get("playing") is True
+            self.moved[folder] = self.moved.get(folder, 0) + 1
+            self._changed()
+
+    def playing(self, folder: str) -> bool:
+        """The band is playing this song now (a new analysis would pull the page from under it). A
+        leader silent for longer than its heartbeat is gone (the phone closed while playing)."""
+        with self.cond:
+            s = self.state
+            return s.get("song") == folder and s.get("playing") is True and time.time() - s.get("at", 0) < LEADER_GONE
+
+    def payload(self) -> dict[str, Any]:
+        """The state as the stream sends it."""
+        with self.cond:
+            return {
+                **self.state,
+                **({"fixes": dict(self.fixes)} if self.fixes else {}),
+                **({"moved": dict(self.moved)} if self.moved else {}),
+            }
 
     def update(self, data: Any, library_root: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
@@ -998,7 +1031,7 @@ class Live:
             self.cond.wait_for(lambda: self.version != seen or self.closed, timeout)
             if self.closed or self.version == seen:
                 return seen, None
-            return self.version, {**self.state, "fixes": dict(self.fixes)} if self.fixes else dict(self.state)
+            return self.version, self.payload()
 
     def close(self) -> None:
         with self.cond:
@@ -1338,7 +1371,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             seen = -1
             with live.cond:
-                first = {**live.state, "fixes": dict(live.fixes)} if live.fixes else dict(live.state)
+                first = live.payload()
                 current: tuple[int, dict[str, Any]] | None = (live.version, first)
             while not live.closed and self.server.accepting:
                 if current is not None:
@@ -1449,6 +1482,7 @@ class AppServer(ThreadingHTTPServer):
         self.doors_lock = threading.Lock()
         super().__init__((host, port), Handler)
         self.library = library
+        library.on_bars = self.live.bars_moved
         self.network = host not in LOOPBACK
         self._addresses: list[str] | None = None
         self.token = secrets.token_urlsafe(24)

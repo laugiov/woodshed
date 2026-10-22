@@ -844,3 +844,5 @@ body.editing .chart-hint { display: none; }
 .bars-dialog .beats-pick button small { font: 500 11px var(--font-body); color: var(--muted); }
 .bars-dialog .beats-pick button.on { border-color: var(--accent); background: var(--accent-soft); }
 .bars-dialog .read { color: var(--muted); font-size: 14px; }
+.bars-dialog .cmd-row { display: flex; gap: 8px; align-items: flex-start; }
+.bars-dialog .cmd-row .cmd { display: block; flex: 1; min-width: 0; }

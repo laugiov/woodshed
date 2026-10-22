@@ -64,7 +64,7 @@ def resolve_meter(
     beats_per_bar: int,
     sevenths: bool,
     bpm: float | None = None,
-    offset: int | None = None,
+    bar_phase: int | None = None,
 ) -> Meter:
     """Tempo octave and bar phase, then one last decoding on the final grid with that phase.
 
@@ -92,10 +92,10 @@ def resolve_meter(
         phase = meter.pick_phase(decoded.labels, accents, beats_per_bar)
         if phase != decoded.phase:
             decoded = decode(sync(spec, decoded.beat_times), sevenths, beats_per_bar, phase=phase)
-    # The band's bar lines (`offset`, the beat it counts "one" on): only at the last decoding, once the
+    # The band's bar lines (`bar_phase`: the beats before the first bar line): only at the last decoding, once the
     # tempo is settled, so the beats stay the same and the chords typed on them stay where they were.
-    if offset is not None and offset != decoded.phase:
-        decoded = decode(sync(spec, decoded.beat_times), sevenths, beats_per_bar, phase=offset)
+    if bar_phase is not None and bar_phase != decoded.phase:
+        decoded = decode(sync(spec, decoded.beat_times), sevenths, beats_per_bar, phase=bar_phase)
     return Meter(decoded, halved)
 
 
@@ -110,7 +110,7 @@ def analyze(
     stems_result: stems.Stems | None = None,
     progress: Progress | None = None,
     bpm: float | None = None,
-    offset: int | None = None,
+    bar_phase: int | None = None,
 ) -> Song:
     """Analyse one recording. With `use_stems`, the stems also give each instrument's part and,
     when beat_this is installed, better beats and downbeats.
@@ -139,7 +139,7 @@ def analyze(
         _, grid = beats.track_librosa(y)
 
     report("chords", 0.0)
-    resolved = resolve_meter(spectral(y), grid, downbeats, beats_per_bar, sevenths, bpm, offset)
+    resolved = resolve_meter(spectral(y), grid, downbeats, beats_per_bar, sevenths, bpm, bar_phase)
     decoded = resolved.decoded
     times = decoded.beat_times
 

@@ -171,6 +171,7 @@
     // The chart's corrections, kept by the library for the band: read when the page opens, when it
     // comes back to the screen, and when the stream says another device corrected this song.
     let fixesRev = -1;
+    let movedSeen = null; // how many times the library moved this page's bar lines, when first heard
     let editsRead = false; // the first answer only fills the page in
     async function loadFixes() {
       const r = await api(
@@ -249,6 +250,10 @@
 
     function heard(state) {
       if (state.fixes && typeof state.fixes[folder] === "number" && state.fixes[folder] > fixesRev) loadFixes();
+      const moved = state.moved && typeof state.moved[folder] === "number" ? state.moved[folder] : 0;
+      const movedBefore = movedSeen;
+      movedSeen = moved; // a restarted library counts from 0 again
+      if (movedBefore !== null && moved > movedBefore && app.barsMoved) app.barsMoved(); // another device moved them
       const sample = state.now - Date.now() / 1000;
       if (offsets.length && Math.abs(sample - offset()) > 2) offsets.length = 0; // this device's clock jumped
       offsets.push(sample);
