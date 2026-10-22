@@ -179,8 +179,8 @@
       const keyName = W.prettyText(song.keyName(s.transpose));
       if (st.state === "cannot") {
         const why = {
-          disk: W.t("Open the page from the woodshed library to hear the recording in another key."),
-          library: W.t("Open the page from the woodshed library to hear the recording in another key."),
+          disk: W.t("The recording keeps its key. Open the page from the woodshed library to hear it in another key."),
+          library: W.t("The recording keeps its key. Open the page from the woodshed library to hear it in another key."),
           filter: W.t("This library cannot change the key: install the full ffmpeg (with Rubber Band), then restart woodshed."),
           off: W.t("Changing the recording's key is off in this library."),
         }[st.why];
