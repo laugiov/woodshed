@@ -31,7 +31,11 @@
     Intro: "Intro", Verse: "Couplet", "Pre-chorus": "Pré-refrain", Chorus: "Refrain", Bridge: "Pont",
     Instrumental: "Instrumental", Outro: "Outro", Part: "Partie",
   }; // prettier-ignore
-  W.partName = function partName(name) {
+  // A part's name in the language chosen: the analysis's ("Verse 2") translated, a name the band typed
+  // (a part with `custom`) as typed, the same on every device.
+  W.partName = function partName(part) {
+    if (part && typeof part === "object") return part.custom ? part.name : W.partName(part.name);
+    const name = part;
     if (W.lang() !== "fr" || typeof name !== "string") return name;
     const m = /^(Intro|Verse|Pre-chorus|Chorus|Bridge|Instrumental|Outro|Part)((?: [A-Z0-9′″]+)?)$/.exec(name);
     return m ? PARTS[m[1]] + m[2] : name;

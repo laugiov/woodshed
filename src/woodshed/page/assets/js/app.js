@@ -142,8 +142,15 @@
       return at;
     };
 
-    // The song's sections, as the analysis named them.
-    app.sections = () => (app.words && app.words.sections) || meta.sections; // named by the words, when placed
+    // The song's parts: the band's own names and cuts (views/editor.js), else as the words named them
+    // when placed, else as the analysis did.
+    let editedParts = null;
+    app.sections = () => editedParts || (app.words && app.words.sections) || meta.sections;
+    song.partsNow = () => app.sections(); // the exports' parts (core/exports.js)
+    // The analysis's lines, for the harmony summary and for parts taken back to the analysis.
+    const analysisGroups = JSON.parse(JSON.stringify(meta.groups));
+    app.analysisGroups = analysisGroups;
+    const analysisLines = song.bars.map((b) => [b.group, b.occurrence, b.column]);
     app.sectionOf = (u) => {
       const list = app.sections();
       return list.length ? list[song.sectionIndex(u, list)] : null;
@@ -160,7 +167,7 @@
       app.seekBar(lineOf(u)[0]);
       const sec = app.sectionOf(u);
       const [from, to] = lineOf(u);
-      app.toast(sec ? W.t("Looping {part}. Press play.", { part: W.partName(sec.name) }) : W.t("Looping bars {from}–{to}. Press play.", { from: from + 1, to: to + 1 }));
+      app.toast(sec ? W.t("Looping {part}. Press play.", { part: W.partName(sec) }) : W.t("Looping bars {from}–{to}. Press play.", { from: from + 1, to: to + 1 }));
     };
     const curBar = () => Math.floor(store.get().beat / song.per);
 
@@ -376,6 +383,16 @@
         song.bars[u].chords = bar.chords;
         song.bars[u].edited = !!bar.edited;
       });
+      // The band's parts, and the chart's lines drawn again from them (a part always starts a line).
+      editedParts = W.edits.applyParts((app.words && app.words.sections) || meta.sections, typedParts.values(), meta.first_beat, song.per, song.bars.length);
+      if (editedParts) {
+        const lines = W.structure.regroup(song.bars, editedParts);
+        meta.groups = lines.groups;
+        lines.fields.forEach((f, u) => Object.assign(song.bars[u], f));
+      } else {
+        meta.groups = JSON.parse(JSON.stringify(analysisGroups));
+        analysisLines.forEach(([group, occurrence, column], u) => Object.assign(song.bars[u], { group, occurrence, column }));
+      }
     }
     // Doubts taken back to the analysis on this device, until the band's library has them: a
     // device that was offline shares them when it comes back, and the library's copy of the old fix
@@ -493,6 +510,24 @@
       store.set({ corrections: store.get().corrections + 1 });
       return app.shareEdits ? app.shareEdits(change) : false;
     }
+    // A part's name, typed at the start of bar u (renaming the part there, or starting one); a join of
+    // the part starting at bar u to the one before; the parts back to the analysis.
+    app.namePart = (u, name) => {
+      const entry = { name: String(name).replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "").trim().slice(0, 40) };
+      if (!entry.name) return false;
+      typedParts.set(beatOfBar(u), entry);
+      return editsChanged({ parts: { [beatOfBar(u)]: entry } });
+    };
+    app.joinPart = (u) => {
+      typedParts.set(beatOfBar(u), { join: true });
+      return editsChanged({ parts: { [beatOfBar(u)]: { join: true } } });
+    };
+    app.untypeParts = () => {
+      const keys = Object.keys(typedParts.values());
+      for (const k of keys) typedParts.take(k);
+      if (!app.shareEdits) typedParts.heard(keys);
+      return editsChanged({ parts: Object.fromEntries(keys.map((k) => [k, null])) });
+    };
     // The chords typed on bar u, as [[beats, label]], or null.
     app.typedBar = (u) => {
       const entry = typedBars.get(beatOfBar(u));

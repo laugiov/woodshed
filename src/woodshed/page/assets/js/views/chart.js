@@ -96,14 +96,35 @@
     function sectionHead(sec, k) {
       const first = bar(sec.start);
       const n = sec.end - sec.start;
-      const part = W.partName(sec.name);
+      const part = W.partName(sec);
       const other = playedOtherwise(sec, k);
+      // Editing the chart: the name is a field (Enter or leaving it keeps it, Escape leaves it as it was),
+      // and a part after the first can be joined to the one before.
+      const editing = store.get().editing && !store.get().stage;
+      const name = editing
+        ? h("span", { class: "sec-edit" },
+            h("input", {
+              class: "sec-field", value: part, size: Math.max(6, part.length + 1), maxlength: "40", "data-testid": "part-name",
+              "aria-label": W.t("Name of the part at bar {n}", { n: sec.start + 1 }),
+              onkeydown: (e) => {
+                if (e.key === "Enter") e.target.blur();
+                else if (e.key === "Escape") {
+                  e.target.value = part;
+                  e.target.blur();
+                }
+              },
+              onchange: (e) => {
+                if (e.target.value.trim() && e.target.value.trim() !== part) app.namePart(sec.start, e.target.value);
+              },
+            }),
+            k > 0 ? h("button", { type: "button", class: "join", "data-testid": "part-join", onclick: () => app.joinPart(sec.start) }, W.t("Join with the part before")) : null)
+        : h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: W.t("Go to {part}", { part }) }, part);
       return h(
         "div",
         { class: "sec-head", "data-testid": "section", "data-section": k, "data-role": sec.role },
-        h("button", { type: "button", class: "sec-name", "data-goto": sec.start, title: W.t("Go to {part}", { part }) }, part),
+        name,
         h("span", { class: "sec-meta" }, fmt(first.start) + " · " + (n === 1 ? W.t("1 bar") : W.t("{n} bars", { n }))),
-        other ? h("span", { class: "sec-other", "data-testid": "played-otherwise" }, W.t("{bars}: different chords from {part}, check by ear", { bars: barsText(other.bars), part: W.partName(other.part.name) })) : null,
+        other ? h("span", { class: "sec-other", "data-testid": "played-otherwise" }, W.t("{bars}: different chords from {part}, check by ear", { bars: barsText(other.bars), part: W.partName(other.part) })) : null,
         h("button", { type: "button", class: "linkbtn sec-loop", "data-loop": sec.start, "data-testid": "section-loop", title: W.t("Loop {part}", { part }) }, W.t("⟲ Loop")),
       );
     }
@@ -116,7 +137,7 @@
       clear(
         $("form"),
         list.map((sec, k) =>
-          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, tabindex: k === stop ? "0" : "-1", "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec.name)),
+          h("button", { type: "button", class: "form-chip" + (k === cur ? " on" : "") + " r-" + sec.role, tabindex: k === stop ? "0" : "-1", "data-goto": sec.start, "data-testid": "form-chip" }, W.partName(sec)),
         ),
       );
       if (focused >= 0 && $("form").children[focused]) $("form").children[focused].focus({ preventScroll: true }); // the page follows the song
@@ -476,7 +497,7 @@
         for (let i = 0; i < box.children.length; i++) box.children[i].classList.toggle("on", i === b % song.per);
       }
       const sec = app.sectionOf(u);
-      $("barInfo").textContent = sec ? W.partName(sec.name) : W.t("Bar {n}", { n: u + 1 });
+      $("barInfo").textContent = sec ? W.partName(sec) : W.t("Bar {n}", { n: u + 1 });
       $("passInfo").textContent = sec ? W.t("bar {n} of {len}", { n: u - sec.start + 1, len: sec.end - sec.start }) : W.t("of {len}", { len: song.bars.length });
       renderTime(s);
     }
@@ -494,7 +515,7 @@
       // Harmony is summarised per family of lines (A, B); the page names them after the part
       // where each family is first heard (Verse, Chorus), the names the chart shows.
       const partOf = (family) => {
-        const g = song.song.groups.find((gr) => gr.family === family);
+        const g = app.analysisGroups.find((gr) => gr.family === family);
         const sec = g && app.sectionOf(g.occurrences[0][0]);
         return sec ? W.partName(sec.name.replace(/ \d+$/, "")) : family;
       };

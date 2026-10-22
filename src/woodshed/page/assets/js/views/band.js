@@ -393,7 +393,7 @@
           ? [h("b", null, W.t("Waiting for a leader")), h("span", null, " · " + W.t("another device presses Lead"))]
           : gone
             ? [h("b", null, W.t("The leader is silent")), h("span", null, " · " + W.t("its page closed or its screen locked"))]
-            : [h("b", null, W.t("Following the leader")), h("span", null, " · " + (last.playing ? W.t("playing") : W.t("stopped")) + (sec ? " · " + W.partName(sec.name) : ""))];
+            : [h("b", null, W.t("Following the leader")), h("span", null, " · " + (last.playing ? W.t("playing") : W.t("stopped")) + (sec ? " · " + W.partName(sec) : ""))];
         clear(banner, status, h("button", { type: "button", class: "linkbtn", onclick: () => setMode("alone") }, W.t("Stop following")));
       } else banner.hidden = true;
       const next = nextSong();

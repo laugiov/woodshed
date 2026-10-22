@@ -142,11 +142,11 @@
       const per = Math.ceil(len / 16); // a dot per bar, or per few bars in a long section
       const at = Math.floor((u - sec.start) / per);
       clear($("stMap"), Array.from({ length: Math.ceil(len / per) }, (_, i) => h("i", { class: i === at ? "on" : i < at ? "done" : "" })));
-      $("stSection").textContent = W.partName(sec.name);
+      $("stSection").textContent = W.partName(sec);
       $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM";
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
-      const what = next ? W.partName(next.name) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
+      const what = next ? W.partName(next) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
       // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
       const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
       $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "");
@@ -173,7 +173,7 @@
       shown.forEach((r, i) => {
         const sec = app.sectionOf(r.firstBar);
         const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
-        if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec.name)));
+        if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec)));
         const now = i === 0 && k >= 0;
         out.push(h("div", { class: "st-line" + (now ? " now" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
         if (now) {

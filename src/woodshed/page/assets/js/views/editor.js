@@ -72,7 +72,7 @@
     }
     const partOf = (u) => {
       const p = app.sectionOf(u);
-      return p ? W.partName(p.name) : W.t("Bar {n}", { n: u + 1 });
+      return p ? W.partName(p) : W.t("Bar {n}", { n: u + 1 });
     };
     function listOf(names) {
       if (names.length <= 1) return names.join("");
@@ -230,6 +230,7 @@
                 W.chordNode(app.nameFor(a, 0, store.get())), " ", h("small", null, W.t("{n}%", { n: a.share })))))
           : null,
         also ? h("label", { class: "also" }, also, W.t("Also {parts}, the same bar", { parts: listOf([...new Set(others.map(partOf))]) })) : null,
+        startPart(u),
         h("p", { class: "tip" }, W.t("As on a chord sheet: Asus4, Cmaj7, Bdim, D/F#. A dot holds the chord, % repeats the bar before.")),
         h(
           "div",
@@ -250,6 +251,31 @@
       place(box, opener || document.body);
       field.focus({ preventScroll: true });
       field.select();
+    }
+
+    // A part starting on this bar, named on the spot (the parts and their lines follow).
+    function startPart(u) {
+      const name = h("input", { class: "part-start-name", type: "text", maxlength: "40", hidden: "", "data-testid": "part-start-name",
+        "aria-label": W.t("Name of the part starting at bar {n}", { n: u + 1 }), placeholder: W.t("Bridge, Tag, Solo…") });
+      const go = h("button", { type: "button", class: "btn", "data-testid": "part-start", onclick: () => {
+        if (name.hidden) {
+          name.hidden = false;
+          name.focus();
+          return;
+        }
+        if (!name.value.trim()) return name.focus();
+        app.namePart(u, name.value);
+        app.toast(W.t("A part starts at bar {n}.", { n: u + 1 }));
+        close(true);
+      } }, W.t("Start a part here"));
+      name.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          go.click();
+        }
+      });
+      return h("div", { class: "part-start" }, go, name);
     }
 
     // The dialog keeps the keyboard; Escape anywhere in it closes it.
@@ -287,7 +313,7 @@
 
     function renderStrip(s) {
       const strip = $("editStrip");
-      const shows = s.editing && !s.stage ? [W.lang()].join("|") : "";
+      const shows = s.editing && !s.stage ? [W.lang(), s.corrections].join("|") : "";
       strip.hidden = !shows;
       document.body.classList.toggle("editing", !!shows);
       if (!shows || strip.dataset.shows === shows) return;
@@ -297,13 +323,19 @@
         h("span", { class: "what" }, W.t("Editing the chart")),
         h("span", { class: "how" }, PHONE.matches ? W.t("Tap a bar to type its chords.") : W.t("Click a bar to type its chords.")),
         h("span", { class: "acts" },
+          Object.keys(app.typedParts.values()).length
+            ? h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-parts", onclick: () => {
+                app.untypeParts();
+                app.toast(W.t("The parts are the analysis's again."));
+              } }, W.t("Parts back to the analysis"))
+            : null,
           h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-all", onclick: untypeAll }, W.t("Back to the analysis…")),
           h("button", { type: "button", class: "btn primary", "data-testid": "edit-done", onclick: () => store.set({ editing: false }) }, W.t("Done"))),
       );
     }
 
     store.on((s, changed) => {
-      if (changed.has("editing") || changed.has("stage")) {
+      if (changed.has("editing") || changed.has("stage") || changed.has("corrections")) {
         renderStrip(s);
         if (!s.editing) close(false);
       }

@@ -109,5 +109,31 @@
     });
   }
 
-  W.edits = { parseBar, apply, label };
+  // A typed part name's colour role, from a word in it (else neutral).
+  const ROLES = [
+    [/pre[- ]?(chorus|refrain)/i, "prechorus"], [/chorus|refrain/i, "chorus"], [/verse|couplet/i, "verse"],
+    [/bridge|pont/i, "bridge"], [/intro/i, "intro"], [/outro|coda/i, "outro"], [/solo|instrumental/i, "instrumental"],
+  ];
+  const roleOf = (name) => (ROLES.find(([re]) => re.test(name)) || [null, "part"])[1];
+
+  // The song's parts with the band's names and cuts laid over them (null: none typed). `parts` by the
+  // beat a part starts on: {name} renames or starts one there, {join} joins it to the part before. A
+  // beat that is no longer a bar's first (the bar lines moved) goes to the nearest bar.
+  function applyParts(base, parts, firstBeat, per, nBars) {
+    const entries = Object.entries(parts || {});
+    if (!entries.length || !nBars) return null;
+    const starts = new Map();
+    const given = base.length ? base : [{ name: "", role: "part", letter: "", start: 0, end: nBars }];
+    for (const sec of given) starts.set(sec.start, { name: sec.name, role: sec.role, letter: sec.letter, custom: !!sec.custom });
+    for (const [at, v] of entries.sort((a, b) => Number(a[0]) - Number(b[0]))) {
+      const u = Math.max(0, Math.min(nBars - 1, Math.round((Number(at) - firstBeat) / per)));
+      if (v.join) {
+        if (u > 0) starts.delete(u); // the first part has nothing to join
+      } else starts.set(u, { name: v.name, role: roleOf(v.name), letter: (starts.get(u) || {}).letter || "", custom: true });
+    }
+    const us = [...starts.keys()].sort((a, b) => a - b);
+    return us.map((u, k) => ({ ...starts.get(u), start: u, end: k + 1 < us.length ? us[k + 1] : nBars }));
+  }
+
+  W.edits = { parseBar, apply, label, applyParts, roleOf };
 })();

@@ -69,7 +69,8 @@
       "{time: " + d.beats_per_bar + "/4}",
       "{comment: chords found by woodshed from " + directiveText(d.file) + "}",
     ];
-    const sections = (words && words.sections) || d.sections || [];
+    // The parts as the page has them (the band's names and cuts, the words', the analysis's).
+    const sections = (song.partsNow && song.partsNow()) || (words && words.sections) || d.sections || [];
     // The chords to check by ear, by part (exports.py _to_check): a file has no bar numbers.
     const doubtful = [];
     d.bars.forEach((bar, u) => bar.chords.forEach((c) => c.doubt && (c.doubt.kind || "chord") === "chord" && doubtful.push([u, c]))); // no kind: older data

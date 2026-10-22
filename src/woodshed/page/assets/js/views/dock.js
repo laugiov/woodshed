@@ -61,7 +61,7 @@
         const room = X(barStart(sec.end)) - x - 5;
         const number = (sec.name.match(/ (\d+)$/) || ["", ""])[1];
         const short = SHORT[sec.role] ? SHORT[sec.role] + number : sec.letter;
-        const text = [W.partName(sec.name), short].find((t) => g.measureText(t).width <= room);
+        const text = [W.partName(sec), short].find((t) => g.measureText(t).width <= room);
         if (text) g.fillText(text, x + 3, 12);
       });
     }
@@ -94,7 +94,7 @@
       if (tenth !== shownTenth) clear($("posInfo"), h("b", null, fmt(s.time, true)), " / " + fmt(Math.round(duration)));
       shownTenth = tenth;
       const looped = s.loop && app.sections().find((sec) => sec.start === s.loop[0] && sec.end === s.loop[1] + 1);
-      const what = !s.loop ? "" : looped ? W.partName(looped.name) : W.t("bars {from}–{to}", { from: s.loop[0] + 1, to: s.loop[1] + 1 });
+      const what = !s.loop ? "" : looped ? W.partName(looped) : W.t("bars {from}–{to}", { from: s.loop[0] + 1, to: s.loop[1] + 1 });
       $("loopInfo").textContent = s.loopOn && s.loop ? W.t("Looping {part}", { part: what }) + (s.trainer ? " · " + W.t("trainer on") : "") : W.t("No loop");
       $("loopBtn").classList.toggle("on", !!s.loopOn);
       $("trainBtn").classList.toggle("on", !!s.trainer);
