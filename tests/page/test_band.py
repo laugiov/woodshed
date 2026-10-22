@@ -558,3 +558,26 @@ def test_add_the_words_is_offered_only_where_words_can_be_placed(
         expect(page.get_by_test_id("add-words")).to_have_count(2 if can_upload else 0)
     finally:
         context.close()  # the page polls the library: nothing may answer it after the test
+
+
+def test_a_note_saved_while_another_is_pressed_still_opens_that_one(browser: Browser, server: app.AppServer) -> None:
+    """The first note's save comes back between the press and the release on the second note."""
+    page = browser.new_context(locale="en-US").new_page()
+    try:
+        page.goto(server.url)
+        items = page.get_by_test_id("set-item")
+        expect(items).to_have_count(2)
+        items.first.get_by_test_id("set-note").click()
+        page.get_by_test_id("set-note-input").fill("count of 4")
+        second = items.nth(1).get_by_test_id("set-note")
+        box = second.bounding_box()
+        assert box
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()  # the first note loses the focus and is saved
+        page.wait_for_timeout(800)  # its answer is back while the button is held
+        page.mouse.up()
+        expect(items.nth(1).get_by_test_id("set-note-input")).to_be_focused()
+        expect(items.first.get_by_test_id("set-note")).to_have_text("count of 4")
+    finally:
+        for name in ("pop", "waltz"):
+            (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)

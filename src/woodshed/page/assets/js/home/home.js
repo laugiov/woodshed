@@ -84,6 +84,22 @@
       toast(W.t("The note was not saved."));
     }
   }
+  // A press on the set list while a note is saved: the list is drawn again only once the click is
+  // over, so the button pressed (another song's note) is still there to get it.
+  let pressing = false;
+  let afterPress = null;
+  document.addEventListener("pointerdown", (e) => {
+    pressing = !!e.target.closest('[data-testid="setlist"]');
+  });
+  const pressOver = () =>
+    setTimeout(() => {
+      pressing = false;
+      const run = afterPress;
+      afterPress = null;
+      if (run) run();
+    }, 0); // after the click the release makes
+  document.addEventListener("pointerup", pressOver);
+  document.addEventListener("pointercancel", pressOver);
   function noteEditor(folder, note) {
     const input = h("input", { type: "text", class: "set-note-input", maxlength: "300", value: note, "aria-label": W.t("Note for {song}", { song: titles[folder] || folder }), "data-testid": "set-note-input" });
     let done = false;
@@ -92,12 +108,16 @@
       done = true;
       if (keep && input.value.trim() !== note) await saveNote(folder, input.value);
       // Drawn after the click that ended the editing: the button under the pointer gets that click.
-      setTimeout(() => {
+      const redraw = () => {
         if (editing !== folder) return; // another song's note was opened meanwhile: left as it is
         editing = null;
         renderSet({ again: true, editor: true });
         const again = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-note"]');
         if (again) again.focus();
+      };
+      setTimeout(() => {
+        if (pressing) afterPress = redraw; // the save came back while a button is held down
+        else redraw();
       }, 0);
     };
     input.addEventListener("keydown", (e) => {
