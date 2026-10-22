@@ -369,7 +369,7 @@
       const mode = app.sheetMode(s);
       // Drawn again only when what it shows changes: a redraw under a click (the band's corrections
       // arriving) would swallow it.
-      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, W.lang()].join("|");
+      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, W.lang()].join("|");
       if (el.dataset.shows === shows) return;
       el.dataset.shows = shows;
       const sheetCtl = app.words
@@ -381,7 +381,7 @@
           )
         : null;
       // The words are placed on the singer's track: offered once the page has it.
-      const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals")
+      const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals") && !s.wordsElsewhere
         ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? W.t("Edit the words") : W.t("Add the words"))
         : null;
       if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
@@ -530,7 +530,7 @@
     store.on((s, changed) => {
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
-      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey"].some((k) => changed.has(k));
+      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere"].some((k) => changed.has(k));
       // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
       if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);
       else if (changed.has("beat") || changed.has("loop") || changed.has("loopOn")) paintBars(s);

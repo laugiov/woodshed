@@ -98,20 +98,20 @@ def test_words_pasted_in_the_page_are_placed_and_shown(page: Page, library: app.
     assert problems == []
 
 
-def test_a_phone_of_the_band_is_told_where_words_are_added(
+def test_a_phone_of_the_band_is_not_offered_to_add_words(
     page: Page, library: app.AppServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(app.Handler, "_from_this_computer", lambda self: False)
     page.goto(library.url + "Pop.woodshed/index.html")
     for _ in range(200):  # the page wired (polled: the CSP forbids Playwright's string evaluation)
         if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
             break
         page.wait_for_timeout(25)
-    # The header's button: the chart's own is drawn again when the band's corrections arrive, and a
-    # click across that redraw is lost.
-    page.get_by_test_id("words-header").click()
-    expect(page.get_by_test_id("words-dialog")).to_be_visible()
-    # Said once the library answers (it is asked when the dialog opens).
-    expect(page.get_by_test_id("words-elsewhere")).to_contain_text("computer that runs the library", timeout=10000)
-    page.get_by_test_id("words-close").click()
-    expect(page.get_by_test_id("words-dialog")).to_be_hidden()
+    expect(page.get_by_test_id("words-header")).to_be_visible()  # this computer: words are placed here
+    monkeypatch.setattr(app.Handler, "_from_this_computer", lambda self: False)  # now a phone of the band
+    page.reload()
+    for _ in range(200):
+        if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
+            break
+        page.wait_for_timeout(25)
+    expect(page.get_by_test_id("words-header")).to_be_hidden()  # no button that leads to a refusal
+    expect(page.get_by_test_id("words-open")).to_have_count(0)

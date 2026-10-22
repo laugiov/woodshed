@@ -211,9 +211,11 @@
       } catch (err) {
         return; // sending says what is wrong
       }
-      headerBtn.classList.remove("primary"); // nothing to do here for this device
+      // Nothing to do here for this device: no button that leads to a refusal.
+      headerBtn.hidden = true;
       elsewhere = true;
-      fill();
+      app.store.set({ wordsElsewhere: true });
+      if (dialog) fill();
     }
 
     // The dialog's content, said again in the other language with what it holds kept: the paste,
@@ -244,7 +246,6 @@
         dialog = h("dialog", { class: "words-dialog", "aria-labelledby": "wordsTitle", "data-testid": "words-dialog" });
         document.body.appendChild(dialog);
         fill();
-        if (served && hasVoice) mayAdd();
       } // built once: closed and opened again, it keeps a paste not sent yet, and a placement under way
       if (!dialog.open) dialog.showModal();
       const area = $("wordsText");
@@ -258,6 +259,7 @@
       headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
       headerBtn.classList.toggle("primary", !app.words);
       headerBtn.addEventListener("click", open);
+      if (served) mayAdd(); // a phone of the band: asked once, when the page opens
     }
 
     // The words placed before this load: said once, now that they show.
