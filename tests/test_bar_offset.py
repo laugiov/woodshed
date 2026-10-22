@@ -191,3 +191,10 @@ def test_bar_lines_that_did_not_move_leave_the_page_as_it_was(
     assert {p.name: p.read_bytes() for p in (page / "index.html", page / MANIFEST)} == before
     assert not app.Library.attempt(lib.songs / "pop.wav").exists()  # nothing to skip at the next start
     assert "moved" not in library.live.payload()
+
+
+def test_a_rebuild_or_a_resume_keeps_the_bar_phase(library: app.AppServer) -> None:
+    lib = library.library
+    assert lib._options_of({"beats_per_bar": 3, "bar_phase": 2}).bar_phase == 2
+    for wrong in (3, -1, True, "1", 1.0):  # edited by hand: dropped, the analysis decides
+        assert lib._options_of({"beats_per_bar": 3, "bar_phase": wrong}).bar_phase is None

@@ -50,7 +50,7 @@ What makes this safe to repeat:
 
 - `run.py` writes a manifest, `woodshed.json`, in each page folder. It holds the settings the page was built from, a summary, and a `complete` flag.
 - `up_to_date()` skips the work when the manifest matches, `complete` is true, and `index.html` and `audio/mix.flac` still exist.
-- The settings include the woodshed version, the analysis revision (`REVISION` in `src/woodshed/analysis.py`), the page revision (see section 9), the file's content hash, and your options (`--title`, `--bpm`, `--sevenths`, beats per bar).
+- The settings include the woodshed version, the analysis revision (`REVISION` in `src/woodshed/analysis.py`), the page revision (see section 9), the file's content hash, and your options (`--title`, `--bpm`, `--sevenths`, beats per bar, and `bar_phase` only when the band chose where the bars start).
 - If the second pass fails, the page keeps the mix and loses its banner. The error still goes up.
 
 For a folder of songs, `run_folder` builds every mix-only page first. Then it adds the stems song by song and rewrites the index (`src/woodshed/songbook.py`).
@@ -130,6 +130,7 @@ Then two questions need an answer: which beats are the "real" ones (tempo octave
 - With downbeats: `phase_from_downbeats` takes the beat position holding the most downbeats. It is used if that share is at least 50% (`MIN_DOWNBEAT_SHARE`).
 - Otherwise the decoder estimates the phase from where chord changes fall, and `pick_phase` breaks ties by onset accent.
 - Every correction ends in a fresh decoding. Chords, doubts and bar lines all come from the same grid and phase.
+- A phase chosen by the band (`--bar-phase`, or Bar lines… on the page) overrides all of this at the last decoding only, once the tempo is settled, so the beats stay bit for bit.
 
 ---
 
@@ -258,7 +259,7 @@ All thresholds carry their measurements in comments. The bass tab and the drum g
 
 **Guitar shapes.** `src/woodshed/shapes.json` holds open shapes and two easy barres. It is the single source for the page's chord diagrams and for capo difficulty in `src/woodshed/theory.py` (`suggest_capo`). `src/woodshed/view.py` ships the shapes to the page.
 
-`theory.py` also does spelling (sharps or flats by key), roman numerals and named progressions. The page holds almost no theory. `view.py` precomputes, for all 12 transpositions, the key name, the capo and the spelling of each root. The page only looks names up.
+`theory.py` also does spelling (sharps or flats by key), roman numerals and named progressions. `view.py` precomputes, for all 12 transpositions, the key name, the capo and the spelling of each root, and the page looks names up there. What the page computes itself is what the band types: it parses chords with the shared table (`core/chords.js`), recomputes the capo when typed chords change the shapes, and regroups the lines when parts are renamed, joined or started (`core/structure.js`, twinned with `structure._group`).
 
 **Chords the band types.** The analysis writes four qualities ("", m, 7, m7). A band can type any chord of `src/woodshed/chords.json` on its chart: sus2, sus4, 7sus4, maj7, 6, m6, 9, m9, maj9, add9, madd9, 5, dim, dim7, m7b5, aug, with or without a slash bass (D/F#). That table is the one place a quality is defined: its intervals, its roman-numeral case and mark, its MusicXML kind and degrees, its Harte form for `.lab`, the open shapes of typed chords and a movable E-form and A-form per quality. `src/woodshed/chords.py` parses what a musician types (the library checks with it what a page sends) and `page/assets/js/core/chords.js` does the same in the page; `tests/chord_cases.json` holds the cases both must read alike. The page gets the table as `core/chord-table.js`, generated from the JSON by `scripts/chord_table.py` (a test checks they agree): pages built earlier receive it with their next code refresh, their data untouched. Names still come from the view tables (the bass note too); a typed quality takes the root's numeral with its own case and mark, and a slash bass its degree above the root ("I/3"). `tests/test_chords.py` checks that every movable shape plays its chord in every key.
 
@@ -469,6 +470,7 @@ flowchart LR
 - `Library.add` puts a job on a queue. **One worker thread** takes one job at a time, so only one analysis runs at once. It runs the same `first_pass` and `second_pass` as the command line.
 - A job goes through `queued`, `analysing`, `separating`, `done` or `failed`. The home page polls its progress.
 - Words pasted on a song page are a job of the same queue (`kind: "words"`, status `placing`): one heavy job at a time, and never two jobs on one song at once. They are allowed from the computer that runs the app, like uploads, and are 32 KB at most. A words job is not resumed after a stop: paste them again.
+- Moving a page's bar lines is a job of the same queue too (`kind: "bars"`): from the computer that runs the app, one per song at a time, not resumed after a stop.
 - If the app stops during a job, that job is not marked failed. It is resumed at next start (`resume`).
 - Uploads are limited to 2 GB and need free disk space for the tracks.
 - The **set list** is `setlist.json` in the library: the order the band plays songs in. The home page shows each song's key (the band's key when there is one), tempo and length, the total, and the leader's note; `@media print` prints the set alone.

@@ -334,7 +334,8 @@ a minute later the page shows the chords above the words. From the command line,
 opened from disk: `woodshed lyrics "Song.woodshed" words.txt`.
 
 Useful options: `--bpm 65` settles a half-time or double-time doubt, `--beats-per-bar 3` for a
-waltz, `--sevenths` adds 7th chords, `--offline` never downloads models. `woodshed --help` lists
+waltz, `--sevenths` adds 7th chords, `--bar-phase 1` puts the first bar line one beat later (a pickup),
+`--offline` never downloads models. `woodshed --help` lists
 them all.
 
 ---

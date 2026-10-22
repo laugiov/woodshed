@@ -33,7 +33,7 @@ def test_typed_chords_are_named_and_numbered_as_the_library_does(open_page: Any)
     for text in typed:
         chord = chords.parse(text)
         assert isinstance(chord, chords.Chord)
-        for transpose in (0, 1, 2, 3, 5, 8, 10):  # sharp and flat keys
+        for transpose in range(12):  # every key, sharp and flat
             name = o.js(f"Woodshed.current.chordName(Woodshed.chords.parse({json.dumps(text)}), {transpose})")
             assert name == chords.name(chord, key, transpose), (text, transpose)
         numeral = o.js(f"Woodshed.current.roman(Woodshed.chords.parse({json.dumps(text)}))")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from playwright.sync_api import expect
@@ -248,3 +249,11 @@ def test_this_bar_held_down_loops_it_until_released(open_page: Any) -> None:
         False,
         False,
     ]
+
+
+def test_the_chart_is_not_edited_while_the_full_analysis_is_coming(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("Woodshed.current.view.pending = true; Woodshed.app.store.set({ inst: 'bass' })")  # a mix-only page
+    button = o.page.get_by_test_id("edit-chart")
+    expect(button).to_be_disabled()
+    expect(button).to_have_attribute("title", re.compile("the full analysis may move the beats"))

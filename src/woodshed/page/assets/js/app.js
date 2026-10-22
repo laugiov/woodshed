@@ -513,7 +513,8 @@
     // A part's name, typed at the start of bar u (renaming the part there, or starting one); a join of
     // the part starting at bar u to the one before; the parts back to the analysis.
     app.namePart = (u, name) => {
-      const entry = { name: String(name).replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "").trim().slice(0, 40) };
+      const entry = { name: String(name).replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "").trim() };
+      entry.name = Array.from(entry.name).slice(0, 40).join(""); // 40 characters as Python counts them, an emoji never cut in half
       if (!entry.name) return false;
       typedParts.set(beatOfBar(u), entry);
       return editsChanged({ parts: { [beatOfBar(u)]: entry } });
