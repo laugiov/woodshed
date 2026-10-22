@@ -522,5 +522,27 @@
 {
 "refused": "unknown"
 }
+],
+[
+"CMAJ7",
+{
+"pc": 0,
+"quality": "maj7",
+"bass": null
+}
+],
+[
+"CMIN",
+{
+"pc": 0,
+"quality": "m",
+"bass": null
+}
+],
+[
+"CMi7",
+{
+"refused": "unknown"
+}
 ]
 ]
