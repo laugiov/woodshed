@@ -31,6 +31,7 @@ import socketserver
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,7 +40,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import audio, lyrics
+from woodshed import audio, lyrics, stems
 from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
@@ -105,7 +106,7 @@ class Job:
     message: str = ""
     page: str | None = None  # the page folder, as soon as a first page exists
     started: float = field(default_factory=time.time)
-    kind: str = "song"  # song (an analysis) or words (lyrics placed on a page)
+    kind: str = "song"  # song (an analysis), words (lyrics placed on a page), bars (the bar lines moved)
     ended: float | None = None  # done or failed: shown a while after this, not after it started
     notes: list[str] = field(default_factory=list)  # what the user should know about the result
 
@@ -570,15 +571,57 @@ class Library:
             return self._failed(src, f"not resumed: another file already makes {folder}")
         seen.add(folder.lower())
         given = manifest.get("settings")
-        given = given if isinstance(given, dict) else {}
-        beats, bpm = given.get("beats_per_bar"), given.get("bpm")
-        # Each field checked on its own: a page edited by hand keeps its good fields.
+        return self.add(src, self._options_of(given if isinstance(given, dict) else {}), uploaded=False)
+
+    def _options_of(self, given: dict[str, Any]) -> Options:
+        """A page's options as its manifest keeps them; each field checked on its own: a page edited by
+        hand keeps its good fields."""
+        beats, bpm, offset = given.get("beats_per_bar"), given.get("bpm"), given.get("offset")
+        per = beats if isinstance(beats, int) and not isinstance(beats, bool) and 2 <= beats <= 12 else 4
         opts = self.options(
-            beats if isinstance(beats, int) and not isinstance(beats, bool) and 2 <= beats <= 12 else 4,
+            per,
             given.get("sevenths") is True,
             float(bpm) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and 30 <= bpm <= 300 else None,
         )
-        return self.add(src, opts, uploaded=False)
+        return replace(opts, offset=offset if type(offset) is int and 0 <= offset < per else None)
+
+    def move_bars(self, data: Any, playing: Callable[[str], bool] | None = None) -> Job:
+        """The band's bar lines for a page, {"page", "offset"}: the song analysed again from its file in
+        the library and its separated tracks in the cache. The beats do not move, so the chords and parts
+        the band typed stay where they were; the picks among candidates start over."""
+        if not isinstance(data, dict):
+            raise ValueError("an object with page and offset")
+        folder = self._page(data.get("page"))
+        try:
+            manifest = json.loads((self.root / folder / MANIFEST).read_text(encoding="utf-8"))
+            given = manifest["settings"] if isinstance(manifest["settings"], dict) else {}
+        except (OSError, ValueError, KeyError, TypeError):
+            raise ValueError("this page has no settings to analyse it again with") from None
+        opts = self._options_of(given)
+        offset = data.get("offset")
+        if type(offset) is not int or not 0 <= offset < opts.beats_per_bar:
+            raise ValueError(f"offset: 0 to {opts.beats_per_bar - 1}, the beats before the first bar line")
+        if playing is not None and playing(folder):
+            raise PermissionError("the band is playing this song: stop it first")
+        src = next(
+            (
+                s
+                for s in media_files(self.songs)
+                if folder_name(s.stem) == folder and stems.fingerprint(s) == given.get("source")
+            ),
+            None,
+        )
+        if src is None:
+            raise ValueError(f'the recording is not in the library: run woodshed "<the file>" --offset {offset}')
+        if given.get("stems") is True and stems.cached(src) is None:
+            raise ValueError("the separated tracks are no longer in the cache: add the song again first")
+        with self.lock:
+            if any(j.page == folder and j.status not in ("done", "failed") for j in self.jobs.values()):
+                raise PermissionError("this song is already being worked on: try again when it is done")
+            job = Job(secrets.token_hex(6), folder, page=folder, kind="bars")
+            self.jobs[job.id] = job
+        self.queue.put((job, src, replace(opts, offset=offset), False, None))
+        return job
 
     def _failed(self, src: Path, message: str) -> Job:
         job = Job(secrets.token_hex(6), src.name, status="failed", message=message)
@@ -897,6 +940,11 @@ class Live:
             self.fixes[folder] = max(self.fixes.get(folder, 0), rev)  # answers can cross: never back
             self._changed()
 
+    def playing(self, folder: str) -> bool:
+        """The band is playing this song now (a new analysis would pull the page from under it)."""
+        with self.cond:
+            return self.state.get("song") == folder and self.state.get("playing") is True
+
     def update(self, data: Any, library_root: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise ValueError("a live update is a JSON object")
@@ -1161,6 +1209,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._small_json_post(url.path)
             return
+        if url.path == "/api/bars":
+            if not self._may_upload():  # a new analysis: like adding a song
+                self._error(HTTPStatus.FORBIDDEN, "the bar lines are moved from the computer that runs the app")
+                return
+            self._small_json_post(url.path)
+            return
         if url.path != "/api/songs":
             self._error(HTTPStatus.NOT_FOUND, "no such endpoint")
             return
@@ -1211,7 +1265,7 @@ class Handler(BaseHTTPRequestHandler):
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
-        limits |= {"/api/edits": CORRECTIONS_BYTES}
+        limits |= {"/api/edits": CORRECTIONS_BYTES, "/api/bars": 4096}
         limits |= {"/api/band": 4096, "/api/network": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
@@ -1250,6 +1304,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, saved)
             elif path == "/api/lyrics":
                 self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.add_words(data)))
+            elif path == "/api/bars":
+                self._json(HTTPStatus.ACCEPTED, asdict(self.server.library.move_bars(data, self.server.live.playing)))
             elif path == "/api/network":
                 if not isinstance(data, dict) or not isinstance(data.get("on"), bool):
                     raise ValueError("on: true or false")
