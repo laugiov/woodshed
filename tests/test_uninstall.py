@@ -12,11 +12,13 @@ import os
 import re
 import shutil
 import socket
+import sys
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -400,9 +402,19 @@ class FakeWoodshed(BaseHTTPRequestHandler):
         pass
 
 
+class QuietServer(ThreadingHTTPServer):
+    """As woodshed's own server: a client gone mid-request is no error. The probe tries HTTPS first and hangs
+    up on this plain server's 400, which then meets a closed connection now and then."""
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
+
+
 @pytest.fixture
 def woodshed_answering(fake: Home, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), FakeWoodshed)
+    server = QuietServer(("127.0.0.1", 0), FakeWoodshed)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setattr(uninstall, "PORT", server.server_address[1])
