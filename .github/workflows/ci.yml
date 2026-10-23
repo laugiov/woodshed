@@ -32,7 +32,7 @@ jobs:
   tests:
     name: Tests, ${{ matrix.os }}, Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 25  # Windows on Python 3.10 is the slowest: 18 minutes with the key change songs
     strategy:
       fail-fast: false
       matrix:
