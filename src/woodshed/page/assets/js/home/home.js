@@ -31,6 +31,7 @@
   let info = {}; // page folder -> the library's facts on it: key, BPM, length, the band's choices
   let canUpload = true;
   let sixSet = false; // Guitar and keys apart: set from the library once, then this page's choice
+  let libSix = true;
   let editing = null; // the song whose note is being written: the set list waits to be drawn again
   let shown = null; // the last /api/songs answer, to redraw the rows at once
   // One save at a time, each made from the list as the previous save left it: two quick clicks
@@ -331,7 +332,8 @@
     $("drop").hidden = !upload;
     $("addBtn").hidden = !upload;
     $("sixWrap").hidden = !data.separates; // without the instruments' tracks there is nothing to split
-    if (!sixSet) $("six").checked = data.separation !== "four"; // the library's own choice, then this page's
+    libSix = data.separation !== "four";
+    if (!sixSet) $("six").checked = libSix; // the library's own choice, then this page's
     sixSet = true;
     info = {};
     for (const s of data.songs) {
@@ -364,7 +366,8 @@
     params.set("beats_per_bar", $("beats").value);
     if ($("bpm").value) params.set("bpm", $("bpm").value);
     if ($("sevenths").checked) params.set("sevenths", "1");
-    if (!$("sixWrap").hidden) params.set("separation", $("six").checked ? "six" : "four");
+    // Only a choice other than the library's: its own keeps the offline fallback to four.
+    if (!$("sixWrap").hidden && $("six").checked !== libSix) params.set("separation", $("six").checked ? "six" : "four");
     for (const file of files) {
       params.set("name", file.name);
       toast(W.t("Sending {file}…", { file: file.name }));

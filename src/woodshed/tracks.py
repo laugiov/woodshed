@@ -63,13 +63,13 @@ def heard_instruments(stems: Stems) -> frozenset[str]:
     original level: the page's tracks and its parts follow the same answer. Four stems: both, on one track."""
     if stems.model is FOUR:
         return frozenset({"guitar", "keys"})
-    stamp = tuple((str(p), p.stat().st_mtime_ns) for p in sorted(stems.paths.values()))
+    stamp = tuple((name, str(p), p.stat().st_mtime_ns) for name, p in sorted(stems.paths.items()))
     return _heard(stamp, stems.gain)
 
 
 @cache
-def _heard(stamp: tuple[tuple[str, int], ...], gain: float) -> frozenset[str]:
-    handles = {Path(p).stem: sf.SoundFile(p) for p, _ in stamp}
+def _heard(stamp: tuple[tuple[str, str, int], ...], gain: float) -> frozenset[str]:
+    handles = {name: sf.SoundFile(p) for name, p, _ in stamp}
     try:
         n = max(f.frames for f in handles.values())
         rate = next(iter(handles.values())).samplerate
