@@ -25,6 +25,7 @@ and Debian's ffmpeg have it; Homebrew's plain `ffmpeg` does not
 git clone https://github.com/laugiov/woodshed && cd woodshed
 uv sync --extra stems                    # Python, PyTorch (CPU), Demucs, beat_this
 uv run playwright install chromium firefox
+uv run playwright install --with-deps webkit   # optional: the tablet tests (it may need sudo for system libraries)
 uv run woodshed path/to/song.mp3        # try it
 ```
 

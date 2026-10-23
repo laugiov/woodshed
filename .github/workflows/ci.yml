@@ -86,6 +86,28 @@ jobs:
       # Spread over the runner's cores, as scripts/ci.sh does: one by one the page tests reached the 20-minute limit.
       - run: uv run --frozen --group dev pytest -q -m page -n 4 --browser chromium --browser firefox
 
+  tablet:
+    name: Practice page in WebKit (tablets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WOODSHED_REQUIRE_PAGE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: "3.13"
+      # The same sound server as the page job: a browser without an audio device may refuse to play.
+      - run: |
+          bash scripts/ci-apt.sh ffmpeg pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=silence
+          pactl set-default-sink silence
+      - run: uv run --frozen --group dev playwright install --with-deps webkit
+      # WebKit is Safari's engine, not iPadOS Safari: what an iPad needs of the page (spec 011), a real iPad
+      # stays the last check.
+      - run: uv run --frozen --group dev pytest -q -m tablet -n 4 --browser webkit
+
   package:
     name: Build and smoke-test the package
     runs-on: ubuntu-latest

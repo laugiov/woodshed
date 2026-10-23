@@ -161,8 +161,8 @@ once (with an undo). Through the library the band's phones get it live.
   time and a note per song ("capo 2, starts on the chorus"), and print it. At the end of a song,
   the pedal (or `N`) takes the whole band to the next one.
 - **The singer's key**: pick the key that suits the voice, then **Keep it for the band** (the button names the key): every
-  device opens the song in that key. The recording keeps its own key (woodshed never pitch-shifts
-  the audio), and the page says so while you play in another one.
+  device opens the song in that key. Served by `woodshed app`, the recording follows too (rendered by the
+  library, see "For singers"); opened from disk it keeps its own key, and the page says so.
 
 <p align="center">
   <img src="docs/images/phones.png" alt="The page on a phone, and stage mode on a phone" width="100%">
@@ -392,6 +392,15 @@ include `localhost` and `127.0.0.1`. With Docker: put the two files in a `certs`
 **No Wi-Fi in the room.** Turn on a phone's hotspot, join it from the computer and the other phones,
 and let the band's phones join again: the library page shows the address on that network (not last
 time's).
+
+**iPad and tablets.** A tablet opens the library like a phone: on the same Wi-Fi as the computer running
+`woodshed app`, scan the code or type the address the library page shows (**Let the band's phones join**),
+in Safari. Everything works there: your part, the stage view, following the leader, the screen kept on.
+A page folder copied to an iPad does not play: Safari opens a file from the Files app without the files
+next to it. So there is no practice on the iPad alone: the computer has to be on, on the same network. On
+iOS a sound may only start from a tap: the first tap on the page lets every track play, and if a switch is
+still refused, the music goes on and the page asks for another tap. Checked in WebKit, Safari's engine; not
+yet on a real iPad.
 
 **The words.** In the library, a song with its parts offers **add the words**; on its page, **Add the
 words** next to the chart. Paste them (part names like `[Chorus]` help), press **Place the words**:

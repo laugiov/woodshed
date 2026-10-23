@@ -405,6 +405,7 @@ While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the ba
 `audio/transport.js` plays the real recording, not a synthesis.
 
 - One `<audio>` element per track. Only one plays at a time, so instruments never drift apart. Switching "full mix" to "without bass" swaps the element at the same position.
+- The new element takes over only once it plays: a start the browser refuses (iOS starts a sound only from a tap, and a switch comes after its file loads) leaves the old one playing, and `setTrack` / `setFile` resolve `"refused"`; the page asks for another tap (spec 011). On iOS and iPadOS (`W.iOS()`: iPadOS Safari says "Macintosh", its touch points tell it apart) each `touchend`, `click` or `keydown` calls `transport.unlock()`: every element not yet unlocked is started muted and paused at once, so it may play later.
 - Speed changes use the browser's own time-stretch: `playbackRate` with `preservesPitch`. woodshed has no stretching code of its own.
 - Loops are checked on `timeupdate` too, because throttled tabs run no animation frames.
 
@@ -537,7 +538,7 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 - **Synthetic songs** (`tests/synth.py`): deterministic songs rendered from a spec (tempo, meter, chords, bass, hats), with exact ground truth for chords, beats, downbeats and stems. Engine tests run on these, so they stay short and cheap, and the right answer is known.
 - **Engine golden file** (`tests/golden/engine.json`, regenerated with `tests/golden/regenerate.py`): exact labels per librosa and numpy version, plus a fixed "reference" entry that every environment must match in accuracy.
 - **Unit tests**: one `tests/test_*.py` per module (audio, beats, meter, engine, structure, sections, parts, lyrics, exports, build, app, band, check_repo).
-- **Page tests** (`tests/page/`, marker `page`): Playwright opens built pages from `file://` in **Chromium and Firefox**. Any network request, console error or console warning fails the test.
+- **Page tests** (`tests/page/`, marker `page`): Playwright opens built pages from `file://` in **Chromium and Firefox**. Any network request, console error or console warning fails the test. The tests marked `tablet` (what an iPad needs: a start the browser refuses keeps the music playing, the first tap unlocks every track on iOS, the iPad's widths, the iPad's awake hint) also run in **WebKit**, in their own CI job; `scripts/ci.sh` runs them when WebKit starts on the machine.
 - **Parity tests**: the page's MIDI is compared with the Python one byte for byte (section 10). Lyrics placement is compared the same way.
 - **Static page rules** (`tests/test_page_sources.py`): no markup from strings, every script loaded in order.
 - **Real stems** (`tests/test_stems_real.py`, marker `stems`): the real Demucs and beat_this, which download models.
@@ -559,7 +560,7 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 
 In `.github/workflows/`:
 
-- `ci.yml`: on push and pull request. Jobs: checks (guard, lock, ruff, mypy, actionlint), tests on Python 3.10 to 3.14 (Ubuntu, plus macOS and Windows on 3.10 and 3.14), the page in Chromium and Firefox, a package build and smoke test, and the stems extra with real models.
+- `ci.yml`: on push and pull request. Jobs: checks (guard, lock, ruff, mypy, actionlint), tests on Python 3.10 to 3.14 (Ubuntu, plus macOS and Windows on 3.10 and 3.14), the page in Chromium and Firefox, the tablet tests in WebKit, a package build and smoke test, and the stems extra with real models.
 - `install.yml`: tries the install scripts on Linux, macOS and Windows (on macOS and Windows from an archive, as users get it), the double-click installers (`scripts/installers/`) and the macOS app they make, and the Docker image, when those files change.
 - `installers.yml`: on version tags, attaches the double-click installers to the GitHub release (`woodshed-installer-macos.zip`, `woodshed-installer-windows.cmd`), set to install that tag (`scripts/package-installers.sh` sets their `WOODSHED_REF`). Pull requests that touch them build them as an artifact, without a write token.
 - `docker.yml`: builds the image on native x86 and ARM machines and publishes one tag for both, from `main` and from version tags.
