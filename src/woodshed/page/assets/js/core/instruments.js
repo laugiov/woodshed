@@ -174,6 +174,8 @@
 
   // The keys read thin on a song (spec 015, PR review): one note in a quarter of its bars or more, as { n, m },
   // else null. Said once for the song instead of an instruction on every such bar.
+  // A quarter of the bars: on the demo songs the reading holds one note in 52 % to 68 % of the bars (the keys
+  // share a track, or leave the chord to the guitar), so the sentence says how the reading is, not the song.
   function keysThin(voicings, m) {
     const n = voicings.filter((pcs) => pcs && pcs.length === 1).length;
     return m > 0 && n * 4 >= m ? { n, m } : null;

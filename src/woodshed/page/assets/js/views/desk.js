@@ -337,7 +337,7 @@
         const other = verdict && verdict.other !== undefined ? verdict.other : null;
         const asThird = other === null ? null : I.thirdName(song.noteName(cur.pc, s.transpose, cur.region), I.mod12(other - cur.pc));
         const named = (pc) => chordNode(asThird && I.mod12(pc) === other ? asThird : song.noteName(pc, s.transpose, song.regionOf(u)));
-        // Said once for the song: one note read in a quarter of the bars or more (spec 015, PR review).
+        // Said once, under the readings: one note read in a quarter of the bars or more (spec 015, PR review).
         const thin = I.keysThin(parts.voicings, song.bars.length);
         const hear = h("button", { type: "button", class: "btn", "data-testid": "hear-voicing", style: { marginLeft: "4px" }, onclick: () => app.hearVoicing(u) }, W.t("▶ Hear it"));
         out.push(
@@ -350,7 +350,8 @@
                   "div",
                   { class: "chips-row" },
                   pcs.map((pc) => h("span", { class: "pc-chip" }, named(pc))),
-                  cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose, cur.region)))] : null,
+                  // "over" the chord's root only on a bar of one chord: a reading spans the whole bar.
+                  cur.pc >= 0 && song.bars[u].chords.length === 1 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose, cur.region)))] : null,
                   hear,
                 ),
           other !== null
@@ -362,7 +363,7 @@
             app.sharedStem
               ? W.t("Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.")
               : W.t("Upper notes heard on the isolated keys track: the piano, and what is not drums, bass, voice or guitar (synths, organ, strings). The keyboard often leaves the root to the bass."),
-            thin ? [" ", h("span", { "data-testid": "keys-thin" }, W.t("The keys read thin on this song: one note in {n} of {m} bars. Where only one is heard, play the chart's chord.", thin))] : null,
+            thin ? [" ", h("span", { "data-testid": "keys-thin" }, W.t("The keys are often read as a single note: where only one is heard, play the chart's chord."))] : null,
           ),
           comping("keys"),
         );

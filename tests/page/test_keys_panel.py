@@ -269,21 +269,17 @@ def test_the_readings_in_french(open_page: Any) -> None:
 # The keys read thin: said once for the song, under "On the record", from a quarter of the bars.
 
 
-def thin_line(n: int, m: int) -> str:
-    return (
-        f"The keys read thin on this song: one note in {n} of {m} bars."
-        " Where only one is heard, play the chart's chord."
-    )
+def thin_line() -> str:
+    return "The keys are often read as a single note: where only one is heard, play the chart's chord."
 
 
 def test_keys_read_thin_on_a_quarter_of_the_bars_is_said_for_the_song(open_page: Any) -> None:
     o = open_page("pop", variant="keys-thin")
     m = int(str(o.js("Woodshed.current.bars.length")))
-    n = (m + 3) // 4
     for bar in (0, m - 1):  # the same note on a one-note bar and on a full one
         desk = keys_at(o, bar)
         expect(desk.get_by_test_id("keys-thin")).to_have_count(1)
-        expect(desk.get_by_test_id("keys-thin")).to_have_text(thin_line(n, m))
+        expect(desk.get_by_test_id("keys-thin")).to_have_text(thin_line())
         expect(desk.get_by_test_id("keys-thin").locator("xpath=..")).to_have_class(re.compile(r"\bsrc-note\b"))
 
 
@@ -298,12 +294,18 @@ def test_keys_read_thin_below_a_quarter_of_the_bars_says_nothing(open_page: Any,
 @french()
 def test_keys_read_thin_in_french(open_page: Any) -> None:
     o = open_page("pop", variant="keys-thin")
-    m = int(str(o.js("Woodshed.current.bars.length")))
     desk = keys_at(o, 0)
     assert desk.get_by_test_id("keys-thin").text_content() == (
-        f"Les claviers s'entendent peu sur ce morceau{NBSP}: une seule note dans {(m + 3) // 4} mesures sur {m}."
-        " Là où une seule s'entend, joue l'accord de la grille."
+        f"Les claviers se lisent souvent sur une seule note{NBSP}: là où une seule s'entend,"
+        " joue l'accord de la grille."
     )
+
+
+def test_a_bar_of_two_chords_shows_its_reading_without_over(open_page: Any) -> None:
+    o = open_page("pop", variant="keys-readings")
+    desk = keys_at(o, 6)  # bar 7: two chords, the reading spans both
+    expect(desk.locator(".chips-row .pc-chip")).to_have_count(2)
+    expect(desk.locator(".chips-row")).not_to_contain_text("over")
 
 
 # R6: French punctuation keeps to its word.

@@ -377,8 +377,8 @@
     "▶ Hear it": "▶ Écouter",
     "No upper notes heard on the record in this bar.": "Aucune note du haut entendue sur le disque dans cette mesure.",
     "Only the root heard here.": "Seule la fondamentale s'entend ici.",
-    "The keys read thin on this song: one note in {n} of {m} bars. Where only one is heard, play the chart's chord.":
-      "Les claviers s'entendent peu sur ce morceau : une seule note dans {n} mesures sur {m}. Là où une seule s'entend, joue l'accord de la grille.",
+    "The keys are often read as a single note: where only one is heard, play the chart's chord.":
+      "Les claviers se lisent souvent sur une seule note : là où une seule s'entend, joue l'accord de la grille.",
     "The record has {note} here, the chart says {chord}: check this bar by ear.":
       "Le disque a {note} ici, la grille dit {chord} : vérifie cette mesure à l'oreille.",
     "Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.":
