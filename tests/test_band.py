@@ -255,7 +255,10 @@ def left_by_0_4_0(server: app.AppServer, folder: str, band: dict[str, Any]) -> N
 
 
 def restarted(server: app.AppServer) -> app.Library:
-    return app.Library(server.library.root, Options(use_stems=False, open_page=False))
+    """The library opened again by a start that got the port (serve)."""
+    library = app.Library(server.library.root, Options(use_stems=False, open_page=False))
+    library.clear_notes_out_of_the_set()
+    return library
 
 
 def test_notes_left_on_songs_out_of_the_set_are_cleared_at_start(server: app.AppServer) -> None:

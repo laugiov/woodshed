@@ -276,6 +276,7 @@ def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, se
               .concat([getComputedStyle(document.querySelector('[data-testid=set-note] [translate=no]')).color])"""
         )
         assert said == ink != warn  # a note, not a warning, in the set as in the page
+        home.route("**/api/songs", lambda route: None)  # the library's next answer is late: the page alone
         row.get_by_test_id("set-remove").click()
         expect(home.get_by_test_id("set-item")).to_have_count(1)
         assert "note" not in server.library.corrections("pop.woodshed", "x1")["band"]
@@ -284,6 +285,7 @@ def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, se
         home.get_by_test_id("set-add").first.click()  # back in the set: a fresh line for a note
         expect(home.locator('[data-set-song="pop.woodshed"]').get_by_test_id("set-note")).to_have_text("+ Note")
         assert problems == []
+        home.context.close()
     finally:
         (server.library.root / app.CORRECTIONS_DIR / "pop.woodshed.json").unlink(missing_ok=True)
         server.library.set_setlist({"songs": ["pop.woodshed", "waltz.woodshed"]})

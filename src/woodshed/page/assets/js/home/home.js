@@ -46,7 +46,11 @@
         const answer = await r.json();
         if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
         else if (!r.ok) toast(W.t("The set list was not saved: {why}", { why: answer.error }));
-        else setlist = answer.songs;
+        else {
+          // The library cleared the note of a song out of the set: dropped here too, no flash of it on a re-add.
+          for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
+          setlist = answer.songs;
+        }
       } catch (err) {
         toast(W.t("The set list was not saved."));
       }

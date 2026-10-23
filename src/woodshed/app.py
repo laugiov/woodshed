@@ -164,7 +164,6 @@ class Library:
             if opts.pitch and pitch.available()
             else None
         )
-        self._clear_notes_out_of_the_set()  # left by 0.4.0, where a note stayed on a song after the set
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
 
     def pages(self) -> list[dict[str, Any]]:
@@ -336,7 +335,8 @@ class Library:
         stored["band"].pop("note")
         return self._write(folder, stored)
 
-    def _clear_notes_out_of_the_set(self) -> None:
+    def clear_notes_out_of_the_set(self) -> None:
+        """At start, once the port is ours (serve): the notes 0.4.0 left on songs out of the set."""
         names = self._set_names()
         if names is None:  # a set list damaged by hand or unreadable: no note is lost on its account
             return
@@ -1872,6 +1872,7 @@ def serve(
                 webbrowser.open(url)
             return
         library.clear_cut_uploads()
+        library.clear_notes_out_of_the_set()
         updated = library.update_pages()
         if updated:
             print(f"woodshed app: {len(updated)} page(s) updated to this version's page", flush=True)
