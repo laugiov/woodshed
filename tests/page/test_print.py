@@ -13,8 +13,8 @@ from tests.page.conftest import built
 from tests.page.pdf_pages import pages_with_text
 from woodshed import build
 
-# The page data of "As I Am, last chorus lifted (Josh Woodward, edited)", CC BY 4.0: a long chart with a key change,
-# the one round 5 printed with a blank third page (Marion).
+# The page data of "As I Am, last chorus lifted (Josh Woodward, edited)", CC BY 4.0 (see demo/LICENSE.md): a long
+# chart with a key change, the one round 5 printed with a blank third page (Marion). No words, no audio.
 LIFTED = Path(__file__).parent / "data" / "lifted-as-i-am.json"
 
 

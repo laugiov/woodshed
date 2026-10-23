@@ -367,7 +367,7 @@ def test_key_changes_in_sung_parts_export_as_python_does(open_page: Any, parts: 
     from tests.page.test_page import download
     from woodshed import exports
 
-    o = open_page("lift", variant="lyrics-lift")
+    o = open_page("lift", variant="lyrics-lift-early" if parts == "after-last-line" else "lyrics-lift")
     sections = (
         [[0, 20, "Verse 1", "verse"], [20, 28, "Outro", "outro"]]
         if parts == "after-last-line"
@@ -381,4 +381,5 @@ def test_key_changes_in_sung_parts_export_as_python_does(open_page: Any, parts: 
     words = json.loads((o.folder / "lyrics.json").read_text())
     words.pop("sections", None)
     o.js("delete (Woodshed.app.words || {}).sections")
-    assert download(o, "export-chordpro") == exports.chordpro(data, words)
+    text = download(o, "export-chordpro")
+    assert text == exports.chordpro(data, words) and text.count("{key: Db}") == 1

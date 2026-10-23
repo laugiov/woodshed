@@ -167,6 +167,12 @@ def _with_lyrics(song: dict[str, Any]) -> None:
     song["_lyrics"] = True  # marker: the folder gets lyrics.js below
 
 
+def _lyrics_before_the_lift(song: dict[str, Any]) -> None:
+    """lift with its sung lines over bars 5-10: the key changes later, among the chord rows (spec 014)."""
+    song["_lyrics"] = True
+    song["_lyrics_at"] = 4
+
+
 def _lyrics_over_the_lift(song: dict[str, Any]) -> None:
     """lift with its first sung line over bars 15-18: the key changes inside it (spec 012)."""
     song["_lyrics"] = True
@@ -263,6 +269,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "lyrics-stacked": _lyrics_stacked,
     "lyrics-midline": _lyrics_midline,
     "lyrics-lift": _lyrics_over_the_lift,
+    "lyrics-lift-early": _lyrics_before_the_lift,
 }  # fmt: skip
 
 
