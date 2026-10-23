@@ -30,7 +30,7 @@ def _key_name(key: theory.Key) -> str:
     return theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
 
 
-def _region(region: KeyRegion) -> dict[str, Any]:
+def view_region(region: KeyRegion) -> dict[str, Any]:
     keys = [theory.Key((region.key.tonic + t) % 12, region.key.mode) for t in range(12)]
     return {
         "bar": region.bar,
@@ -68,7 +68,7 @@ def view(
         "romans": {q: [theory.roman(pc, q, song.key) for pc in range(12)] for q in QUALITIES},
         # From each region's first bar: its key name and root spellings per transposition, and its numerals
         # (a Gb after a lift to Db, not F#; I V vi IV on both sides of the lift). Spec 012.
-        "regions": [_region(r) for r in (song.key_regions or [KeyRegion(0, song.key)])],
+        "regions": [view_region(r) for r in (song.key_regions or [KeyRegion(0, song.key)])],
         "shapes": theory.SHAPES,
         "tracks": [{"id": t.id, "label": t.label, "file": t.file} for t in tracks],
         # While the stems are being separated, the page says when to reload.

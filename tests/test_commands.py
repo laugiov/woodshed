@@ -750,3 +750,38 @@ def test_a_ctrl_c_during_a_refresh_leaves_the_page_as_it_was(
     monkeypatch.setattr(Path, "replace", real)
     assert (page / "assets" / "app.css").read_text(encoding="utf-8") == "/* the old page */"
     assert not [p.name for p in page.iterdir() if p.name.startswith(".")]
+
+
+def test_a_page_of_0_3_gets_this_page_code_in_one_key_without_a_new_analysis(tmp_path: Path, cache: Path) -> None:
+    """Pages made before key changes (song format 2, view 1) are upgraded in place: one key region, their own
+    (spec 012); nothing is analysed again."""
+    from woodshed import build, run
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    index = page / "index.html"
+    text = index.read_text(encoding="utf-8")
+    found = build.DATA_BLOCK.search(text)
+    assert found is not None
+    data = json.loads(found.group(1))
+    data["song"].pop("key_regions")
+    data["view"].pop("regions")
+    data["song"]["schema_version"], data["view"]["view_version"] = 2, 1
+    index.write_text(text[: found.start(1)] + build.script_json(data) + text[found.end(1) :], encoding="utf-8")
+    assert run.update_page_code(page) is not None
+    now = json.loads(build.DATA_BLOCK.search(index.read_text(encoding="utf-8")).group(1))  # type: ignore[union-attr]
+    key = data["song"]["key"]
+    assert now["song"]["schema_version"] == 3 and now["view"]["view_version"] == 2
+    assert now["song"]["key_regions"] == [{"bar": 0, "pc": key["pc"], "mode": key["mode"]}]
+    assert now["view"]["regions"][0]["romans"] == now["view"]["romans"]
+    assert now["song"]["bars"] == data["song"]["bars"]  # the analysis kept
+    import jsonschema
+
+    from woodshed import song as song_json
+    from woodshed import view as view_json
+
+    jsonschema.validate(now["song"], song_json.schema())
+    jsonschema.validate(now["view"], view_json.schema())
+    assert song_json.cross_check(now["song"]) == []

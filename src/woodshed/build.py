@@ -17,13 +17,13 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from woodshed import exports
+from woodshed import exports, theory
 from woodshed import song as song_json
 from woodshed import tracks as track_files
 from woodshed.errors import WoodshedError
-from woodshed.model import Song
+from woodshed.model import KeyRegion, Song
 from woodshed.stems import Stems
-from woodshed.view import VIEW_VERSION, view
+from woodshed.view import VIEW_VERSION, view, view_region
 
 FOLDER_SUFFIX = ".woodshed"
 # Characters that are not allowed in file names on Windows, macOS or Linux, and control characters.
@@ -143,6 +143,18 @@ def _keep_lyrics(old: Path, new: Path, song_data: dict[str, Any], source: Path) 
         exports.write_chordpro(song_data, new / "exports", data)
 
 
+def upgraded(data: dict[str, Any]) -> dict[str, Any]:
+    """A page's data from the format before, brought to this one when nothing needs analysing again: a page made
+    before key changes (song 2, view 1) is in one key, its own (spec 012)."""
+    song, view = data["song"], data["view"]
+    if song.get("schema_version") == 2 and view.get("view_version") == 1:
+        key = theory.Key(int(song["key"]["pc"]), song["key"]["mode"])
+        song = {**song, "schema_version": 3, "key_regions": [{"bar": 0, "pc": key.tonic, "mode": key.mode}]}
+        view = {**view, "view_version": 2, "regions": [view_region(KeyRegion(0, key))]}
+        return {**data, "song": song, "view": view}
+    return data
+
+
 def refresh_code(page: Path) -> bool:
     """This version's page code on a page's own data, in place: after an update of woodshed, a
     second instead of a new analysis. False when the data was written for another version of the
@@ -154,6 +166,7 @@ def refresh_code(page: Path) -> bool:
         if not isinstance(data, dict):
             return False
         title = str(data["song"]["title"])
+        data = upgraded(data)
         if data["song"]["schema_version"] != song_json.SCHEMA_VERSION or data["view"]["view_version"] != VIEW_VERSION:
             return False
     except (OSError, ValueError, KeyError, TypeError):
