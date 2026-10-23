@@ -275,7 +275,7 @@ def test_several_chords_before_one_word_are_written_apart_not_stacked(pop: dict[
     n = names(song)
     sung = rows.index(f"[{n[1][1]}]late")  # the last chord on the word
     assert rows[sung - 1] == f"| [{n[1][0]}] |"  # the first on a chord row of its own, above the line
-    assert not any(re.search(r"\] *\[[^\]]*\]\w", row) for row in rows)  # never two chords on one word
+    assert not any("][" in row for row in rows)  # never two chords glued on one word
 
 
 def test_bars_of_chords_after_the_words_are_written_four_a_row(pop: dict[str, Any]) -> None:

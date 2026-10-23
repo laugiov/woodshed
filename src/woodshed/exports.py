@@ -61,6 +61,37 @@ class Keys:
         return self.keys[self.region(u)]
 
 
+def _key_words(key: theory.Key) -> str:
+    """ "Db major", "F# minor": a key as a ChordPro comment says it (ASCII accidentals, as the chords)."""
+    return theory.spell(key.tonic, key) + (" major" if key.mode == "maj" else " minor")
+
+
+def fold_rows(rows: list[str]) -> list[str]:
+    """Chord rows played again folded (spec 014): a run of one row → the row " x2"; a run of a pair → "|: " first,
+    second " :| x2". Same rows first, then pairs, greedy from the left; rows equal only when their text is."""
+    out: list[str] = []
+    i = 0
+    while i < len(rows):
+        n = 1
+        while i + n < len(rows) and rows[i + n] == rows[i]:
+            n += 1
+        if n > 1:
+            out.append(f"{rows[i]} x{n}")
+            i += n
+            continue
+        pair = rows[i : i + 2]
+        m = 1
+        while len(pair) == 2 and pair[0] != pair[1] and rows[i + 2 * m : i + 2 * m + 2] == pair:
+            m += 1
+        if m > 1:
+            out += ["|:" + pair[0][1:], f"{pair[1][:-1]}:| x{m}"]
+            i += 2 * m
+            continue
+        out.append(rows[i])
+        i += 1
+    return out
+
+
 def key_name(key: theory.Key) -> str:
     return theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
 
@@ -204,7 +235,9 @@ def _sung(song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any
         return max(0, bisect.bisect_right(first_bars, u) - 1)
 
     def name(p: dict[str, Any]) -> str:
-        return "[" + _name(song["bars"][p["bar"]]["chords"][p["index"]], keys.at(p["bar"])) + "]"
+        chord = song["bars"][p["bar"]]["chords"][p["index"]]
+        # N.C. is said, never a chord to transpose: a ChordPro 6 annotation (spec 014).
+        return "[*N.C.]" if chord["pc"] < 0 else "[" + _name(chord, keys.at(p["bar"])) + "]"
 
     def chord_rows(ps: list[dict[str, Any]]) -> list[str]:
         """Chords with no word of their own: bar by bar, four bars a row, never one long row."""
@@ -215,8 +248,17 @@ def _sung(song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any
                 bars.append([])
                 last = p["bar"]
             bars[-1].append(name(p))
-        # Framed by bar lines, as every chord row: "| [D] | [C#m] [E] |".
-        return ["| " + " | ".join(" ".join(b) for b in bars[i : i + 4]) + " |" for i in range(0, len(bars), 4)]
+        # Framed by bar lines, as every chord row: "| [D] | [C#m] [E] |"; the same rows again folded.
+        framed = ["| " + " | ".join(" ".join(b) for b in bars[i : i + 4]) + " |" for i in range(0, len(bars), 4)]
+        return fold_rows(framed)
+
+    def sounding(t: float) -> dict[str, Any] | None:
+        """The placement of the chord sounding at time t (the last change at or before it), if any."""
+        last = None
+        for (when, _, _), p in zip(changes, placed, strict=True):
+            if when <= t:
+                last = p
+        return last
 
     begin = {li: min(s for s, _ in ws if s == s) for li, ws in timed.items()}
     finish = {li: max(e for _, e in ws if e == e) for li, ws in timed.items()}
@@ -225,12 +267,16 @@ def _sung(song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any
         u = max(0, bisect.bisect_right(starts, begin[li] + half_bar) - 1)
         by_section.setdefault(section_of_bar(u), []).append(li)
     gaps: dict[int, list[tuple[float, dict[str, Any]]]] = {}
-    on_word: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    on_word: dict[tuple[int, int], list[tuple[float, dict[str, Any]]]] = {}
     for (t, _, _), p in zip(changes, placed, strict=True):
         if p["line"] is None:
             gaps.setdefault(section_of_bar(p["bar"]), []).append((t, p))
         else:
-            on_word.setdefault((p["line"], p["word"]), []).append(p)
+            on_word.setdefault((p["line"], p["word"]), []).append((t, p))
+
+    # Key changes said before the line that holds them (spec 014): the bar's start time, the key.
+    key_at = [(starts[b] if b < len(starts) else math.inf, keys.keys[r]) for r, b in enumerate(keys.starts) if r]
+    break_gap = 2 * bar_time  # a gap of two bars or more inside a line is a real break: its bars on a row
 
     out: dict[int, list[str]] = {}
     for k, ids in by_section.items():
@@ -241,22 +287,45 @@ def _sung(song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any
             lead = [p for t, p in waiting if begin[li] - bar_time <= t < begin[li]]
             before = [p for t, p in waiting if t < begin[li] - bar_time]
             rows += chord_rows(before)
+            for when, key in [c for c in key_at if c[0] < finish[li]]:  # just before the line that holds it
+                key_at.remove((when, key))
+                rows += ["{comment: Key change: " + _key_words(key) + "}", "{key: " + key_name(key) + "}"]
+            after_row = bool(before)
             inside = [(t, p) for t, p in waiting if begin[li] <= t < finish[li]]
             waiting = [(t, p) for t, p in waiting if t >= finish[li]]
             tokens: list[str] = []
+            last_end = begin[li]
             for wi, w in enumerate(lines[li]["words"]):
                 start = timed[li][wi][0]
                 ahead = [p for t, p in inside if start == start and t <= start]
                 inside = [(t, p) for t, p in inside if not (start == start and t <= start)]
-                chords = (lead if wi == 0 else []) + ahead + on_word.get((li, wi), [])
-                # One chord a word. Those before it go on a chord row of their own: above the line for
-                # its first word; for a later word the line breaks there (they change while the word
-                # before it is held).
-                if chords[:-1] and tokens:
+                on = [p for _, p in sorted(on_word.get((li, wi), []), key=lambda tp: tp[0])]
+                pre = (lead if wi == 0 else []) + ahead
+                # One chord on the word: its own first, else the last one before it. Others before it go
+                # inline (a row above the line for its first word); those landing while it is held, after it.
+                word_chord: dict[str, Any] | None
+                if on:
+                    word_chord, extra_before, extra_after = on[0], pre, on[1:]
+                else:
+                    word_chord, extra_before, extra_after = (pre[-1] if pre else None), pre[:-1], []
+                if extra_before and not tokens:
+                    rows += chord_rows(extra_before)
+                    after_row = True
+                elif extra_before and start == start and start - last_end >= break_gap:
                     rows.append(lyric_row(" ".join(tokens)))
                     tokens = []
-                rows += chord_rows(chords[:-1])
-                tokens.append((name(chords[-1]) if chords else "") + lyric_text(w["text"]))
+                    rows += chord_rows(extra_before)
+                    after_row = True
+                else:
+                    tokens += [name(p) for p in extra_before]
+                if word_chord is None and not tokens and after_row and start == start:
+                    word_chord = sounding(start)  # a line opened by a chord row: the chord playing on its first word
+                tokens.append((name(word_chord) if word_chord else "") + lyric_text(w["text"]))
+                tokens += [name(p) for p in extra_after]
+                after_row = False
+                end = timed[li][wi][1]
+                if end == end:
+                    last_end = end
             tokens += [name(p) for _, p in inside]
             backing = lines[li].get("backing") or []
             rows.append(lyric_row(" ".join(tokens) + "".join(f" ({lyric_text(b)})" for b in backing)))
@@ -324,22 +393,23 @@ def chordpro(song: Song, words: dict[str, Any] | None = None, transpose: int = 0
     for k, sec in enumerate(sections):
         lines.append("")
         bars = list(range(sec["start"], sec["end"]))
-        if k in sung:  # the part's key before it; a change inside its lines said there too, with its bar
+        if k in sung:  # the part's key before it; a change inside its lines is said before the line holding it
             lines += announce(keys.region(sec["start"]))
-            for u in bars[1:]:
-                if keys.region(u) != keys.region(u - 1):
-                    said[0] = keys.region(u)
-                    lines.append(f"{{comment: key change to {key_name(keys.at(u))} at bar {u + 1}}}")
+            said[0] = keys.region(sec["end"] - 1)
             env = ENVIRONMENT.get(sec["role"], "verse")
             lines.append(f'{{start_of_{env}: label="' + directive_text(sec["name"]).replace('"', "'") + '"}')
             lines += sung[k]
             lines.append(f"{{end_of_{env}}}")
             continue
-        # A grid splits at the bar where the key changes, the same label on both sides.
+        # A grid splits at the bar where the key changes: the change said between, the rest "continued".
         cuts = [u for u in bars[1:] if keys.region(u) != keys.region(u - 1)]
-        for piece in (bars[a:b] for a, b in itertools.pairwise([0, *(u - sec["start"] for u in cuts), len(bars)])):
+        pieces = [bars[a:b] for a, b in itertools.pairwise([0, *(u - sec["start"] for u in cuts), len(bars)])]
+        for n, piece in enumerate(pieces):
+            if n:
+                lines.append("{comment: Key change: " + _key_words(keys.at(piece[0])) + "}")
             lines += announce(keys.region(piece[0]))
-            lines += _grid(song, sec["name"], _rows(song, piece, keys), keys)
+            label = sec["name"] if n == 0 else sec["name"] + ", continued"
+            lines += _grid(song, label, _rows(song, piece, keys), keys)
     return "\n".join(lines) + "\n"
 
 
