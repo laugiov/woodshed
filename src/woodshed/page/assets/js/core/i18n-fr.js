@@ -224,7 +224,7 @@
     "Full band, original tempo. Follow the chart.": "Tout le groupe, tempo d'origine. Suis la grille.",
     "Loop it slow": "Boucler lentement",
     "From 70% tempo, 5 BPM faster each pass.": "À partir de 70 % du tempo, 5 BPM de plus à chaque tour.",
-    "Play along": "Jouer avec le groupe",
+    "Play with the band": "Jouer avec le groupe",
     "Your part is muted. The band is yours.": "Ta partie est coupée. Le groupe est à toi.",
     "The full mix, with a count-in.": "Le mix complet, avec un décompte.",
     "Step {n}": "Étape {n}",
@@ -313,7 +313,7 @@
     "The band plays this song in the recorded key again.": "Le groupe joue de nouveau ce morceau dans la tonalité de l'enregistrement.",
     "Not saved: the app did not answer.": "Pas enregistré : l'appli n'a pas répondu.",
     "Saved: the band plays this song in {key}, on every device.": "Enregistré : le groupe joue ce morceau en {key}, sur chaque appareil.",
-    "Note: {note}": "Note : {note}",
+    "Note:": "Note :",
     "of {len}": "sur {len}",
     minor: "mineur",
     major: "majeur",
@@ -478,7 +478,10 @@
     "Changing the recording's key is off in this library.": "Le changement de tonalité de l'enregistrement est désactivé dans cette bibliothèque.",
     "The recording plays {shift}": "L'enregistrement joue {shift}",
     "Chords in {key}, the recording too.": "Accords en {key}, l'enregistrement aussi.",
-    "Chords in {key}: the recording follows in about {n} s.": "Accords en {key} : l'enregistrement suit dans environ {n} s.",
+    "Chords in {key}: the recording catches up in about {n} s.": "Accords en {key} : l'enregistrement suit dans environ {n} s.",
+    "Chords in {key}: the recording catches up in a moment.": "Accords en {key} : l'enregistrement suit dans un instant.",
+    "Transposed to {key}: the chart and the shapes. The recording follows when it is ready.": "Transposé en {key} : la grille et les positions. L'enregistrement suit dès qu'il est prêt.",
+    "The band plays this song in {key}: the chords follow. The recording follows when it is ready.": "Le groupe joue ce morceau en {key} : les accords suivent. L'enregistrement suit dès qu'il est prêt.",
     "Transposed to {key}: the chart, the shapes and the recording follow.": "Transposé en {key} : la grille, les positions et l'enregistrement suivent.",
     "The band plays this song in {key}: the chords and the recording follow.": "Le groupe joue ce morceau en {key} : les accords et l'enregistrement suivent.",
     // Your part (views/desk.js)
@@ -740,8 +743,8 @@
       "Sur chaque téléphone, sur le même Wi-Fi : scanne le code avec l'appareil photo, ou tape",
     "On a song page, Lead plays for the whole band, Follow plays along with the device that leads, Alone plays on its own.":
       "Sur la page d'un morceau, Mener joue pour tout le groupe, Suivre joue avec l'appareil qui mène, Seul joue de son côté.",
-    "The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.":
-      "Les téléphones peuvent jouer, mener et suivre, pas ajouter de morceaux. Règle-les pour que l'écran ne se verrouille pas pendant que vous jouez.",
+    "The phones can play, lead and follow, not add songs. Their screen stays on while woodshed shows the music; if one still locks, the page says how to stop it.":
+      "Les téléphones peuvent jouer, mener et suivre, pas ajouter de morceaux. Leur écran reste allumé tant que woodshed montre la musique ; si l'un se verrouille quand même, la page dit comment l'en empêcher.",
     "Let in, but this computer has no network address: is it on the band's Wi-Fi?":
       "Admis, mais cet ordinateur n'a pas d'adresse réseau : est-il sur le Wi-Fi du groupe ?",
     "Phones on this Wi-Fi then open the library, lead and follow. The first time, your computer may ask whether woodshed (or Python) may accept incoming connections: allow it on private networks.":

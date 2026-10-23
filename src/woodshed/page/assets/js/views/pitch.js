@@ -203,6 +203,11 @@
     };
     // For the sentences that say the recording's key (the chart, the toasts): will it follow the chart?
     app.pitchFollows = () => !reason && wanted(store.get());
+    // ...and is it rendered already in the chart's key (the track this device plays)?
+    app.pitchReady = () => {
+      const s = store.get();
+      return !pitched(s.track) || stateOf(keyOf(s.transpose), s.track) === "ready";
+    };
 
     store.on((_, changed) => {
       if (changed.has("transpose") || changed.has("bandKey")) {

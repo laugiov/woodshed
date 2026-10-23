@@ -296,8 +296,12 @@
       const transpose = Math.max(-6, Math.min(6, t));
       store.set({ transpose, capo: song.capoFor(transpose) });
       const name = W.prettyText(song.keyName(transpose));
-      if (transpose && app.pitchFollows && app.pitchFollows()) app.toast(W.t("Transposed to {key}: the chart, the shapes and the recording follow.", { key: name }));
-      else app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: name }));
+      // Only what changed now: a recording still to render is said to follow when it is ready.
+      if (transpose && app.pitchFollows && app.pitchFollows()) {
+        app.toast(app.pitchReady()
+          ? W.t("Transposed to {key}: the chart, the shapes and the recording follow.", { key: name })
+          : W.t("Transposed to {key}: the chart and the shapes. The recording follows when it is ready.", { key: name }));
+      } else app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: name }));
     };
     // The band's key for this song (served by woodshed app): every device opens in it, and a change
     // made on one device reaches the others. A device already in that key just takes note of it.
@@ -310,7 +314,11 @@
       store.set({ transpose: t, capo: song.capoFor(t) });
       const follows = app.pitchFollows && app.pitchFollows();
       app.toast(t
-        ? (follows ? W.t("The band plays this song in {key}: the chords and the recording follow.", { key: W.prettyText(song.keyName(t)) }) : W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) }))
+        ? (follows
+          ? (app.pitchReady()
+            ? W.t("The band plays this song in {key}: the chords and the recording follow.", { key: W.prettyText(song.keyName(t)) })
+            : W.t("The band plays this song in {key}: the chords follow. The recording follows when it is ready.", { key: W.prettyText(song.keyName(t)) }))
+          : W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) }))
         : W.t("The band plays this song in the recorded key again."));
     };
     app.keepBandKey = async () => {
@@ -919,10 +927,12 @@
       if (/Android/.test(ua)) return W.t("Screen going dark? Settings → Screen timeout → the longest.");
       return W.t("Screen locking? Turn off its sleep while you play.");
     }
-    function sayAwake() {
+    // `early`: right after the mode changed, before the lock or the video had their moment: what no
+    // longer applies goes at once, nothing new is said (a phone about to be held never reads "Screen locking?").
+    function sayAwake(early = false) {
       const mode = bandMode();
       const atRisk = awake.wanted() && (!awake.holding() || cameBack);
-      const line = mode === "follow" && atRisk && !stored("woodshed:awakeLineClosed");
+      const line = mode === "follow" && atRisk && !stored("woodshed:awakeLineClosed") && !(early && awakeLine.hidden);
       if (mode !== "follow") cameBack = false;
       if (line && (awakeLine.hidden || awakeLine.lang !== W.lang())) {
         awakeLine.lang = W.lang(); // said again in the other language
@@ -936,7 +946,7 @@
       }
       awakeLine.hidden = !line;
       // Leading or on stage: a toast, once per device, never over another one.
-      if (mode !== "follow" && atRisk && !stored("woodshed:awakeTold")) {
+      if (!early && mode !== "follow" && atRisk && !stored("woodshed:awakeTold")) {
         if (!$("toast").hidden) {
           clearTimeout(sayTimer);
           sayTimer = setTimeout(sayAwake, 3000); // another toast is being read: after it
@@ -948,7 +958,9 @@
     }
     app.awakeCheck = () => {
       awake.want(bandMode() !== "alone" || !!store.get().stage);
-      sayAwake();
+      sayAwake(true);
+      clearTimeout(sayTimer);
+      sayTimer = setTimeout(sayAwake, W.AWAKE_SETTLE_MS);
     };
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && awake.wanted()) cameBack = true;

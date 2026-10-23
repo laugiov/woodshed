@@ -46,7 +46,11 @@
         const answer = await r.json();
         if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
         else if (!r.ok) toast(W.t("The set list was not saved: {why}", { why: answer.error }));
-        else setlist = answer.songs;
+        else {
+          // A song out of the set loses the set's note on it (the library cleared it): not shown again if it comes back.
+          for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
+          setlist = answer.songs;
+        }
       } catch (err) {
         toast(W.t("The set list was not saved."));
       }
@@ -304,7 +308,7 @@
             h("p", null, W.t("On each phone, on the same Wi-Fi: scan the code with the camera, or type")),
             h("p", { class: "net-addr", translate: "no", "data-testid": "network-address" }, addresses.join("  ·  ")),
             h("p", { class: "hint" }, W.t(ROLES)),
-            h("p", { class: "hint" }, W.t("The phones can play, lead and follow, not add songs. Set them not to lock their screen while you play.")),
+            h("p", { class: "hint" }, W.t("The phones can play, lead and follow, not add songs. Their screen stays on while woodshed shows the music; if one still locks, the page says how to stop it.")),
             h("p", { class: "hint" }, W.t("If a phone cannot open it: your computer may have asked whether woodshed (or Python) may accept incoming connections; allow it on private networks.")))));
       } else if (net.on) {
         out.push(h("p", { class: "hint" }, W.t("Let in, but this computer has no network address: is it on the band's Wi-Fi?")));

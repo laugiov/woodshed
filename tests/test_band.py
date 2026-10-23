@@ -227,6 +227,40 @@ def test_the_set_list_keeps_its_order_and_forgets_removed_pages(server: app.AppS
     assert json.loads(request(server, "GET", "/api/setlist")[2]) == {"songs": ["One.woodshed"]}
 
 
+def test_a_song_leaving_the_set_takes_its_note_with_it(server: app.AppServer) -> None:
+    post(server, "/api/setlist", {"songs": ["One.woodshed", "Two.woodshed"]})
+    post(server, "/api/band", {"page": "One.woodshed", "transpose": 2, "key": "D", "note": "starts on the chorus"})
+    post(server, "/api/band", {"page": "Two.woodshed", "note": "capo 2"})
+    follower = Stream(server)
+    try:
+        follower.next()
+        status, answer = post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
+        assert status == 200 and answer == {"songs": ["Two.woodshed"]}
+        one = server.library.corrections("One.woodshed", "a1")
+        assert one["band"] == {"transpose": 2, "key": "D"}  # the note was the set's; the band's key stays
+        assert server.library.corrections("Two.woodshed", "a1")["band"] == {"note": "capo 2"}  # still in the set
+        event = follower.next()  # the open pages read the song again
+        assert isinstance(event, dict) and event["fixes"]["One.woodshed"] == one["rev"]
+    finally:
+        follower.close()
+    post(server, "/api/setlist", {"songs": ["Two.woodshed", "One.woodshed"]})
+    assert "note" not in server.library.corrections("One.woodshed", "a1")["band"]  # back in the set: no old note
+
+
+def test_notes_left_on_songs_out_of_the_set_are_cleared_at_start(server: app.AppServer) -> None:
+    post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
+    for name in ("One.woodshed", "Two.woodshed", "Three.woodshed"):
+        server.library.set_band({"page": name, "note": "from an older version"})  # as 0.4.0 left them
+    server.library.set_band({"page": "Three.woodshed", "transpose": -1, "key": "B"})
+    later = app.Library(server.library.root, Options(use_stems=False, open_page=False))  # the app started again
+    assert later.corrections("One.woodshed", "a1")["band"] == {}
+    assert later.corrections("Two.woodshed", "a1")["band"] == {"note": "from an older version"}
+    assert later.corrections("Three.woodshed", "a1")["band"] == {"transpose": -1, "key": "B"}
+    rev = later.corrections("One.woodshed", "a1")["rev"]
+    again = app.Library(server.library.root, Options(use_stems=False, open_page=False))
+    assert again.corrections("One.woodshed", "a1")["rev"] == rev  # cleared once: nothing written again
+
+
 @pytest.mark.parametrize(
     "data",
     [{"songs": ["Nope.woodshed"]}, {"songs": ["One.woodshed", "One.woodshed"]}, {"songs": "One.woodshed"}, [], {}],

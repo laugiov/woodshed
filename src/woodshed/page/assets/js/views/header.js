@@ -47,7 +47,7 @@
           ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
           : h("span", { class: "okfact" }, W.t("Nothing to check by ear")),
         meta.analysis.chords_reliable ? null : h("span", { class: "warnfact", "data-testid": "unreliable" }, W.t("Little harmony found: chords may be wrong")),
-        s.bandNote ? h("span", { class: "band-note", "data-testid": "band-note" }, W.nodes(W.t("Note: {note}"), { note: h("span", { translate: "no" }, s.bandNote) })) : null,
+        s.bandNote ? h("span", { class: "band-note", "data-testid": "band-note" }, h("span", { class: "note-label" }, W.t("Note:")), " ", h("span", { translate: "no" }, s.bandNote)) : null,
       );
     }
 
@@ -72,7 +72,7 @@
         [W.t("Listen"), W.t("Full band, original tempo. Follow the chart.")],
         [t2, d2],
         [W.t("Loop it slow"), W.t("From 70% tempo, 5 BPM faster each pass.")],
-        [W.t("Play along"), stems ? W.t("Your part is muted. The band is yours.") : W.t("The full mix, with a count-in.")],
+        [W.t("Play with the band"), stems ? W.t("Your part is muted. The band is yours.") : W.t("The full mix, with a count-in.")],
       ];
       clear(
         $("path"),

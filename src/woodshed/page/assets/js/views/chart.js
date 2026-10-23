@@ -550,7 +550,13 @@
     function recordingNote(s, key) {
       const st = s.pitchStatus || { state: "off" };
       if (st.state === "on") return W.t("Chords in {key}, the recording too.", { key: key(s.transpose) });
-      if (st.state === "preparing" && st.eta) return W.t("Chords in {key}: the recording follows in about {n} s.", { key: key(s.transpose), n: st.eta });
+      // Rendering, or rendered and waiting for a tap: the switch says On, so the line says it is on its way.
+      if (st.state === "preparing" || st.state === "tap") {
+        return st.eta
+          ? W.t("Chords in {key}: the recording catches up in about {n} s.", { key: key(s.transpose), n: st.eta })
+          : W.t("Chords in {key}: the recording catches up in a moment.", { key: key(s.transpose) });
+      }
+      // Off, or a key this library cannot render: the recording stays where it was.
       return W.t("Chords in {key}: the recording plays in {original}.", { key: key(s.transpose), original: key(0) });
     }
 
