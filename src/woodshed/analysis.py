@@ -211,8 +211,9 @@ def key_regions(decoded: Decoded, built: Structure, per: int) -> list[KeyRegion]
         near = [s for s in starts if bar - 4 <= s <= bar + 1]
         if near:
             bar = min(near, key=lambda s: (abs(s - bar), s))
-        if bar > out[-1].bar:
-            out.append(KeyRegion(bar, theory.Key(tonic, mode)))
+        key = theory.Key(tonic, mode)
+        if bar > out[-1].bar and key != out[-1].key:  # a change dropped in between leaves no change to the same key
+            out.append(KeyRegion(bar, key))
     return out
 
 

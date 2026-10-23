@@ -65,6 +65,8 @@ def view(
     return {
         "view_version": VIEW_VERSION,
         "transpositions": transpositions,
+        # The song's key (the longest region): kept for the capo; names and numerals come from `regions`, whose
+        # first is the key the song starts in (what the page shows as its key).
         "romans": {q: [theory.roman(pc, q, song.key) for pc in range(12)] for q in QUALITIES},
         # From each region's first bar: its key name and root spellings per transposition, and its numerals
         # (a Gb after a lift to Db, not F#; I V vi IV on both sides of the lift). Spec 012.
