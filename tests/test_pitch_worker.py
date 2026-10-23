@@ -99,9 +99,10 @@ def rendered(r: pitch.Renders, page: str, key: str, track: str) -> Path:
 def test_a_track_asked_is_rendered_and_said_ready(renders: pitch.Renders) -> None:
     assert pitch.available()
     assert renders.ask("One.woodshed", "mix", 2) == "queued"
-    until(lambda: rendered(renders, "One.woodshed", "up2", "mix").is_file())
+    # The file is renamed into place a moment before the worker marks the job done: wait for the state.
+    until(lambda: renders.state("One.woodshed")["keys"] == {"up2": {"mix": "ready"}})
+    assert rendered(renders, "One.woodshed", "up2", "mix").is_file()
     assert renders.ask("One.woodshed", "mix", 2) == "ready"
-    assert renders.state("One.woodshed")["keys"] == {"up2": {"mix": "ready"}}
     assert renders.state("Two.woodshed")["keys"] == {}  # another page's renders are its own
 
 
@@ -194,7 +195,7 @@ def test_old_keys_go_the_band_key_and_the_recent_ones_stay(
         done = rendered(renders, "One.woodshed", pitch.key_dir(semitones), "mix")
         until(done.is_file)
     renders.ask("One.woodshed", "mix", 5)  # a new key: the oldest other keys go
-    until(lambda: rendered(renders, "One.woodshed", "up5", "mix").is_file())
+    until(lambda: renders.state("One.woodshed")["keys"].get("up5", {}).get("mix") == "ready")  # done, pruned too
     kept = sorted(p.name for p in (renders.root / "One.woodshed" / "audio" / pitch.KEY_DIR).iterdir())
     assert kept == ["down2", "up4", "up5"]  # the band's key, and the two most recent others
 
