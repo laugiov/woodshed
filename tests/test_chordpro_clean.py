@@ -116,3 +116,23 @@ def test_the_bars_after_a_line_are_folded_where_they_repeat(lift: dict[str, Any]
     n = names(data)
     row = f"| [{n[1][0]}] | [{n[2][0]}] | [{n[3][0]}] | [{n[4][0]}] |"
     assert f"{row} x3" in rows.splitlines()  # bars 2-13: the same four bars three times
+
+
+def _lift_parts(lift: dict[str, Any], parts: list[tuple[str, str, int, int]]) -> dict[str, Any]:
+    return {**lift, "sections": [{"name": n, "role": r, "letter": n[0], "start": a, "end": b} for n, r, a, b in parts]}
+
+
+def test_a_change_after_a_part_s_last_line_is_said_among_its_rows(lift: dict[str, Any]) -> None:
+    data = _lift_parts(lift, [("Verse 1", "verse", 0, 20), ("Outro", "outro", 20, len(lift["bars"]))])
+    words = {**words_for(data), "lines": [line_of(data, [("One", 13.0, 13.4)])], "sections": data["sections"]}
+    text = exports.chordpro(data, words)
+    verse = text.split('{start_of_verse: label="Verse 1"}\n')[1].split("{end_of_verse}")[0]
+    assert "{comment: Key change: Db major}\n{key: Db}" in verse  # between the rows, at the change
+    assert text.count("{comment: Key change: Db major}") == 1  # said once, not again later
+
+
+def test_a_sung_part_opening_in_the_new_key_says_it_once(lift: dict[str, Any]) -> None:
+    data = _lift_parts(lift, [("Intro", "intro", 0, 16), ("Verse 1", "verse", 16, len(lift["bars"]))])
+    words = {**words_for(data), "lines": [line_of(data, [("One", 16.0, 16.4)])], "sections": data["sections"]}
+    text = exports.chordpro(data, words)
+    assert text.count("{key: Db}") == 1 and text.count("Key change: Db major") <= 1

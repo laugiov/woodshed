@@ -360,3 +360,25 @@ def test_bars_without_words_inside_a_sung_part_and_at_the_end_are_said(open_page
     notes = o.page.get_by_test_id("free-note")
     expect(notes.first).to_have_text("no words here")  # inside the part: said, not an unexplained grid
     expect(notes.last).to_contain_text("No words placed from here")  # after the last sung line
+
+
+@pytest.mark.parametrize("parts", ["after-last-line", "opens-in-new-key"])
+def test_key_changes_in_sung_parts_export_as_python_does(open_page: Any, parts: str) -> None:
+    from tests.page.test_page import download
+    from woodshed import exports
+
+    o = open_page("lift", variant="lyrics-lift")
+    sections = (
+        [[0, 20, "Verse 1", "verse"], [20, 28, "Outro", "outro"]]
+        if parts == "after-last-line"
+        else [[0, 14, "Intro", "intro"], [14, 28, "Verse 1", "verse"]]
+    )
+    to_part = (
+        "([start, end, name, role]) => ({ start, end: Math.min(end, s.bars.length), name, role, letter: name[0] })"
+    )
+    o.js(f"(secs) => {{ const s = Woodshed.current.song; s.sections = secs.map({to_part}); }}", sections)
+    data = o.js("Woodshed.current.song")
+    words = json.loads((o.folder / "lyrics.json").read_text())
+    words.pop("sections", None)
+    o.js("delete (Woodshed.app.words || {}).sections")
+    assert download(o, "export-chordpro") == exports.chordpro(data, words)

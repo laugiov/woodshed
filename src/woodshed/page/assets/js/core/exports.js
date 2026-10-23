@@ -151,7 +151,7 @@
       if (sung.has(k)) {
         // The part's key before it; a change inside its lines is said before the line holding it.
         lines.push(...announce(song.regionOf(sec.start)));
-        said = song.regionOf(sec.end - 1);
+        said = sung.ends.get(k); // the key the part's rows ended in
         const env = ENVIRONMENT[sec.role] || "verse";
         lines.push("{start_of_" + env + ': label="' + quote(sec.name) + '"}', ...sung.get(k), "{end_of_" + env + "}");
       } else {
@@ -182,6 +182,7 @@
   // on rows of their own, the chords of the bar leading into a line on its first word.
   function sungRows(song, words, sections, name, keyOf) {
     const out = new Map();
+    out.ends = new Map(); // the key each part's rows ended in
     if (!words || !words.lines.length) return out;
     const per = song.per;
     const barTime = (60 / song.song.bpm) * per;
@@ -235,21 +236,37 @@
       for (const p of placed) if (p.t <= t) last = p;
       return last;
     };
-    // Key changes said before the line that holds them (spec 014): the bar's start time, its region.
-    const keyAt = song.keyChanges.map((c) => ({ t: c.bar < song.bars.length ? song.bars[c.bar].start : Infinity, region: c.region }));
     const breakGap = 2 * barTime; // a gap of two bars or more inside a line is a real break
+    // Each part follows its key (as exports.py): a key change is said where the rows reach it, between bar rows
+    // split at the change, or before the line that holds it; the part starts in the key said before it.
     for (const [k, ids] of bySection) {
       const rows = [];
+      let cur = song.regionOf(sections[k].start);
+      const say = (region) => {
+        if (region === cur) return;
+        cur = region;
+        rows.push("{comment: Key change: " + keyWords(keyOf(region)) + "}", "{key: " + keyOf(region) + "}");
+      };
+      const keyedRows = (ps) => {
+        let run = [];
+        for (const p of [...ps, null]) {
+          if (p === null || (run.length && song.regionOf(p.bar) !== song.regionOf(run[run.length - 1].bar))) {
+            if (run.length) {
+              say(song.regionOf(run[0].bar));
+              rows.push(...chordRows(run));
+            }
+            run = [];
+          }
+          if (p !== null) run.push(p);
+        }
+      };
       let waiting = (gaps.get(k) || []).slice();
       for (const li of ids) {
         const ln = words.lines[li];
         const lead = waiting.filter((p) => ln.start - barTime <= p.t && p.t < ln.start);
         const before = waiting.filter((p) => p.t < ln.start - barTime);
-        rows.push(...chordRows(before));
-        for (const c of keyAt.filter((x) => x.t < ln.end)) {
-          keyAt.splice(keyAt.indexOf(c), 1);
-          rows.push("{comment: Key change: " + keyWords(keyOf(c.region)) + "}", "{key: " + keyOf(c.region) + "}");
-        }
+        keyedRows(before);
+        say(song.regionOf(song.barAt(ln.end - 0.01))); // before the line that holds a change
         let afterRow = before.length > 0;
         let inside = waiting.filter((p) => ln.start <= p.t && p.t < ln.end);
         waiting = waiting.filter((p) => p.t >= ln.end);
@@ -279,14 +296,15 @@
           tokens.push((wordChord ? chord(wordChord) : "") + lyricText(w.text));
           tokens.push(...extraAfter.map(chord));
           afterRow = false;
-          if (timed) lastEnd = w.end;
+          if (timed && Number.isFinite(w.end)) lastEnd = w.end;
         });
         tokens.push(...inside.map(chord));
         const backing = (ln.backing || []).map((b) => " (" + lyricText(b) + ")").join("");
         rows.push(lyricRow(tokens.join(" ") + backing));
       }
-      rows.push(...chordRows(waiting));
+      keyedRows(waiting);
       out.set(k, rows);
+      out.ends.set(k, cur);
     }
     return out;
   }
