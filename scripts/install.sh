@@ -139,7 +139,8 @@ if ! $(sh_quote "$2") tool uninstall woodshed; then
     pause
     exit 1
 fi
-$(sh_quote "$2") cache prune >/dev/null 2>&1 || true
+# woodshed's downloads in uv's cache (uninstall.CACHED in woodshed): only those packages, never the whole cache.
+$(sh_quote "$2") cache clean woodshed torch torchaudio demucs llvmlite numba scipy scikit-learn sympy numpy >/dev/null 2>&1 || true
 echo ""
 echo "woodshed is removed. Your songs stay where they are."
 pause

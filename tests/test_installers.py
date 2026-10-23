@@ -276,7 +276,7 @@ def test_the_mac_uninstall_app_runs_woodshed_then_uv(tmp_path: Path, woodshed_ex
     proc = run_uninstall_script(command, tmp_path)
     if woodshed_exit == 0:
         assert proc.returncode == 0, proc.stdout + proc.stderr
-        assert calls_of(log) == ["woodshed uninstall --keep-self --yes", "uv tool uninstall woodshed", "uv cache prune"]
+        assert calls_of(log) == ["woodshed uninstall --keep-self --yes", *(f"uv {c[3:]}" for c in uninstall.LAST_STEP)]
     else:  # declined or refused: woodshed stays
         assert proc.returncode == 1
         assert calls_of(log) == ["woodshed uninstall --keep-self --yes"]
@@ -328,6 +328,15 @@ def test_the_uninstall_script_survives_odd_folder_names(tmp_path: Path) -> None:
     proc = run_uninstall_script(script, tmp_path)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert calls_of(log)[0] == "woodshed uninstall --keep-self --yes"
+
+
+def test_the_shortcuts_clean_the_same_packages_from_uv_cache_as_woodshed_says() -> None:
+    from woodshed import uninstall
+
+    clean = uninstall.LAST_STEP[1].removeprefix("uv ")
+    assert clean.startswith("cache clean woodshed ") and "torch" in clean
+    assert f") {clean} >/dev/null" in INSTALL_SH.read_text(encoding="utf-8")
+    assert f"' {clean} >nul" in PS1.read_text(encoding="utf-8")
 
 
 def test_the_windows_installer_registers_the_uninstall_woodshed_knows() -> None:

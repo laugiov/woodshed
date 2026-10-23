@@ -123,7 +123,7 @@ jobs:
             sleep 1
           done
           after="$(du -sk "$(uv cache dir)" | cut -f1)"
-          echo "uv cache: ${before} KB before, ${after} KB after the uninstall (uv cache prune)"
+          echo "uv cache: ${before} KB before, ${after} KB after the uninstall (uv cache clean of woodshed's packages)"
           test -n "$gone" || { echo "::error::woodshed is still in uv tool list after 60 s"; exit 1; }
           test ! -e "$bin/woodshed"
           test ! -e "$cache/stems" && test ! -e "$cache/models"
@@ -220,7 +220,7 @@ jobs:
             Start-Sleep 1
           }
           $after = Get-Item (uv cache dir).Trim() | Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum
-          Write-Host ("uv cache: {0:N0} KB before, {1:N0} KB after the uninstall (uv cache prune)" -f ($bytes.Sum / 1KB), ($after.Sum / 1KB))
+          Write-Host ("uv cache: {0:N0} KB before, {1:N0} KB after the uninstall (uv cache clean of woodshed's packages)" -f ($bytes.Sum / 1KB), ($after.Sum / 1KB))
           if (-not $gone) { throw "woodshed is still in uv tool list after 60 s" }
           if (Test-Path $exe) { throw "woodshed.exe is still there" }
           foreach ($l in $links) { if (Test-Path $l) { throw "the shortcut is still there: $l" } }

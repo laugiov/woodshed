@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import csv
-import io
 import os
 import re
 import shutil
@@ -33,7 +31,11 @@ UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\woodshed"
 APP_ID = "io.github.laugiov.woodshed"  # the Mac apps' bundle identifiers start with it
 WINDOWS_SCRIPT = "uninstall-woodshed.cmd"  # in the tools folder, what the Start menu and Settings run
 QUESTION = "Remove woodshed from this computer? Your songs stay where they are. [y/N] "
-LAST_STEP = ("uv tool uninstall woodshed", "uv cache prune")
+# uv keeps every download: `uv cache prune` frees nothing once woodshed is gone (seen on all three systems), so
+# woodshed's own entry and its heavy packages leave the cache (downloaded again if another program needs them).
+# Never `uv cache clean` alone: that empties the cache of every other uv program too.
+CACHED = ("woodshed", "torch", "torchaudio", "demucs", "llvmlite", "numba", "scipy", "scikit-learn", "sympy", "numpy")
+LAST_STEP = ("uv tool uninstall woodshed", "uv cache clean " + " ".join(CACHED))
 RUNNING = "woodshed is running: close its window first (the library in the browser), then try again."
 EXIT_OK, EXIT_STOPPED = 0, 1
 
@@ -229,42 +231,103 @@ def remove(p: Plan) -> list[str]:
     return done
 
 
-def _processes() -> list[tuple[int, str]]:
-    """(pid, command line) of this user's processes; on Windows the woodshed.exe ones, by image name."""
+Process = tuple[int, int, str]  # pid, parent pid, command line (on Windows the program's file name)
+
+
+def _windows_processes() -> list[Process]:
+    """Every process, with its parent, from a Toolhelp snapshot (no program to run, no wmic)."""
+    found: list[Process] = []
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class Entry(ctypes.Structure):  # PROCESSENTRY32W
+            _fields_ = [
+                ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260),
+            ]  # fmt: skip
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        for step in (kernel.Process32FirstW, kernel.Process32NextW):
+            step.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+            step.restype = wintypes.BOOL
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+        if snapshot in (None, wintypes.HANDLE(-1).value):
+            return found
+        try:
+            entry = Entry()
+            entry.dwSize = ctypes.sizeof(Entry)
+            more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+            while more:
+                found.append((entry.th32ProcessID, entry.th32ParentProcessID, entry.szExeFile))
+                more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+        finally:
+            kernel.CloseHandle(snapshot)
+    return found
+
+
+def _processes() -> list[Process]:
+    """This computer's processes with their parents."""
+    if sys.platform == "win32":
+        try:
+            return _windows_processes()
+        except OSError:
+            return []
     try:
-        if sys.platform == "win32":
-            out = subprocess.run(
-                ["tasklist", "/FO", "CSV", "/NH", "/FI", "IMAGENAME eq woodshed.exe"],
-                capture_output=True, text=True, timeout=20, check=False,
-            ).stdout  # fmt: skip
-            return [(int(row[1]), row[0]) for row in csv.reader(io.StringIO(out)) if len(row) > 1 and row[1].isdigit()]
         out = subprocess.run(
-            ["ps", "-Ao", "pid=,args="], capture_output=True, text=True, timeout=20, check=False
+            ["ps", "-Ao", "pid=,ppid=,args="], capture_output=True, text=True, timeout=20, check=False
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return []
     found = []
     for line in out.splitlines():
-        pid, _, args = line.strip().partition(" ")
-        if pid.isdigit():
-            found.append((int(pid), args.strip()))
+        pid, ppid, args = ([*line.split(None, 2), "", ""])[:3]
+        if pid.isdigit() and ppid.isdigit():
+            found.append((int(pid), int(ppid), args.strip()))
     return found
 
 
-def others_running(processes: Sequence[tuple[int, str]], script: str, system: str) -> bool:
-    """Another woodshed than this one and its parent (the launcher, or the shell of the shortcut)."""
-    me = {os.getpid(), os.getppid()}
+def _lineage(processes: Sequence[Process], me: int) -> set[int]:
+    """This process and all its ancestors: the launchers between the shortcut and this Python (on Windows
+    woodshed.exe, then the environment's python.exe, then uv's), and the shortcut's own shell."""
+    parent = {pid: ppid for pid, ppid, _ in processes}
+    chain = {me}
+    pid = parent.get(me)
+    while pid is not None and pid not in chain:  # a reused id can loop back
+        chain.add(pid)
+        pid = parent.get(pid)
+    if me == os.getpid():
+        chain.add(os.getppid())  # even when the list misses this process
+    return chain
+
+
+def other_woodshed(processes: Sequence[Process], script: str, system: str, me: int | None = None) -> int | None:
+    """The process id of a woodshed other than this one and its ancestors, if one runs."""
+    mine = _lineage(processes, os.getpid() if me is None else me)
     if system == "win32":
-        return any(pid not in me and args.lower() == "woodshed.exe" for pid, args in processes)
+        return next((pid for pid, _, name in processes if pid not in mine and name.lower() == "woodshed.exe"), None)
     names = {script, os.path.realpath(script)}
     pattern = re.compile("|".join(re.escape(n) + r"(\s|$)" for n in names))
-    return any(pid not in me and pattern.search(args) for pid, args in processes)
+    return next((pid for pid, _, args in processes if pid not in mine and pattern.search(args)), None)
 
 
-def _running(system: str) -> bool:
+def others_running(processes: Sequence[Process], script: str, system: str, me: int | None = None) -> bool:
+    return other_woodshed(processes, script, system, me) is not None
+
+
+def _running(system: str) -> str | None:
+    """Why woodshed counts as running, if it does."""
     from woodshed.app import running_url
 
-    return running_url(PORT) is not None or others_running(_processes(), _script(), system)
+    if running_url(PORT) is not None:
+        return f"{RUNNING} (it answers on port {PORT})"
+    pid = other_woodshed(_processes(), _script(), system)
+    return f"{RUNNING} (woodshed is process {pid})" if pid is not None else None
 
 
 def _installed_by_uv() -> bool:
@@ -308,8 +371,8 @@ def main(argv: Sequence[str]) -> int:
     p = plan(system, args.keep_self)
     if p.refusal:
         return _refuse(p.refusal)
-    if _running(system):
-        return _refuse(RUNNING)
+    if running := _running(system):
+        return _refuse(running)
 
     print("This removes:")
     for item in p.items:

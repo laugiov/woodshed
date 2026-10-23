@@ -322,28 +322,66 @@ def test_refuses_while_another_woodshed_process_runs(
     fill_cache(fake)
     script = "/opt/uv/bin/woodshed"
     monkeypatch.setattr(uninstall, "_script", lambda: script)
-    monkeypatch.setattr(uninstall, "_processes", lambda: [(4242, f"/usr/bin/python3 {script} app")])
+    monkeypatch.setattr(uninstall, "_processes", lambda: [(4242, 1, f"/usr/bin/python3 {script} app")])
     before = fake.files()
     assert run(monkeypatch, "linux", "--yes") == 1
     assert fake.files() == before
     assert "close its window first" in capsys.readouterr().err
 
 
-def test_itself_and_its_parent_do_not_count_as_running(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_itself_and_its_ancestors_do_not_count_as_running(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
     fill_cache(fake)
     script = "/opt/uv/bin/woodshed"
-    me = [(os.getpid(), f"python3 {script} uninstall"), (os.getppid(), f"{script} uninstall")]
-    others = [(4243, f"python3 {script}-other app"), (4244, "sh /x/uninstall.command")]
+    me, parent = os.getpid(), os.getppid()
+    tree = [(me, parent, f"python3 {script} uninstall --keep-self"), (parent, 1, f"sh {script} uninstall")]
+    others = [(4243, 1, f"python3 {script}-other app"), (4244, 1, "sh /x/uninstall.command")]
     monkeypatch.setattr(uninstall, "_script", lambda: script)
-    monkeypatch.setattr(uninstall, "_processes", lambda: me + others)
+    monkeypatch.setattr(uninstall, "_processes", lambda: tree + others)
     assert run(monkeypatch, "linux", "--yes") == 0
     assert not (fake.cache / "stems").exists()
 
 
-def test_windows_counts_other_woodshed_programs() -> None:
-    # On Windows woodshed.exe is a launcher: the Python running this is its child.
-    assert uninstall.others_running([(os.getppid(), "woodshed.exe")], "x", "win32") is False
-    assert uninstall.others_running([(os.getpid() + 1, "WOODSHED.EXE")], "x", "win32") is True
+# The Start menu's uninstall on Windows, as GitHub's runner showed it: woodshed.exe (uv's launcher) starts the
+# tool environment's python.exe, itself a launcher of uv's Python, so woodshed.exe is a grandparent of this one.
+WINDOWS_TREE = [
+    (100, 4, "pwsh.exe"),
+    (200, 100, "cmd.exe"),  # uninstall-woodshed.cmd
+    (300, 200, "woodshed.exe"),
+    (400, 300, "python.exe"),  # the environment's launcher
+    (500, 400, "python.exe"),  # this woodshed uninstall
+]
+
+
+def test_windows_does_not_count_its_own_launchers() -> None:
+    assert uninstall.others_running(WINDOWS_TREE, "x", "win32", me=500) is False
+
+
+def test_windows_counts_another_woodshed_program() -> None:
+    app = [(600, 4, "explorer.exe"), (700, 600, "WOODSHED.EXE"), (800, 700, "python.exe")]
+    assert uninstall.others_running(WINDOWS_TREE + app, "x", "win32", me=500) is True
+
+
+def test_the_whole_chain_of_this_process_counts_as_itself() -> None:
+    # The real parent and grandparent of this test run, then a woodshed above them: still this one's.
+    me, parent = os.getpid(), os.getppid()
+    tree = [(me, parent, "python.exe"), (parent, 77, "python.exe"), (77, 66, "woodshed.exe"), (66, 1, "cmd.exe")]
+    assert uninstall.others_running(tree, "x", "win32") is False
+
+
+def test_a_parent_loop_ends(fake: Home) -> None:
+    # Windows reuses process ids: a dead parent's id can point back down the chain.
+    loop = [(300, 500, "woodshed.exe"), (400, 300, "python.exe"), (500, 400, "python.exe")]
+    assert uninstall.others_running(loop, "x", "win32", me=500) is False
+
+
+def test_refuses_with_the_process_named(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(uninstall, "_processes", lambda: [*WINDOWS_TREE, (700, 4, "woodshed.exe")])
+    monkeypatch.setattr(os, "getpid", lambda: 500)
+    fill_cache(fake)
+    assert run(monkeypatch, "win32", "--yes") == 1
+    assert "process 700" in capsys.readouterr().err
 
 
 def test_refuses_in_docker(fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -421,3 +459,10 @@ def test_the_cli_runs_it(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "uninstall" in cli.COMMANDS
     assert cli.main(["uninstall", "--yes"]) == 0
     assert not (fake.cache / "stems").exists()
+
+
+def test_the_real_process_list_holds_this_process_and_its_parent() -> None:
+    # ps on macOS and Linux, a Toolhelp snapshot on Windows (the CI's Windows jobs run this).
+    procs = uninstall._processes()
+    assert (os.getpid(), os.getppid()) in {(pid, ppid) for pid, ppid, _ in procs}
+    assert len(uninstall._lineage(procs, os.getpid())) >= 2
