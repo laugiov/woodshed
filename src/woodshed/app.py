@@ -517,7 +517,8 @@ class Library:
             ]:
                 del self.jobs[key]
             jobs = [asdict(j) for j in self.jobs.values()]
-        return {"songs": self.pages(), "jobs": jobs}
+        separates = self.opts.use_stems and stems_extra_installed()
+        return {"songs": self.pages(), "jobs": jobs, "separates": separates}
 
     def reserve(self, name: str) -> Path:
         """Where an upload goes: a safe name, unique by its stem (one page per stem), reserved

@@ -329,6 +329,7 @@
     canUpload = upload; // a phone of the band plays and follows; words are placed from the computer
     $("drop").hidden = !upload;
     $("addBtn").hidden = !upload;
+    $("sixWrap").hidden = !data.separates; // without the instruments' tracks there is nothing to split
     info = {};
     for (const s of data.songs) {
       titles[s.folder] = s.title;
@@ -360,6 +361,7 @@
     params.set("beats_per_bar", $("beats").value);
     if ($("bpm").value) params.set("bpm", $("bpm").value);
     if ($("sevenths").checked) params.set("sevenths", "1");
+    if (!$("sixWrap").hidden && !$("six").checked) params.set("separation", "four"); // guitars and keys on one track
     for (const file of files) {
       params.set("name", file.name);
       toast(W.t("Sending {file}…", { file: file.name }));

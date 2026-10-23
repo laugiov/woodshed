@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,38 @@ def test_options_and_errors_are_shown(page: Page, server: app.AppServer, tmp_pat
     bad.write_bytes(b"data")
     page.get_by_test_id("file-input").set_input_files(str(bad))
     expect(page.get_by_test_id("toast")).to_contain_text("BPM")
+
+
+def test_guitar_and_keys_apart_is_an_option_when_the_library_separates(
+    page: Page, server: app.AppServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page.goto(server.url)
+    page.get_by_test_id("drop").locator("summary").click()
+    expect(page.get_by_test_id("opt-six")).to_be_hidden()  # this library makes no instrument tracks
+    monkeypatch.setattr(app, "stems_extra_installed", lambda: True)
+    server.library.opts = replace(server.library.opts, use_stems=True)
+    page.reload()
+    page.get_by_test_id("drop").locator("summary").click()
+    six = page.get_by_test_id("opt-six")
+    expect(six).to_be_checked()
+    sent: list[str] = []
+
+    def answer(route: Any) -> None:  # the upload is only looked at: nothing is separated
+        sent.append(route.request.url)
+        route.fulfill(status=400, json={"error": "seen"})
+
+    page.route("**/api/songs?*", answer)
+    wav = synth.write("pop", tmp_path / "src").wav
+    for count in (1, 2):
+        if count == 2:
+            six.uncheck()
+            page.get_by_test_id("file-input").set_input_files([])
+        page.get_by_test_id("file-input").set_input_files(str(wav))
+        for _ in range(100):
+            if len(sent) == count:
+                break
+            page.wait_for_timeout(50)
+    assert len(sent) == 2 and "separation" not in sent[0] and "separation=four" in sent[1]
 
 
 def test_a_title_cannot_inject_markup_in_the_library(page: Page, server: app.AppServer, tmp_path: Path) -> None:

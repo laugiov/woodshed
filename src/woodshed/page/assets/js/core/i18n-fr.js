@@ -83,6 +83,7 @@
     "Beats per bar": "Temps par mesure",
     "Tempo you hear (BPM)": "Tempo que tu entends (BPM)",
     "Seventh chords (less reliable)": "Accords de septième (moins fiables)",
+    "Guitar and keys apart": "Guitare et claviers séparés",
     "Set list": "Set list",
     "No set yet: add songs with": "Pas encore de set : ajoute des morceaux avec",
     "in your songs. On a song page,": "dans tes morceaux. Sur la page d'un morceau,",
