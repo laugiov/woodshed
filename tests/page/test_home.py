@@ -282,7 +282,9 @@ def test_the_footer_says_the_version_what_s_new_and_how_to_update(page: Page, se
     expect(news).to_have_text("What's new")
     expect(news).to_have_attribute("href", "https://github.com/laugiov/woodshed/blob/main/CHANGELOG.md")
     expect(update).to_have_text("How to update")
-    expect(update).to_have_attribute("href", "https://github.com/laugiov/woodshed#install")
+    expect(update).to_have_attribute(
+        "href", "https://github.com/laugiov/woodshed/blob/main/docs/guide/install.md#updating"
+    )
     for link in (news, update):  # opens beside the library, as the page's other outside links
         expect(link).to_have_attribute("target", "_blank")
         expect(link).to_have_attribute("rel", "noopener")

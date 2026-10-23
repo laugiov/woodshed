@@ -89,7 +89,7 @@ def test_the_home_page_says_the_library_s_version_and_links_its_changelog(server
     assert f'data-testid="version">woodshed {__version__}</span>' in body and "{{" not in body
     for href in (
         "https://github.com/laugiov/woodshed/blob/main/CHANGELOG.md",
-        "https://github.com/laugiov/woodshed#install",
+        "https://github.com/laugiov/woodshed/blob/main/docs/guide/install.md#updating",
     ):
         assert f'<a href="{href}" target="_blank" rel="noopener"' in body
 

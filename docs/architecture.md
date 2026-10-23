@@ -263,7 +263,7 @@ With stems, `analysis._parts` reads each stem on a **sixteenth-note grid** (`Gri
 | Keys voicings | `other` | Chroma per bar, up to four pitch classes above a threshold, strongest first. |
 | Vocal range | `vocals` | `librosa.pyin` (80 to 1400 Hz), note by note. Reports the 10th and 90th percentile of sung notes: the usual range, not the extremes. |
 
-All thresholds carry their measurements in comments. The bass tab and the drum groove are marked experimental in the page (README).
+All thresholds carry their measurements in comments. The bass tab and the drum groove are marked experimental in the page ([the guide](guide/parts.md)).
 
 The keys panel checks the voicing of the current bar against the chart (`instruments.voicingVerdict`, on pitch classes before transposition): no upper note heard and, on a bar of one chord, its root heard alone are said in words instead of chips (the root quietly, as a statement), and a bar of one chord whose reading holds the other third (a major third on a minor chord or the reverse, without its own) gets a line asking to check the bar by ear. That third is spelled as a third of the chord's root as displayed (`instruments.thirdName`: the root's letter plus two, so C♯ on A, never D♭), in the line and in its chip; a double sharp or flat falls back to the key region's name. Chords with no third (sus, 5, no chord), readings with both thirds and bars of two chords or more are shown as heard. Once per song, when a quarter of the bars or more read a single note (`instruments.keysThin`), the note under the readings says the keys are often read as a single note and to play the chart's chord where only one is heard (the threshold's measurements in `keysThin`). The "over" chip (the chord's root) shows on bars of one chord only. On a six-stem page the keys panel heads the comping grid read from the guitar "the guitar's strumming": the keys' own rhythm is not read.
 
@@ -308,7 +308,7 @@ flowchart LR
 - `x2` repeats a part or a line. A part's name alone (`[Chorus]`) repeats the last part of that name; a chorus named nowhere before is the stanza written out most often (at least twice, then `[Chorus]` on lyrics sites), and when two stanzas come back as often nothing is guessed. A name with no words to repeat (`[Solo]`, `[Bridge]`) names the music between the lines around it, and a sung part's name with nothing to repeat is reported to the user.
 - Rows of chords and `[Am]` chords inside words are dropped. The chart has the chords.
 - Words in brackets are backing vocals, kept apart.
-- The model hears only `a` to `z` and the apostrophe. Accents are stripped. Other letters raise an error ("write numbers out as words" in the README).
+- The model hears only `a` to `z` and the apostrophe. Accents are stripped. Other letters raise an error ("write numbers out as words" in [the guide](guide/singers.md#the-words-with-the-chords-above-them)).
 
 **Listen.** `listen` runs the MMS forced aligner (`torchaudio.pipelines.MMS_FA`, with a star token) on the vocal stem:
 
@@ -335,7 +335,7 @@ The page shows these lines as "to check". A line the model could not place is ma
 
 **Output.** `lyrics.json` in the page folder (version 1), and `lyrics.js` with the same data, so the page can read it from disk. Rebuilding a page keeps the words (`_keep_lyrics` in `build.py`). Times are kept and chords are placed again on the new analysis. If the source recording changed, only the text is kept, as `lyrics.previous.json`.
 
-**Licence.** The MMS weights (about 1.2 GB) are **CC BY-NC 4.0**: non-commercial use. woodshed itself is MIT. The README lists the licence of every model, and the `lyrics` command prints a notice.
+**Licence.** The MMS weights (about 1.2 GB) are **CC BY-NC 4.0**: non-commercial use. woodshed itself is MIT. [The guide](guide/how-it-works.md#models-and-licences) lists the licence of every model, and the `lyrics` command prints a notice.
 
 ---
 

@@ -37,6 +37,7 @@ much lighter.
 ## Before a pull request
 
 ```bash
+uv run pytest -n auto  # Python and page tests (Playwright)
 scripts/ci.sh          # a few minutes: hygiene, lint, types, tests, the page in Chromium
 scripts/ci.sh --full   # what GitHub runs: every Python, Firefox, the stems extra, the package
 ```
@@ -55,6 +56,8 @@ The rules the checks enforce, and the ones they can't:
   and the song's own text (title, chords, words) is marked `translate="no"`.
 - **Audio quality is never traded for speed**: no mono, no lossy re-encoding, no truncated notes.
 - Python 3.10 to 3.14, typed (`mypy --strict`), formatted with `ruff`.
+
+Security problems go through [private reporting](SECURITY.md), never a public issue.
 
 ## Pull requests
 

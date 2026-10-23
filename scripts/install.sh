@@ -247,7 +247,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
         say "This Mac has an Intel processor: the installer needs a Mac with Apple silicon (M1 or newer),"
         say "because one part of woodshed has no ready-made build for Intel Macs."
         say "On this Mac, use woodshed with Docker instead:"
-        say "  https://github.com/laugiov/woodshed#with-docker-windows-macos-or-linux"
+        say "  https://github.com/laugiov/woodshed/blob/main/docs/guide/install.md#with-docker-windows-macos-or-linux"
         exit 1
     fi
     PYTHON=cpython-3.13-macos-aarch64-none  # the Apple silicon build, even from a Rosetta Terminal

@@ -15,7 +15,7 @@ services:
     # The address the band's phones type, shown on the library page (the app cannot see it from
     # inside the container): this computer's address on the network, for example
     # environment: [WOODSHED_PUBLIC_URL=http://192.168.1.20:8000]
-    # HTTPS for the phones (README: Phones on the music stand): put the certificate and its key in a
+    # HTTPS for the phones (docs/guide/phones.md: HTTPS for the phones): put the certificate and its key in a
     # ./certs folder (not inside ./woodshed), add the volume "./certs:/certs:ro" and
     # environment: [WOODSHED_PUBLIC_URL=https://192.168.1.20:8000, WOODSHED_CERT=/certs/cert.pem,
     # WOODSHED_KEY=/certs/key.pem]. The key must be readable by the user below (chmod 640).

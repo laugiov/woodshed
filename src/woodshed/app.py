@@ -1210,7 +1210,7 @@ def public_urls() -> list[str]:
 # installed) and how to update. Plain links, filled in by the library with its version: the page
 # itself asks nothing of the network.
 CHANGELOG_URL = "https://github.com/laugiov/woodshed/blob/main/CHANGELOG.md"
-UPDATE_URL = "https://github.com/laugiov/woodshed#install"
+UPDATE_URL = "https://github.com/laugiov/woodshed/blob/main/docs/guide/install.md#updating"
 
 
 def home_html(token: str) -> str:
@@ -1727,7 +1727,7 @@ class AppServer(ThreadingHTTPServer):
             main.untrusted_told = True
             print(
                 "woodshed app: a device does not trust the certificate yet, or opened an http:// address: "
-                "install the certificate's root on it (README: Phones on the music stand)",
+                "install the certificate's root on it (docs/guide/phones.md: HTTPS for the phones)",
                 file=sys.stderr,
                 flush=True,
             )
