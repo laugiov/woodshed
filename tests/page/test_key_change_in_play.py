@@ -243,3 +243,37 @@ def test_the_lit_shape_moves_with_the_key_on_the_same_chord(page: Page, pages_ro
     page.evaluate("Woodshed.app.transport.seek(Woodshed.current.bars[16].start + 0.05)")  # as playback moves on
     page.wait_for_timeout(300)
     expect(page.locator(".shape-card.cur")).to_have_attribute("data-region", "1")
+
+
+def test_the_words_stage_says_the_key_change_too(page: Page, pages_root: str) -> None:
+    from tests.page.conftest import VARIANTS, rewritten
+
+    lyric = rewritten("lift", pages_root, "lyrics-lift", VARIANTS["lyrics-lift"])  # words over bars 15-18
+    folder = lyric.with_name("lift-lyrics-mid.woodshed")
+    if not folder.exists():
+        shutil.copytree(lyric, folder)
+        index = folder / "index.html"
+        text = index.read_text(encoding="utf-8")
+        found = build.DATA_BLOCK.search(text)
+        assert found is not None
+        data = json.loads(found.group(1))
+        data["song"]["key_regions"][1]["bar"] = data["view"]["regions"][1]["bar"] = 18
+        index.write_text(text[: found.start(1)] + build.script_json(data) + text[found.end(1) :], encoding="utf-8")
+    page.set_viewport_size({"width": 390, "height": 844})
+    opened(page, folder)
+    page.evaluate("Woodshed.app.setInstrument('voice')")
+    stage(page)
+    at(page, 17, True)
+    expect(page.get_by_test_id("stage-key-words")).to_have_text("Key change next bar: D♭ major")
+
+
+def test_a_song_in_one_key_keeps_its_stage_and_shapes_as_before(page: Page, pages_root: str) -> None:
+    opened(page, built("pop", False, pages_root))
+    page.evaluate("Woodshed.app.setInstrument('guitar')")
+    chords = "Woodshed.current.bars.flatMap((b) => b.chords).filter((c) => c.pc >= 0)"
+    distinct = f"new Set({chords}.map((c) => c.pc + c.quality)).size"
+    assert page.locator(".shape-card").count() == page.evaluate(distinct)  # one card a chord, ungrouped
+    stage(page)
+    at(page, 1, True)
+    top = page.locator("#stTop").inner_text()
+    assert "major" not in top and "minor" not in top  # no key on the top line of a song in one key

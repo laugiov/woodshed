@@ -193,13 +193,15 @@
         }
       }
       if ($("stKey").textContent !== keyLine) $("stKey").textContent = keyLine; // a live region: written on a change only
-      renderLyrics(s, list);
+      renderLyrics(s, list, keyLine);
     }
 
     // The words on the stand: the line sung now, a bar showing how far into it, then the next
     // lines, with the name of the part they start. The singer gets them full width; guitar and
     // keys next to the chords; bass and drums keep the chords and the bars.
-    function renderLyrics(s, list) {
+    // keyLine: the key change coming, also said above the words (the words stage hides the NEXT column on a
+    // phone, and the voice stage at every width).
+    function renderLyrics(s, list, keyLine) {
       const box = $("stLyrics");
       const words = app.words && app.sheetMode(s) === "lyrics" && s.inst !== "bass" && s.inst !== "drums";
       $("stage").classList.toggle("st-lyrics", !!words && s.inst !== "voice");
@@ -212,7 +214,7 @@
       // Between lines (a solo), no line is lit: the next ones wait, with the part they start.
       const from = k >= 0 ? k : at.next;
       const shown = rows.slice(from, from + 3);
-      const out = [];
+      const out = keyLine ? [h("div", { class: "st-next-part st-key-words", "data-testid": "stage-key-words" }, keyLine)] : [];
       shown.forEach((r, i) => {
         const sec = app.sectionOf(r.firstBar);
         const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
