@@ -153,7 +153,10 @@ once (with an undo). Through the library the band's phones get it live.
 **Key changes.** A last chorus lifted a semitone, a bridge in another key: woodshed finds where the key
 changes and marks the bar ("→ D♭ major", with a double bar line). From there the numerals read in the new
 key (I V vi IV again, not bII), the chords are spelled in it (G♭, not F♯), and a chord it hesitates on is
-weighted toward it. The header says "C major → D♭ major", the stage view says the next part's key, the words
+weighted toward it. The header says "C major → D♭ major"; on stage, two bars before it, "Key change next bar:
+D♭ major", and the top line always says the key of the bar; the guitar's shapes come by key ("From bar 17: D♭
+major"), with a word for the hands on a lift; the voice panel says "Up a semitone at bar 17" before you pick a
+key; where the chords around the change are unsure, the mark says "check by ear". The words
 show the change above their line, the library and the set list say the key a song ends in, and the ChordPro
 and MusicXML exports change key where the song does. A change counts when the new key holds at least
 8 bars and its own tonic takes over: a bridge on the relative minor, a rock vamp on bVII or a few borrowed
