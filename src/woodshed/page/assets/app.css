@@ -896,9 +896,8 @@ body.editing .chart-hint { display: none; }
 @media (pointer: coarse) { .your-part .pitch-row .btn { min-height: 44px; } }
 .key-mark { margin-left: 8px; color: var(--accent); font-weight: 700; }
 @media print {
-  /* Blocks, not nested grids, on paper: Chromium leaves an empty trailing page when a tall grid item that must not
-     break sits in nested grids (spec 014). */
-  body { margin: 0; }
-  .wrap, .main, .sheet, .sec-block { display: block !important; }
+  /* No room for the dock on paper: app.js keeps it with an inline padding, which spilled onto a blank last page
+     (spec 014). */
+  .wrap { padding-bottom: 0 !important; }
   .bar .key-change { color: #000; font-size: 13px; } /* the key change readable on the stand */
 }

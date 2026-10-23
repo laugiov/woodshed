@@ -141,7 +141,7 @@ def test_a_sung_part_holding_the_change_exports_as_python_does(open_page: Any) -
     words = json.loads((o.folder / "lyrics.json").read_text())
     text = download(o, "export-chordpro")
     assert text == exports.chordpro(data, words)
-    assert "{key: Db}" in text or "{comment: key change to Db at bar 17}" in text
+    assert "{key: Db}" in text
 
 
 def test_a_doubt_after_the_lift_is_spelled_in_the_new_key(open_page: Any) -> None:

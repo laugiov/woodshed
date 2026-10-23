@@ -62,6 +62,19 @@ def test_no_chord_written_is_ever_n_c(pop: dict[str, Any]) -> None:  # noqa: F81
     assert "[N.C.]" not in "\n".join(rows) and "[*N.C.]" in rows[1]
 
 
+def test_a_line_opened_by_a_chord_row_writes_the_chord_sounding_on_its_first_word(pop: dict[str, Any]) -> None:  # noqa: F811
+    bars = [dict(b) for b in pop["bars"]]
+    bars[2] = {**bars[2], "chords": [dict(c) for c in bars[1]["chords"]]}  # bar 3 plays bar 2's chord on
+    data = {**pop, "bars": bars}
+    words = {
+        **words_for(data),
+        "lines": [line_of(data, [("Morning", 0.0, 0.4)]), line_of(data, [("comes", 2.2, 2.3)])],
+    }
+    rows = exports.chordpro(data, words).split('{start_of_verse: label="Verse 1"}\n')[1].splitlines()
+    n = names(data)
+    assert rows[:3] == [f"[{n[0][0]}]Morning", f"| [{n[1][0]}] |", f"[{n[1][0]}]comes"]
+
+
 @pytest.mark.parametrize(
     ("rows", "folded"),
     [

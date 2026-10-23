@@ -546,5 +546,5 @@
     }, 0);
   }
 
-  W.exports = { data, chordpro, lab, json, midi, musicxml, save };
+  W.exports = { data, chordpro, lab, json, midi, musicxml, save, foldRows };
 })();

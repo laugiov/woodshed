@@ -211,7 +211,9 @@ def test_damaged_part_names_are_ignored(open_page: Any, bad: Any) -> None:
     assert o.js("Woodshed.app.sections().map((s) => s.name)") == names
 
 
-@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named", "lyrics-stacked", "lyrics-midline", "lyrics-lift"])
+@pytest.mark.parametrize(
+    "variant", ["lyrics", "lyrics-named", "lyrics-stacked", "lyrics-midline", "lyrics-lift", "lyrics-opened"]
+)
 def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, variant: str) -> None:
     from tests.page.test_page import download
     from woodshed import exports
@@ -221,7 +223,11 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
     words = json.loads((o.folder / "lyrics.json").read_text())
     text = download(o, "export-chordpro")
     assert text == exports.chordpro(data, words)
-    assert ("Morning comes" in text or variant in ("lyrics-stacked", "lyrics-midline")) and "{start_of_" in text
+    assert (
+        "Morning comes" in text or variant in ("lyrics-stacked", "lyrics-midline", "lyrics-opened")
+    ) and "{start_of_" in text
+    if variant == "lyrics-opened":  # a line opened by a chord row: the chord sounding on its first word
+        assert re.search(r"^\| \[(\w+)\] \|\n\[\1\]comes$", text, re.M)
     if variant == "lyrics-named":
         assert '{start_of_chorus: label="Chorus 1"}' in text  # the parts as the page names them
     if variant in ("lyrics-stacked", "lyrics-midline"):
@@ -233,6 +239,23 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
         else:
             assert re.search(r"\] \[[^\]]+\]\w", text)  # "[G] [Am]late": inline, the line not cut
         assert "{comment: check by ear: " in text and "(" in text.split("check by ear: ")[1].split("}")[0]
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        ["| [A] |"] * 4,
+        ["| [A] |", "| [B] |"] * 2 + ["| [A] |"],
+        ["| [A] |", "| [B] |"] * 3,
+        ["| [A] |", "| [A] |", "| [B] |", "| [B] |"],
+        ["| [A] |", "| [B] |", "| [C] |"],
+    ],
+)
+def test_chord_rows_fold_on_the_page_as_in_python(open_page: Any, rows: list[str]) -> None:
+    from woodshed import exports
+
+    o = open_page("pop")
+    assert o.js(f"Woodshed.exports.foldRows({json.dumps(rows)})") == exports.fold_rows(rows)
 
 
 def test_the_chordpro_is_in_the_key_the_page_shows_like_python(open_page: Any) -> None:

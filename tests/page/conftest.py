@@ -97,6 +97,7 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     named = data["song"].pop("_lyrics_sections", None)
     late = data["song"].pop("_lyrics_late", False)
     midline = data["song"].pop("_lyrics_midline", False)
+    opened = data["song"].pop("_lyrics_opened", False)
     at = data["song"].pop("_lyrics_at", 0)
     if data["song"].pop("_lyrics", False):
         lyrics = lyrics_for(data["song"], at)
@@ -110,6 +111,12 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
             early = lyrics["lines"][0]["words"][0]
             word = {"text": "late", "start": start + 0.75 * (end - start), "end": start + 0.9 * (end - start)}
             lyrics["lines"] = [{**lyrics["lines"][0], "text": early["text"] + " late", "words": [early, word]}]
+        if opened:  # a word on bar 1; the next line early in bar 3, which plays bar 2's chord on
+            bars = data["song"]["bars"]
+            start, end = bars[2]["start"], bars[2]["end"]
+            first = {**lyrics["lines"][0], "text": "Morning", "words": lyrics["lines"][0]["words"][:1]}
+            word = {"text": "comes", "start": start + 0.2 * (end - start), "end": start + 0.3 * (end - start)}
+            lyrics["lines"] = [first, {**lyrics["lines"][0], "text": "comes", "words": [word]}]
         if named is not None:
             lyrics["sections"] = named
         (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(lyrics) + ";\n")
@@ -231,6 +238,14 @@ def _lyrics_midline(song: dict[str, Any]) -> None:
     song["_lyrics_midline"] = True
 
 
+def _lyrics_opened(song: dict[str, Any]) -> None:
+    """Words on pop with bar 3 playing bar 2's chord on: the second line, opened by a chord row, has no change
+    of its own on its first word (the chord sounding there is written on it)."""
+    _with_lyrics(song)
+    song["bars"][2]["chords"] = [dict(c) for c in song["bars"][1]["chords"]]
+    song["_lyrics_opened"] = True
+
+
 def _groove_edge(song: dict[str, Any]) -> None:
     """A kick on the & of 1 in 55 % of the bars: drawn by the notation (over half the bars), below the
     strong hits a relative rule would keep."""
@@ -268,6 +283,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "groove-diffuse": _groove_diffuse,
     "lyrics-stacked": _lyrics_stacked,
     "lyrics-midline": _lyrics_midline,
+    "lyrics-opened": _lyrics_opened,
     "lyrics-lift": _lyrics_over_the_lift,
     "lyrics-lift-early": _lyrics_before_the_lift,
 }  # fmt: skip
