@@ -40,7 +40,8 @@ def fake_stems(name: str, folder: Path) -> stems.Stems:
     return stems.Stems(out, paths, from_cache=True)
 
 
-@pytest.mark.parametrize("name", list(synth.SONGS))
+# The key change songs have their own tests (test_key_changes.py): one of them is enough here (a minute each).
+@pytest.mark.parametrize("name", [n for n in synth.SONGS if n not in synth.KEY_SONGS] + ["lift"])
 def test_song_json_matches_the_schema_and_is_consistent(name: str, folder: Path) -> None:
     per_bar = synth.SONGS[name].beats_per_bar
     wav = synth.write(name, folder).wav

@@ -109,6 +109,8 @@ KEYS = {
     "lift": "C", "lift2": "C", "lift4": "C", "lift8": "C", "bridge": "C", "mixolydian": "C", "vamp": "C",
     "lift_late": "Db",
 }  # fmt: skip
+# The songs made for key changes (spec 012): about a minute each, so most tests use the others.
+KEY_SONGS = {"lift", "lift2", "lift4", "lift8", "bridge", "mixolydian", "vamp", "lift_late"}
 # The key changes each song holds: (bar, key), the first at bar 0 (spec 012).
 KEY_REGIONS = {
     "lift": [(0, "C"), (16, "Db")],
