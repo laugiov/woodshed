@@ -78,6 +78,8 @@ def test_while_the_recording_renders_the_chart_says_it_catches_up(
     expect(toast).to_have_text(
         "Transposed to D: the chart and the shapes follow; the recording follows when it is ready."
     )
+    # The library's own band state first (it has no key): heard after the change below, it would undo it.
+    until(page, "Woodshed.app.store.get().bandKey !== null")
     page.evaluate("Woodshed.app.useBand({ transpose: 3, key: 'Eb' })")  # the band's key, from another device
     expect(toast).to_contain_text("the chords follow. The recording follows when it is ready.")
     page.get_by_test_id("lang-fr").click()
