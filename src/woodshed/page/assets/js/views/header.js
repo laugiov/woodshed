@@ -132,6 +132,7 @@
     function render(s) {
       $("stage").hidden = !s.stage;
       if (!s.stage) return;
+      $("stage").classList.toggle("keyed", song.regionCount > 1); // its key line keeps its height
       const u = Math.floor(s.beat / song.per);
       const c = song.chordAtBeat(s.beat);
       const up = song.upcoming(s.beat, 2);
@@ -157,16 +158,38 @@
       $("stSection").textContent = W.partName(sec);
       // The recording in another key (views/pitch.js) is said on the stand too.
       const shifted = s.pitchStatus && s.pitchStatus.state === "on" ? " · ♪ " + (s.transpose > 0 ? "+" : "−") + Math.abs(s.transpose) : "";
-      $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM" + shifted;
+      // On a song whose key changes, the key of the bar playing is always on the top line (spec 013).
+      const keyed = song.regionCount > 1;
+      const keyOf = (region) => song.keyWords(song.keyName(s.transpose, region));
+      const here = keyed ? " · " + keyOf(song.regionOf(u)) : "";
+      $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + here + " · " + s.bpm + " BPM" + shifted;
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
-      // A next part in another key says it: the band hears the lift coming (spec 012).
+      // A next part that starts in another key than the bar before it says it (spec 012, 013).
       const nextRegion = next ? song.regionOf(next.start) : null;
-      const inKey = next && nextRegion !== song.regionOf(u) && app.keyWords ? " " + W.t("in {key}", { key: app.keyWords(song.keyName(s.transpose, nextRegion)) }) : "";
-      const what = next ? W.partName(next) + inKey : k >= 0 && k === list.length - 1 ? W.t("End") : "";
+      const inKey = keyed && next && nextRegion !== song.regionOf(next.start - 1) ? " · " + W.t("in {key}", { key: keyOf(nextRegion) }) : "";
+      const what = next ? W.partName(next) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
       // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
       const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
-      $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "");
+      $("stComing").textContent = !what ? "" : (soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "")) + ((soon || !s.playing) && next ? inKey : "");
+      // A key change inside the part (not where a part starts: the part line says that one) on its own line:
+      // two bars ahead, on the bar, and stopped, where it is (spec 013).
+      let keyLine = "";
+      if (keyed) {
+        const inside = (change) => change && change.bar < sec.end && !list.some((p) => p.start === change.bar);
+        const ahead = song.changeAhead(u, 2, s.loop);
+        const now = song.keyChanges.find((c) => c.bar === u);
+        if (s.playing && inside(ahead)) {
+          keyLine = ahead.bar - u === 1
+            ? W.t("Key change next bar: {key}", { key: keyOf(ahead.region) })
+            : W.t("Key change in {n} bars: {key}", { n: ahead.bar - u, key: keyOf(ahead.region) });
+        } else if (s.playing && inside(now)) keyLine = W.t("Now in {key}", { key: keyOf(now.region) });
+        else if (!s.playing) {
+          const rest = song.keyChanges.find((c) => c.bar > u && inside(c));
+          if (rest) keyLine = W.t("Key change at bar {n}: {key}", { n: rest.bar + 1, key: keyOf(rest.region) });
+        }
+      }
+      $("stKey").textContent = keyLine;
       renderLyrics(s, list);
     }
 

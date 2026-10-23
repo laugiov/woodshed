@@ -106,8 +106,12 @@
       const cur = song.chordAtBeat(s.beat);
       const chords = song.distinctChords();
       const t = s.transpose;
-      const funk = s.pos === "funk" ? I.funkVoicings(chords.map((c) => ({ pc: c.pc + t, quality: c.quality, bass: I.bassOf(c, t) }))) : null;
-      const cards = chords.map((c) => {
+      // On a song whose key changes, the shapes come by key, each group headed (spec 013); one capo for the song.
+      const groups = song.regionCount > 1 ? Array.from({ length: song.regionCount }, (_, r) => song.regionChords(r)) : [chords];
+      const shown = groups.flat();
+      const funk = s.pos === "funk" ? I.funkVoicings(shown.map((c) => ({ pc: c.pc + t, quality: c.quality, bass: I.bassOf(c, t) }))) : null;
+      const here = song.regionOf(curBar(s));
+      const card = (c) => {
         let shape;
         let label;
         let sub;
@@ -130,8 +134,9 @@
           "button",
           {
             type: "button",
-            class: "shape-card" + (song.same(c, cur) ? " cur" : ""),
+            class: "shape-card" + (song.same(c, cur) && (song.regionCount === 1 || c.region === here) ? " cur" : ""),
             "data-testid": "shape",
+            "data-region": song.regionCount > 1 ? c.region : null,
             "aria-label": W.t("Hear {chord}", { chord: app.nameFor(c, 0, s) }),
             onclick: () => app.hearShape(shape, s.pos === "open" ? s.capo : 0),
           },
@@ -140,6 +145,20 @@
           guitarDiagram(shape),
           h("span", { class: "play-hint", style: { display: "block" } }, W.t("▶ hear")),
         );
+      };
+      const barresIn = (list, k) => list.filter((c) => I.openOrBarre(song.view.shapes, c.pc + t - k, c.quality, I.bassOf(c, t - k)).barre > 0).length;
+      const cards = song.regionCount === 1 ? shown.map(card) : groups.flatMap((list, r) => {
+        const key = song.keyWords(song.keyName(t, r));
+        const name = r ? W.t("From bar {n}: {key}", { n: song.view.regions[r].bar + 1, key }) : key;
+        const n = s.pos === "open" ? barresIn(list, s.capo) : 0;
+        const out = [h("div", { class: "shape-group" }, h("b", { "data-testid": "shape-group" }, name), n ? h("span", { class: "hint" }, n === 1 ? W.t("1 barre chord") : W.t("{n} barre chords", { n })) : null), ...list.map(card)];
+        const step = r ? (song.regionKey(r).pc - song.regionKey(r - 1).pc + 12) % 12 : 0;
+        // A lift of a semitone or a tone: the same hand, slid up (no capo moves mid-song).
+        if (step === 1 || step === 2) {
+          out.push(h("p", { class: "hint shape-hands", "data-testid": "shape-hands" },
+            step === 1 ? W.t("A semitone up: the same shapes one fret higher, as barre chords.") : W.t("A whole tone up: the same shapes two frets higher, as barre chords.")));
+        }
+        return out;
       });
       // One line: the capo the page chooses when it transposes (theory.suggest_capo: chords weighted
       // by how long they last, a high capo only when clearly easier), with the barre chords it saves,
@@ -365,7 +384,33 @@
       return said.join(" ");
     }
 
+    // Where the song moves key, said to the singer before a key is chosen (spec 013): one line per change.
+    function keyMoves(s) {
+      return song.keyChanges.map((k) => {
+        const from = song.regionKey(k.region - 1);
+        const to = song.regionKey(k.region);
+        const step = (to.pc - from.pc + 12) % 12;
+        const key = song.keyWords(song.keyName(s.transpose, k.region));
+        const n = k.bar + 1;
+        const size = (d) => (d === 1 ? W.t("a semitone") : d === 2 ? W.t("a whole tone") : W.t("{n} semitones", { n: d }));
+        const text = step === 0
+          ? W.t("Moves to {key} at bar {n}.", { key, n })
+          : step === 6
+            ? W.t("{interval} away at bar {n}: {key}.", { interval: size(6), n, key })
+            : step < 6
+              ? W.t("Up {interval} at bar {n}: {key}.", { interval: size(step), n, key })
+              : W.t("Down {interval} at bar {n}: {key}.", { interval: size(12 - step), n, key });
+        return h("p", { class: "desk-note voice-moves", "data-testid": "voice-key-change" }, text.charAt(0).toUpperCase() + text.slice(1));
+      });
+    }
+
     function voice(s) {
+      const moves = keyMoves(s);
+      const body = voiceBody(s);
+      return moves.length ? [moves, body] : body;
+    }
+
+    function voiceBody(s) {
       if (!parts) return note(W.t("No vocal track was separated for this song: run woodshed with stems to get this part."));
       const vocal = parts.vocal;
       if (!vocal) return note(W.t("No singing was detected on the isolated vocal track, so there is no range to match."));
@@ -485,8 +530,23 @@
         if (now > (parseFloat(desk.style.minHeight) || 0)) desk.style.minHeight = now + "px";
       }).observe($("desk"));
     }
+    // The key of the bar playing beside the panel's title, when it is not the key the song starts in (spec 013).
+    let badgeOf = "";
+    function renderKeyNow(s) {
+      const r = song.regionCount > 1 ? song.regionOf(curBar(s)) : 0;
+      const shown = r + "|" + s.transpose + "|" + W.lang();
+      if (shown === badgeOf) return;
+      badgeOf = shown;
+      const badge = $("keyNow");
+      badge.hidden = r === 0;
+      badge.textContent = r ? W.t("now in {key}", { key: song.keyWords(song.keyName(s.transpose, r)) }) : "";
+    }
+    store.on((s) => renderKeyNow(s));
+
     function render(s) {
       $("deskTitle").textContent = TITLES()[s.inst];
+      badgeOf = "";
+      renderKeyNow(s);
       renderPart(s);
       $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
       const body = { guitar, bass, piano: keys, drums, voice }[s.inst](s);

@@ -59,7 +59,7 @@
     <aside class="col desk-col">
       <section class="panel">
         <div class="desk-head">
-          <div class="label" id="deskTitle"></div>
+          <div class="label"><span id="deskTitle"></span><span class="key-now" id="keyNow" data-testid="key-now" hidden></span></div>
           <div class="keyrow">
             <span>Key</span>
             <div class="stepper" aria-label="Transpose"><button type="button" id="trDown" data-testid="transpose-down" aria-label="Transpose down">−</button><span id="trVal" data-testid="transpose"></span><button type="button" id="trUp" data-testid="transpose-up" aria-label="Transpose up">+</button></div>
@@ -132,7 +132,7 @@
   <div class="stage-mid">
     <div><div class="stage-now" id="stNow" data-testid="stage-chord"></div><div class="stage-shape" id="stShape"></div></div>
     <div class="stage-lyrics" id="stLyrics" hidden data-testid="stage-lyrics"></div>
-    <div class="stage-next"><div class="st-coming" id="stComing" data-testid="stage-coming" aria-live="polite"></div><div class="n1"><small>Next</small><span id="stNext"></span></div><div class="n2"><small>Then</small><span id="stThen"></span></div></div>
+    <div class="stage-next"><div class="st-key" id="stKey" data-testid="stage-key" aria-live="polite"></div><div class="st-coming" id="stComing" data-testid="stage-coming" aria-live="polite"></div><div class="n1"><small>Next</small><span id="stNext"></span></div><div class="n2"><small>Then</small><span id="stThen"></span></div></div>
   </div>
   <div class="stage-beats" id="stBeats"></div>
   <div class="stage-ctl" role="group" aria-label="Playback">

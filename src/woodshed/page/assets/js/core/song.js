@@ -121,8 +121,37 @@
     }
     // The song's key, or a region's (`keyName(t, regionOf(u))`).
     const keyName = (transpose, region) => tableOf(transpose, region).key;
+    // A key name in words: "D♭ major", "A minor" (in the page's language).
+    const keyWords = (name) => {
+      const minor = name.endsWith("m");
+      return W.prettyText(minor ? name.slice(0, -1) : name) + " " + (minor ? W.t("minor") : W.t("major"));
+    };
     // The changes after the first region: [{bar, region}] (empty for most songs).
     const keyChanges = regions.slice(1).map((r, i) => ({ bar: r.bar, region: i + 1 }));
+    // A region's key as the analysis wrote it ({bar, pc, mode}), for intervals between keys.
+    const regionKey = (region) => song.key_regions[region];
+    // The first key change in the next n bars after u, inside the loop when one is set (spec 013).
+    function changeAhead(u, n, loop) {
+      const last = loop ? Math.min(u + n, loop[1]) : u + n;
+      return keyChanges.find((k) => k.bar > u && k.bar <= last) || null;
+    }
+    // The chords of a region, in order, each once, as a copy spelled in that region's key.
+    function regionChords(region) {
+      const from = regions[region].bar;
+      const to = region + 1 < regions.length ? regions[region + 1].bar : bars.length;
+      const seen = new Set();
+      const out = [];
+      for (const bar of bars.slice(from, to)) {
+        for (const c of bar.chords) {
+          if (c.pc < 0 || (c.doubt && c.beats <= 1)) continue;
+          const key = c.pc + c.quality + "/" + bassOf(c);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(Object.defineProperty({ ...c }, "region", { value: region, enumerable: false }));
+        }
+      }
+      return out;
+    }
     // The capo worth suggesting (theory.suggest_capo): the analysis's, in the view, until the band types
     // chords; then counted again on the chart as it is.
     function shapeCost(pc, quality) {
@@ -197,7 +226,8 @@
 
     return {
       data, song, view, per, bars, totalBeats, beatTime, beatAt, chordAtBeat, same, upcoming,
-      noteName, chordName, roman, keyName, regionOf, markRegions, keyChanges, regionCount: regions.length, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
+      noteName, chordName, roman, keyName, regionOf, markRegions, keyChanges, regionCount: regions.length, regionKey,
+      changeAhead, regionChords, keyWords, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
       tracks: view.tracks,
       parts: song.parts,
     };

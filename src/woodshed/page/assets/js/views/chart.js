@@ -208,16 +208,21 @@
 
     // A key change (spec 012): its new key before the bar, a double bar line, and said in the bar's label.
     const changeAt = new Map(song.keyChanges.map((k) => [k.bar, k.region]));
-    const keyWords = (name) => {
-      const minor = name.endsWith("m");
-      return W.prettyText(minor ? name.slice(0, -1) : name) + " " + (minor ? W.t("minor") : W.t("major"));
-    };
+    const keyWords = song.keyWords;
     app.keyWords = keyWords;
+    // Doubtful bars within 2 bars of a change: the mark says to check by ear there (spec 013).
+    const doubtfulNear = (u) => song.bars.slice(Math.max(0, u - 2), u + 3).some((b) => b.chords.some((c) => c.doubt && !c.fixed && (c.doubt.kind || "chord") === "chord"));
     const keyMark = (u, s) =>
-      changeAt.has(u) ? h("span", { class: "key-change", "aria-hidden": "true", "data-testid": "key-change" }, W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, changeAt.get(u))) })) : null;
+      changeAt.has(u)
+        ? h("span", { class: "key-change", "aria-hidden": "true", "data-testid": "key-change" },
+            W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, changeAt.get(u))) }),
+            doubtfulNear(u) ? h("span", { class: "check" }, " · " + W.t("check by ear")) : null)
+        : null;
     const barLabel = (b, u, s) => {
       const said = W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
-      return changeAt.has(u) ? W.t("{bar}, key change: {key}", { bar: said, key: keyWords(song.keyName(s.transpose, changeAt.get(u))) }) : said;
+      if (!changeAt.has(u)) return said;
+      const changed = W.t("{bar}, key change: {key}", { bar: said, key: keyWords(song.keyName(s.transpose, changeAt.get(u))) });
+      return doubtfulNear(u) ? W.t("{bar}, check by ear around the key change", { bar: changed }) : changed;
     };
 
     // Bars no sung line holds (an intro, a solo, an ending), as bars of the grid, four a row.
@@ -468,6 +473,11 @@
       const out = [s.transpose
         ? h("span", { class: "hint key-note", "data-testid": "key-note" }, recordingNote(s, key))
         : h("span", { class: "hint" }, W.t("Real chords, concert pitch"))];
+      // Where the key moves, on a song with key changes (spec 013).
+      if (song.keyChanges.length) {
+        const moves = song.keyChanges.map((k) => W.t("{key} from bar {n}", { key: keyWords(song.keyName(s.transpose, k.region)), n: k.bar + 1 })).join(", ");
+        out.push(h("span", { class: "hint", "data-testid": "key-moves" }, moves));
+      }
       if (s.bandKey === null || !app.shareBand) return out;
       if (s.transpose !== s.bandKey) {
         out.push(h("button", { type: "button", class: "btn", "data-testid": "band-key-keep", onclick: () => app.keepBandKey() }, W.t("Keep {key} for the band", { key: key(s.transpose) })));
