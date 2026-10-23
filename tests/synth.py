@@ -16,6 +16,7 @@ import soundfile as sf
 SR = 22050
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 FLATS = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
+FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 QUALITIES = {"": (0, 4, 7), "m": (0, 3, 7), "7": (0, 4, 7, 10), "m7": (0, 3, 7, 10), "maj7": (0, 4, 7, 11)}
 
 
@@ -54,6 +55,19 @@ def _loop(seq: list[tuple[str, int]], times: int) -> tuple[tuple[str, int], ...]
     return tuple(seq * times)
 
 
+def _up(seq: list[tuple[str, int]], semitones: int) -> list[tuple[str, int]]:
+    """The same chords, a few semitones up (spelled with flats, as a lift usually is)."""
+    out = []
+    for label, beats in seq:
+        root = label[:2] if len(label) > 1 and label[1] in "#b" else label[:1]
+        pc = (NOTES.index(FLATS.get(root, root)) + semitones) % 12
+        out.append((FLAT_NAMES[pc] + label[len(root) :], beats))
+    return out
+
+
+POP = [("C", 4), ("G", 4), ("Am", 4), ("F", 4)]
+
+
 SONGS: dict[str, Spec] = {
     # Four chords, one per bar, twice.
     "pop": Spec(120, 4, _loop([("C", 4), ("G", 4), ("Am", 4), ("F", 4)], 2)),
@@ -77,8 +91,26 @@ SONGS: dict[str, Spec] = {
     "rock": Spec(130, 4, _loop([("C", 2), ("G", 2), ("Am", 2), ("F", 2)], 4)),
     # One beat of G before the first bar: an upbeat, so the chart starts with a partial bar.
     "pickup": Spec(100, 4, (("G", 1), *_loop([("C", 4), ("F", 4), ("G", 4), ("C", 4)], 2)), pickup=1),
+    # Key changes (spec 012): the last chorus lifted a semitone, a whole tone, a fourth; a lift of exactly 8 bars at
+    # the end; and two that must not change: 8 bars on the relative minor, 8 bars of a mixolydian vamp.
+    "lift": Spec(120, 4, (*_loop(POP, 4), *_loop(_up(POP, 1), 3))),
+    "lift2": Spec(120, 4, (*_loop(POP, 4), *_loop(_up(POP, 2), 3))),
+    "lift4": Spec(120, 4, (*_loop(POP, 4), *_loop(_up(POP, 5), 3))),
+    "lift8": Spec(120, 4, (*_loop(POP, 4), *_loop(_up(POP, 1), 2))),
+    "bridge": Spec(120, 4, (*_loop(POP, 4), *_loop([("Am", 4), ("Em", 4), ("F", 4), ("E", 4)], 2), *_loop(POP, 2))),
+    "mixolydian": Spec(120, 4, (*_loop(POP, 2), *_loop([("C", 4), ("Bb", 4), ("F", 4), ("C", 4)], 2), *_loop(POP, 2))),
 }
-KEYS = {"pop": "C", "ballad": "C", "waltz": "D", "funk": "Ab", "rock": "C", "pickup": "C"}
+KEYS = {
+    "pop": "C", "ballad": "C", "waltz": "D", "funk": "Ab", "rock": "C", "pickup": "C",
+    "lift": "C", "lift2": "C", "lift4": "C", "lift8": "C", "bridge": "C", "mixolydian": "C",
+}  # fmt: skip
+# The key changes each song holds: (bar, key), the first at bar 0 (spec 012).
+KEY_REGIONS = {
+    "lift": [(0, "C"), (16, "Db")],
+    "lift2": [(0, "C"), (16, "D")],
+    "lift4": [(0, "C"), (16, "F")],
+    "lift8": [(0, "C"), (16, "Db")],
+}
 
 
 def parse(label: str) -> tuple[int, tuple[int, ...]]:

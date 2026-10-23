@@ -15,7 +15,7 @@ from woodshed import __version__, audio, beats, meter, parts, stems, structure, 
 from woodshed.engine import Decoded, decode
 from woodshed.engine.decoding import MIN_CLARITY
 from woodshed.engine.features import Spectral, beat_accents, spectral, sync
-from woodshed.model import AnalysisInfo, Meta, Parts, Song, Structure
+from woodshed.model import AnalysisInfo, KeyRegion, Meta, Parts, Song, Structure
 
 Progress = Callable[[str, float], None]
 # Bumped whenever the analysis gives different results for the same file: pages built by an older
@@ -160,6 +160,7 @@ def analyze(
         vocal=None if vocals is None else parts.vocal_activity(vocals, times),
     )
     key = theory.Key(decoded.key_pc, decoded.key_mode)
+    regions = key_regions(decoded, built, beats_per_bar)
     timed = [theory.TimedChord(c.pc, c.quality, c.beats) for b in built.bars for c in b.chords if c.pc >= 0]
 
     song_parts = None
@@ -179,7 +180,7 @@ def analyze(
         capo=theory.suggest_capo(timed),
         beats=[float(t) for t in times],
         structure=built,
-        harmony=structure.harmony_summary(built, key),
+        harmony=structure.harmony_summary(built, key, lambda bar: key_at(regions, bar)),
         energy=[(float(t), float(e)) for t, e in zip(times, decoded.energy_db, strict=True)],
         parts=song_parts,
         analysis=AnalysisInfo(
@@ -193,7 +194,31 @@ def analyze(
             bpm_hint=bpm,
         ),
         meta=Meta(__version__, time.monotonic() - started),
+        key_regions=regions,
     )
+
+
+def key_regions(decoded: Decoded, built: Structure, per: int) -> list[KeyRegion]:
+    """The decoding's key regions on the chart's bars. A change found where the chords stop fitting the old key
+    can sit a few bars late after pivot chords (a lift to the fourth shares six chords): it moves to the start of
+    the part it falls in when that part starts up to 4 bars before (or 1 after), as lifts start on a part."""
+    if not built.bars or not decoded.key_regions:
+        return [KeyRegion(0, theory.Key(decoded.key_pc, decoded.key_mode))]
+    starts = sorted({s.start for s in built.sections})
+    out = [KeyRegion(0, theory.Key(decoded.key_regions[0][1], decoded.key_regions[0][2]))]
+    for beat, tonic, mode in decoded.key_regions[1:]:
+        bar = min(len(built.bars) - 1, max(0, (beat - built.first_beat) // per))
+        near = [s for s in starts if bar - 4 <= s <= bar + 1]
+        if near:
+            bar = min(near, key=lambda s: (abs(s - bar), s))
+        if bar > out[-1].bar:
+            out.append(KeyRegion(bar, theory.Key(tonic, mode)))
+    return out
+
+
+def key_at(regions: list[KeyRegion], bar: int) -> theory.Key:
+    """The key of a bar: the last region starting at or before it."""
+    return next(r.key for r in reversed(regions) if r.bar <= bar)
 
 
 def _parts(

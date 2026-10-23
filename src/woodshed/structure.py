@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -233,8 +233,11 @@ def _section_harmony(label: str, signature: LineSignature, key: theory.Key) -> S
     return SectionHarmony(label, seq, romans, theory.progression_name(seq, key))
 
 
-def harmony_summary(structure: Structure, key: theory.Key) -> HarmonySummary:
-    """Harmony per section, as roman numerals with a name when a progression is well known.
+def harmony_summary(
+    structure: Structure, key: theory.Key, key_at: Callable[[int], theory.Key] | None = None
+) -> HarmonySummary:
+    """Harmony per section, as roman numerals with a name when a progression is well known; each in the key of
+    the bar where the section is first heard (`key_at`, after a key change).
 
     Two sections that strictly alternate (A B A B, as in an eight-bar loop) are one loop and are
     summarised together; otherwise each section family gets its own line.
@@ -242,6 +245,11 @@ def harmony_summary(structure: Structure, key: theory.Key) -> HarmonySummary:
     if not structure.bars:
         return HarmonySummary([])
     occurrences = [(g.family, occ) for g in structure.groups for occ in g.occurrences]
+    first_bar = {family: min(occ) for family, occ in reversed(occurrences)}
+
+    def key_of(family: str) -> theory.Key:
+        return key_at(first_bar[family]) if key_at is not None else key
+
     lines = [tuple(structure.bars[i].signature() for i in occ) for _, occ in occurrences]
     families = [family for family, _ in occurrences]
 
@@ -257,10 +265,10 @@ def harmony_summary(structure: Structure, key: theory.Key) -> HarmonySummary:
             else:
                 i += 1
         if first is not None and covered / len(families) >= LOOP_COVERAGE:
-            return HarmonySummary([_section_harmony(f"{fa}+{fb}", lines[first] + lines[first + 1], key)])
+            return HarmonySummary([_section_harmony(f"{fa}+{fb}", lines[first] + lines[first + 1], key_of(fa))])
 
     sections = []
     for family in dict.fromkeys(families):
         family_lines = [line for line, f in zip(lines, families, strict=True) if f == family]
-        sections.append(_section_harmony(family, Counter(family_lines).most_common(1)[0][0], key))
+        sections.append(_section_harmony(family, Counter(family_lines).most_common(1)[0][0], key_of(family)))
     return HarmonySummary(sections)

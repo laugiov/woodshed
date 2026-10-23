@@ -85,6 +85,14 @@ class Section:
     end: int  # bar after the last
 
 
+@dataclass(frozen=True)
+class KeyRegion:
+    """From this bar on, the song is in this key (spec 012); the first region starts at bar 0."""
+
+    bar: int
+    key: theory.Key
+
+
 @dataclass
 class Structure:
     bars: list[Bar]
@@ -183,3 +191,5 @@ class Song:
     parts: Parts | None
     analysis: AnalysisInfo
     meta: Meta
+    # The key regions, the first at bar 0: one for most songs, more after a key change (spec 012).
+    key_regions: list[KeyRegion] = field(default_factory=list)
