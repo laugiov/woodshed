@@ -149,13 +149,16 @@ def test_on_an_ipad_the_first_tap_unlocks_every_track(browser: Browser, server: 
     assert problems == []
 
 
-def test_a_failure_that_is_not_a_refusal_still_switches(browser: Browser, server: app.AppServer) -> None:
+def test_a_failure_that_is_not_a_refusal_keeps_the_old_track_and_says_it(
+    browser: Browser, server: app.AppServer
+) -> None:
     problems: list[str] = []
     page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE, ipad=False)
     playing(page)
     page.evaluate("__odd.add('solo-bass')")
-    assert page.evaluate("Woodshed.app.setTrack('solo-bass')") is True  # not taken for a refused start
-    expect(page.get_by_test_id("toast")).not_to_contain_text("Tap the track again")
+    assert page.evaluate("Woodshed.app.setTrack('solo-bass')") is False
+    expect(page.get_by_test_id("toast")).not_to_contain_text("Tap the track again")  # not a refused start
+    assert page.evaluate("Woodshed.app.transport.track") == "mix" and not paused(page, "mix")  # no silence
     problems.clear()  # the error said by the page is the point here
 
 

@@ -62,4 +62,7 @@
     const sec = total - m * 60;
     return m + ":" + (sec < 10 ? "0" : "") + (tenths ? sec.toFixed(1) : String(sec));
   };
+
+  // An iPhone or an iPad: iPadOS Safari says "Macintosh", only its touch points tell it apart.
+  W.iOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 })();

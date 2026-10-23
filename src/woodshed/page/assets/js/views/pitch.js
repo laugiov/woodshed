@@ -22,6 +22,7 @@
     let poll = 0;
     let settle = 0;
     let tapAsked = false; // a rendered file waits for a tap to start (iOS)
+    const tapWaiting = new Set(); // the tracks whose rendered file waits for it
 
     const keyOf = (n) => (n > 0 ? "up" + n : "down" + -n);
     const pitched = (id) => !!originals[id] && id !== "solo-drums"; // drums: nothing to transpose
@@ -51,7 +52,7 @@
       const key = keyOf(s.transpose);
       const st = stateOf(key, s.track);
       if (st === "ready" && transport.fileOf(s.track) === rendered(key, s.track)) return { state: "on" };
-      if (st === "ready" && tapAsked) return { state: "tap" }; // rendered, waiting for a tap to start (iOS)
+      if (st === "ready" && tapWaiting.has(s.track)) return { state: "tap" }; // rendered, waiting for a tap to start (iOS)
       if (st === "failed") {
         const why = refused.get(key + "|" + s.track) || (lib && lib.failed[key] && lib.failed[key][s.track]) || "the browser could not play it";
         return { state: "failed", why };
@@ -124,7 +125,7 @@
         if (transport.fileOf(id) === file) continue;
         const wantedNow = () => store.get().transpose === s.transpose; // a key changed meanwhile: drop it
         transport.setFile(id, file, wantedNow).then((ok) => {
-          if (ok === "refused") return waitForTap(); // iOS: the rendered file starts after the next tap
+          if (ok === "refused") return waitForTap(id); // iOS: the rendered file starts after the next tap
           if (!ok && file !== originals[id]) failed(id, file);
           publish();
         });
@@ -133,7 +134,8 @@
     }
 
     // The browser would not start the rendered file without a tap (iOS): asked once, swapped on the next tap.
-    function waitForTap() {
+    function waitForTap(id) {
+      tapWaiting.add(id);
       if (tapAsked) return publish();
       tapAsked = true;
       publish();
@@ -141,6 +143,7 @@
       const again = () => {
         if (navigator.userActivation && !navigator.userActivation.isActive) return; // not a tap: the next one
         tapAsked = false;
+        tapWaiting.clear();
         for (const type of ["touchend", "click", "keydown"]) document.removeEventListener(type, again, true);
         swap();
       };

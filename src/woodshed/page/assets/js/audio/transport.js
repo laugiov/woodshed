@@ -133,21 +133,19 @@
       onTime && onTime(active().currentTime);
     }
 
-    // Starts `to` in place of `from` when `from` plays. A start the browser refuses (iOS starts a sound
-    // only from a tap) leaves `from` playing: false, and nothing changed. Any other failure is said, and
-    // the switch goes ahead as before.
+    // Starts `to` in place of `from` when `from` plays: "ok", or why not, and then `from` plays on:
+    // "refused" (iOS starts a sound only from a tap), "failed" (any other error, said by onError).
     async function takeOver(from, to) {
-      if (from.paused) return true;
+      if (from.paused) return "ok";
       try {
         await to.play();
+        return "ok";
       } catch (err) {
-        if (err && err.name === "NotAllowedError") {
-          to.pause();
-          return false;
-        }
+        to.pause();
+        if (err && err.name === "NotAllowedError") return "refused";
         onError && onError(err);
+        return "failed";
       }
-      return true;
     }
 
     // Switch to another track at the same position. The new track is loaded and positioned first,
@@ -169,9 +167,10 @@
         }
         to.currentTime = from.currentTime; // the old track kept playing while the new one loaded
         const wasPlaying = !from.paused;
-        if (!(await takeOver(from, to))) {
+        const took = await takeOver(from, to);
+        if (took !== "ok") {
           to.preload = "none";
-          return "refused";
+          return took === "refused" ? "refused" : false;
         }
         current = id;
         if (wasPlaying) watch();
@@ -205,13 +204,12 @@
         if (!still()) return true; // asked for a key no longer wanted: the old file plays on
         to.currentTime = from.currentTime;
         const wasPlaying = !from.paused;
-        if (!(await takeOver(from, to))) {
-          if (!still()) {
-            to.remove(); // a key no longer wanted: not kept
-            delete els[id + "|" + file];
-          }
-          return "refused"; // the old file plays on; asked again after a tap
+        const took = await takeOver(from, to);
+        if (took === "failed" || !still()) {
+          to.remove(); // a file that will not play, or a key no longer wanted: not kept
+          delete els[id + "|" + file];
         }
+        if (took !== "ok") return took === "refused" ? "refused" : false; // the old file plays on
         files[id] = file;
         if (wasPlaying) watch();
         from.pause();

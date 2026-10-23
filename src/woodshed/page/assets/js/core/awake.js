@@ -12,8 +12,8 @@
     let lock = null; // the WakeLockSentinel held
     let asking = null; // a request in flight
     let video = null;
-    // iOS counts a touchend or a click as a tap, not a pointerdown: all of them, the first one wins.
-    const GESTURES = ["pointerdown", "touchend", "click", "keydown"];
+    // iOS counts a touchend or a click as a tap, not a pointerdown (which would come first and use the try).
+    const GESTURES = W.iOS() ? ["touchend", "click", "keydown"] : ["pointerdown", "keydown"];
     let retry = null; // the next touch or key tries the video again (a play refused without a gesture)
 
     const holding = () => !!lock || !!(video && !video.paused);

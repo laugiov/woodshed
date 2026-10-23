@@ -11,9 +11,6 @@
   const STEM_OF = { guitar: "guitar", piano: "keys", bass: "bass", drums: "drums", voice: "vocals" };
   const SHARED_OF = { ...STEM_OF, guitar: "other", piano: "other" };
 
-  // An iPhone or an iPad: iPadOS Safari says "Macintosh", only its touch points tell it apart.
-  W.iOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-
   // 32-bit FNV-1a, enough to tell two analyses apart in a storage key.
   function fnv1a(text) {
     let hash = 0x811c9dc5;
