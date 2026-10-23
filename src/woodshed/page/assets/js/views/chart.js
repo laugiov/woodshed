@@ -565,7 +565,10 @@
         // One row per section; the chips are direct children of .prog, as the stylesheet expects.
         if (n > 0) prog.append(h("div", { style: { flexBasis: "100%", height: "0" } }));
         if (sections.length > 1) prog.append(h("b", { class: "prog-sec" }, labels[n]));
-        sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s)), h("small", { translate: "no" }, sec.romans[i]))));
+        // Spelled in the key of the bar where the part is first heard, as its numerals are (spec 012).
+        const g = app.analysisGroups.find((gr) => gr.family === sec.label.split("+")[0]);
+        const first = g ? g.occurrences[0][0] : 0;
+        sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s, first)), h("small", { translate: "no" }, sec.romans[i]))));
         if (!sec.name) return;
         const named = W.t(sec.name); // a well-known progression's name (theory.PROGRESSIONS), in core/i18n-fr.js
         const said = named.charAt(0).toUpperCase() + named.slice(1) + ".";

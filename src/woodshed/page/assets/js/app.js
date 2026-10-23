@@ -55,7 +55,8 @@
     app.store = store;
 
     // Names: the chord as heard, moved by the transposition and, for capo shapes, down by the capo.
-    app.nameFor = (c, shift, s) => song.chordName(c, s.transpose - (shift || 0));
+    // `u`: the bar a chord made on the fly belongs to (its key region, spec 012).
+    app.nameFor = (c, shift, s, u) => song.chordName(c, s.transpose - (shift || 0), u === undefined ? undefined : song.regionOf(u));
     app.showShapes = (s) => s.inst === "guitar" && s.pos === "open" && s.capo > 0 && s.view === "shapes";
     app.nowHint = function nowHint(c, s) {
       if (c.pc < 0) return W.t("no chord");
@@ -513,7 +514,7 @@
       const back = document.querySelector('.doubt[data-ref^="' + u + '_"]:not(.fixed)');
       if (back && (document.activeElement === document.body || !document.activeElement)) back.focus({ preventScroll: true });
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
-      app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get())) : "", where }));
+      app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get(), Math.max(0, u))) : "", where }));
     };
     app.correct = function correct(u, k, alt) {
       const c = song.bars[u].chords[k];
@@ -525,7 +526,7 @@
       store.set({ corrections: store.get().corrections + 1 });
       const shared = app.shareFixes ? app.shareFixes(fixes) : false;
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
-      app.toast(W.t("Saved: {chord}. {where}", { chord: W.prettyText(app.nameFor(alt, 0, store.get())), where }));
+      app.toast(W.t("Saved: {chord}. {where}", { chord: W.prettyText(app.nameFor(alt, 0, store.get(), u)), where }));
     };
 
     restoreCorrections();

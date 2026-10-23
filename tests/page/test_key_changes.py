@@ -114,3 +114,31 @@ def test_a_chord_typed_after_the_lift_is_spelled_in_the_new_key(open_page: Any) 
     o.js("Woodshed.app.typeBars([19], [[4, 'F#']])")  # typed with a sharp: the key of D-flat spells it G-flat
     expect(bar(o, 19)).to_contain_text("G♭")
     expect(bar(o, 19).locator(".rn")).to_have_text("IV")
+
+
+def test_the_band_s_key_and_the_toasts_name_the_key_the_song_starts_in(open_page: Any) -> None:
+    o = open_page("lift_late", stems=False)  # C for 8 bars, then D-flat for 16: the longer one is not the start
+    expect(o.page.get_by_test_id("key-facts")).to_have_text("Key C major → D♭ major")
+    o.js("Woodshed.app.transposeTo(2)")
+    expect(o.page.get_by_test_id("toast")).to_contain_text("Transposed to D:")
+
+
+def test_six_semitones_up_the_names_stay_readable(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    o.js("Woodshed.app.transposeTo(6)")
+    expect(o.page.get_by_test_id("key-facts")).to_have_text("Key F♯ major → G major")
+    expect(bar(o, 16).get_by_test_id("key-change")).to_have_text("→ G major")
+
+
+def test_a_sung_part_holding_the_change_exports_as_python_does(open_page: Any) -> None:
+    import json
+
+    from tests.page.test_page import download
+    from woodshed import exports
+
+    o = open_page("lift", variant="lyrics-lift")
+    data = o.js("Woodshed.current.song")
+    words = json.loads((o.folder / "lyrics.json").read_text())
+    text = download(o, "export-chordpro")
+    assert text == exports.chordpro(data, words)
+    assert "{key: Db}" in text or "{comment: key change to Db at bar 17}" in text

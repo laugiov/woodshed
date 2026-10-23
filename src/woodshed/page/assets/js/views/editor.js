@@ -57,7 +57,8 @@
     const T = () => store.get().transpose;
     const concert = (label) => W.chords.parse(moved(label, -T()));
     // A label typed in the key on screen, named as the chart names it (the key's sharps or flats).
-    const shown = (label) => W.prettyText(app.nameFor(concert(label), 0, store.get()));
+    let atBar = 0; // the bar open in the editor: a typed label is spelled in its key (spec 012)
+    const shown = (label) => W.prettyText(app.nameFor(concert(label), 0, store.get(), atBar));
     const ascii = (text) => text.replace(/♯/g, "#").replace(/♭/g, "b");
 
     // "D/F♯ for 2 beats, F♯ in the bass, then G for 2".
@@ -189,6 +190,7 @@
     window.addEventListener("resize", follow);
 
     function openBar(u, from) {
+      atBar = u;
       if (u < 0 || u >= song.bars.length) return close(true);
       open = u;
       opener = from || chart.barEl(u);
@@ -231,7 +233,7 @@
           chips,
           parsed.chords.filter(([, l]) => !seen.has(l) && seen.add(l) && l !== "N.C.").map(([, l]) =>
             h("button", { type: "button", class: "chip", "data-testid": "bar-hear-chord", "aria-label": W.t("Hear {chord} in this bar", { chord: shown(l) }), onclick: () => app.audition(u, concert(l)) },
-              W.chordNode(app.nameFor(concert(l), 0, store.get())), h("i", { "aria-hidden": "true" }, "▶"))),
+              W.chordNode(app.nameFor(concert(l), 0, store.get(), u)), h("i", { "aria-hidden": "true" }, "▶"))),
         );
       }
       field.addEventListener("input", update);
@@ -294,7 +296,7 @@
         doubt
           ? h("div", { class: "cands", "data-testid": "bar-candidates" }, h("span", null, W.t("Heard here")),
               doubt.chord.doubt.alternatives.map((a) => h("button", { type: "button", class: "cand", "data-testid": "bar-candidate", onclick: () => fill(a) },
-                W.chordNode(app.nameFor(a, 0, store.get())), " ", h("small", null, W.t("{n}%", { n: a.share })))))
+                W.chordNode(app.nameFor(a, 0, store.get(), u)), " ", h("small", null, W.t("{n}%", { n: a.share })))))
           : null,
         also ? h("label", { class: "also" }, also, W.t("Also {parts}, the same bar", { parts: listOf([...new Set(others.map((v) => (partOf(v) === partOf(u) ? W.t("{part}, played again", { part: partOf(v) }) : partOf(v))))]) })) : null,
         startPart(u),

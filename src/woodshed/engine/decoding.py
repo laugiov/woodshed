@@ -159,17 +159,6 @@ def estimate_key(
     return (major, "maj", True) if r_major >= r_minor else (minor, "min", True)
 
 
-def _mode_of(signature: int, treble: Floats, bass: Floats, beats: Bools) -> tuple[int, Mode]:
-    """Major or its relative minor, by the Krumhansl profiles of these beats' chroma."""
-    minor = (signature + 9) % 12
-    prof = (unit(treble[:, beats]) + unit(bass[:, beats])).sum(axis=1)
-    if not beats.any() or float(np.std(prof)) == 0.0:
-        return signature, "maj"
-    r_major = float(np.corrcoef(prof, np.roll(KK_MAJOR, signature))[0, 1])
-    r_minor = float(np.corrcoef(prof, np.roll(KK_MINOR, minor))[0, 1])
-    return (signature, "maj") if r_major >= r_minor else (minor, "min")
-
-
 def key_signatures(
     states: Ints,
     roots: Ints,
@@ -193,10 +182,16 @@ def key_signatures(
     if n_bars < 2 * cfg.key_min_bars:
         return [(0, -1)]
     chords = [(int(roots[s]), quals[s]) if s >= 0 else None for s in states]
+    in_bar: list[list[tuple[int, str] | None]] = [[] for _ in range(n_bars)]  # each bar's beats, once
+    voiced_in_bar: list[list[tuple[int, str]]] = [[] for _ in range(n_bars)]
+    for i, c in enumerate(chords):
+        in_bar[bar_of[i]].append(c)
+        if c is not None and voiced[i]:
+            voiced_in_bar[bar_of[i]].append(c)
     diatonic = [key_chords(sig, "maj", strict=True) for sig in range(12)]
     fit = np.zeros((12, n_bars))
     for b in range(n_bars):
-        picked = [c for c, i in zip(chords, range(n), strict=True) if bar_of[i] == b and c is not None and voiced[i]]
+        picked = voiced_in_bar[b]
         for sig in range(12):
             fit[sig, b] = np.mean([c in diatonic[sig] for c in picked]) if picked else 0.0
     prof = np.zeros((12, n_bars))
@@ -245,11 +240,7 @@ def key_signatures(
         return (sig, "") if mode == "maj" else ((sig + 9) % 12, "m")
 
     def downbeat_chords(start: int, end: int) -> list[tuple[int, str] | None]:
-        out = []
-        for b in range(start, end):
-            first = next((c for c, i in zip(chords, range(n), strict=True) if bar_of[i] == b and c is not None), None)
-            out.append(first)
-        return out
+        return [next((c for c in in_bar[b] if c is not None), None) for b in range(start, end)]
 
     final = kept[:1]
     for k in range(1, len(kept)):
@@ -261,7 +252,7 @@ def key_signatures(
         new_tonic, old_tonic = firsts.count(tonic_chord(sig)), firsts.count(tonic_chord(old))
         # Tonic evidence: the new tonic starts as many bars as the old one, or the old tonic chord is all but gone
         # (a song whose phrases start on IV or iv). A mixolydian vamp keeps its tonic everywhere: no change.
-        inside = [c for c, i in zip(chords, range(n), strict=True) if start <= bar_of[i] < end and c is not None]
+        inside = [c for b in range(start, end) for c in in_bar[b] if c is not None]
         old_share = inside.count(tonic_chord(old)) / len(inside) if inside else 1.0
         tonic = (new_tonic > 0 and new_tonic >= old_tonic) or old_share <= cfg.key_old_tonic_share
         clear = gain >= cfg.key_change_margin and tonic
@@ -272,7 +263,8 @@ def key_signatures(
                 b -= 1
             while b < end - 1 and fit[sig, b] <= fit[old, b]:
                 b += 1
-            final.append((b, sig))
+            if end - b >= cfg.key_min_bars:  # still a change of 8 bars once its first bar is found
+                final.append((b, sig))
     return final
 
 

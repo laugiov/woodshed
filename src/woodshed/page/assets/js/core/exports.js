@@ -121,7 +121,14 @@
       const bars = [];
       for (let u = sec.start; u < sec.end; u++) bars.push(u);
       if (sung.has(k)) {
-        lines.push(...announce(song.regionOf(sec.end - 1))); // a change inside sung lines is said before the part
+        // The part's key before it; a change inside its lines said there too, with its bar.
+        lines.push(...announce(song.regionOf(sec.start)));
+        for (const u of bars.slice(1)) {
+          if (song.regionOf(u) !== song.regionOf(u - 1)) {
+            said = song.regionOf(u);
+            lines.push("{comment: key change to " + song.keyName(transpose, said) + " at bar " + (u + 1) + "}");
+          }
+        }
         const env = ENVIRONMENT[sec.role] || "verse";
         lines.push("{start_of_" + env + ': label="' + quote(sec.name) + '"}', ...sung.get(k), "{end_of_" + env + "}");
       } else {

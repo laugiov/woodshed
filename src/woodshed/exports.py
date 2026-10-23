@@ -324,8 +324,12 @@ def chordpro(song: Song, words: dict[str, Any] | None = None, transpose: int = 0
     for k, sec in enumerate(sections):
         lines.append("")
         bars = list(range(sec["start"], sec["end"]))
-        if k in sung:  # a change inside sung lines is said before the part
-            lines += announce(keys.region(sec["end"] - 1))
+        if k in sung:  # the part's key before it; a change inside its lines said there too, with its bar
+            lines += announce(keys.region(sec["start"]))
+            for u in bars[1:]:
+                if keys.region(u) != keys.region(u - 1):
+                    said[0] = keys.region(u)
+                    lines.append(f"{{comment: key change to {key_name(keys.at(u))} at bar {u + 1}}}")
             env = ENVIRONMENT.get(sec["role"], "verse")
             lines.append(f'{{start_of_{env}: label="' + directive_text(sec["name"]).replace('"', "'") + '"}')
             lines += sung[k]

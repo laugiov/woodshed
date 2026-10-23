@@ -95,12 +95,13 @@
     }
     markRegions();
     const regionOfChord = (c) => (c && typeof c.region === "number" ? c.region : null);
-    const tableOf = (transpose, region) =>
-      region === null || region === undefined ? t(transpose) : regions[region].transpositions[((transpose % 12) + 12) % 12];
+    // Without a region, the first one: the key the song starts in (the band's key and the toasts name it).
+    const tableOf = (transpose, region) => regions[region === null || region === undefined ? 0 : region].transpositions[((transpose % 12) + 12) % 12];
     // A pitch class from the recording, named in the transposed key (of a region, when given).
     const noteName = (pc, transpose, region) => tableOf(transpose, region).roots[((pc % 12) + 12) % 12];
-    const chordName = (c, transpose) => {
-      const r = regionOfChord(c);
+    // A chord of the chart knows its region; one made on the fly (a candidate, a typed label) is given it.
+    const chordName = (c, transpose, region) => {
+      const r = region === undefined || region === null ? regionOfChord(c) : region;
       return c.pc < 0 ? "N.C." : noteName(c.pc, transpose, r) + c.quality + (bassOf(c) === null ? "" : "/" + noteName(c.bass, transpose, r));
     };
     // The analysis's four qualities have their numerals in the view; a typed one takes the root's numeral
@@ -108,7 +109,7 @@
     function roman(c) {
       if (c.pc < 0) return "";
       const r = regionOfChord(c);
-      const romans = r === null ? view.romans : regions[r].romans;
+      const romans = regions[r === null ? 0 : r].romans;
       let out;
       if (romans[c.quality]) out = romans[c.quality][c.pc];
       else {
