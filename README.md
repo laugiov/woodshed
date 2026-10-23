@@ -194,9 +194,9 @@ is picked.
 
 **Share a song**: zip its `.woodshed` folder and send it. Unzipped, `index.html` opens in any
 browser, offline, with every track, the words and the parts. **After an update** of woodshed, the
-library gives every page the new interface when it starts, without analysing anything again, unless the
-analysis itself improved: then each page is analysed once more from its separated tracks, a minute or two per
-song (0.4.0 does it once, for key changes; the band's typed bars stay).
+library gives every page the new interface when it starts, without analysing anything again. A page made
+before 0.4.0 reads in one key; to have its key changes found, add the song again (a minute or two, from its
+separated tracks; the band's typed bars stay).
 
 ---
 
