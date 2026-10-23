@@ -209,10 +209,12 @@
       box.hidden = !words;
       if (!words) return;
       const { rows } = app.words.rows();
-      const at = app.lineNow(s);
-      const k = at.now;
-      // Between lines (a solo), no line is lit: the next ones wait, with the part they start.
-      const from = k >= 0 ? k : at.next;
+      // Playing between lines (a solo), no line is lit: the next ones wait, with the part they start. Stopped,
+      // the line to sing next comes first, "Next:" before it until the cursor is inside it.
+      const at = s.playing ? app.lineNow(s) : null;
+      const stopped = at ? null : app.lineStopped(rows, s);
+      const from = at ? (at.now >= 0 ? at.now : at.next) : stopped.first;
+      const k = at ? at.now : stopped.inside ? from : -1;
       const shown = rows.slice(from, from + 3);
       const out = keyLine ? [h("div", { class: "st-next-part st-key-words", "data-testid": "stage-key-words" }, keyLine)] : [];
       shown.forEach((r, i) => {
@@ -220,7 +222,9 @@
         const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
         if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec)));
         const now = i === 0 && k >= 0;
-        out.push(h("div", { class: "st-line" + (now ? " now" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
+        const ready = i === 0 && stopped && !now;
+        if (ready) out.push(h("div", { class: "st-next-label", "data-testid": "stage-next-label" }, W.t("Next:")));
+        out.push(h("div", { class: "st-line" + (now ? " now" : ready ? " ready" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
         if (now) {
           const span = Math.max(0.1, (rows[k + 1] ? rows[k + 1].line.start : r.line.end) - r.line.start);
           const done = Math.max(0, Math.min(1, (s.time - r.line.start) / span));

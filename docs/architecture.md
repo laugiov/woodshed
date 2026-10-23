@@ -404,6 +404,8 @@ The load order is fixed in `template.html`, and a test checks that every script 
 
 While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the bar or the sung line playing stays in the upper part of the screen, above the dock. A scroll by hand (wheel, touch, scroll keys, the scrollbar) wins: following waits while the musician reads elsewhere, a "Back to the song" button shows, and following comes back by itself when the music reaches what they are reading. The page's own keys (a pedal's Page Down) do not count as a scroll. It does not move a page whose chart is off screen (a phone reading the instrument panel under it), nor in stage mode.
 
+On stage, the words (`renderLyrics` in `views/header.js`) start at the top of the stage: the sung line first, with its progress bar, then the next lines, clipped at the bottom. Playing, the line shown first is `app.lineNow` (none lit between lines). Stopped, it is `app.lineStopped`: the first line not over yet, leaving out a line of a part before the cursor's (after Part ⏭ the part's own first line comes first, a pickup included); lit when the cursor is inside it, else marked "Next:" (`.st-line.ready`, the sung size, not lit).
+
 ### Audio playback and time-stretch
 
 `audio/transport.js` plays the real recording, not a synthesis.

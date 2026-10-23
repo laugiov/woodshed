@@ -146,6 +146,15 @@
       if (ln && part && s.time > ln.end && song.barAt(ln.start + 0.15) < part.start) return { now: -1, next: at.next };
       return at;
     };
+    // Stopped: the line to sing from here, the first not over yet (rows: app.words.rows()), lit only when
+    // the cursor is inside it. A line of a part before the cursor's is left out: after Part ⏭ the part's own
+    // first line comes first, a pickup sung just before the part included. first: rows.length when none.
+    app.lineStopped = (rows, s) => {
+      const part = app.sectionOf(Math.floor(s.beat / song.per));
+      let first = rows.findIndex((r) => r.line.end > s.time && !(part && r.firstBar < part.start));
+      if (first < 0) first = rows.length;
+      return { first, inside: first < rows.length && rows[first].line.start <= s.time };
+    };
 
     // The song's parts: the band's own names and cuts (views/editor.js), else as the words named them
     // when placed, else as the analysis did.

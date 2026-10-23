@@ -531,6 +531,7 @@
     stopped: "à l'arrêt",
     "Stop following": "Ne plus suivre",
     "Next: {song}": "Ensuite : {song}",
+    "Next:": "Ensuite :",
     "N, or → at the end of the song": "N, ou → à la fin du morceau",
     "Next song: {song}": "Morceau suivant : {song}",
 

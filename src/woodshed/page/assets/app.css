@@ -683,11 +683,15 @@ body.following #playBtn { opacity: 0.45; }
 #stage.st-lyrics .stage-next { gap: 8px; }
 #stage.st-voice .stage-mid { grid-template-columns: minmax(0, 1fr); }
 #stage.st-voice .stage-mid > :not(.stage-lyrics) { display: none; }
-.stage-lyrics { padding-right: 32px; min-width: 0; overflow: hidden; }
+/* The words from the top left of the stage, whatever the length of the lines shown: the sung line first,
+   the next ones clipped at the bottom. */
+.stage-lyrics { padding: 10px 32px 0 0; min-width: 0; overflow: hidden; align-self: start; justify-self: stretch; }
 .stage-lyrics .lw { cursor: default; }
 .stage-lyrics .nb { display: inline; margin: 0; }  /* no bar lines on the stand: the words flow */
 .stage-lyrics .st-line .lwords { font-size: clamp(24px, min(3.6vw, 6vh), 54px); }
 .stage-lyrics .st-line.later { opacity: 0.8; }
+.stage-lyrics .st-line.ready { color: var(--ink); opacity: 1; } /* stopped: the line to sing next, its full size, not lit */
+.st-next-label { font-family: var(--font-body); font-weight: 700; font-size: clamp(13px, min(1.8vw, 2.6vh), 20px); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .stage-lyrics .st-line.later .lwords { font-size: clamp(20px, min(2.9vw, 4.8vh), 43px); }
 #stage.st-voice .stage-lyrics .st-line .lwords { font-size: clamp(26px, min(5vw, 6.5vh), 72px); }
 #stage.st-voice .stage-lyrics .lw .lc { font-size: 0.5em; min-height: 1.2em; color: var(--muted); }
@@ -751,8 +755,9 @@ body.following #playBtn { opacity: 0.45; }
 .form-chip.r-chorus:not(.on) { border-color: var(--accent); }
 .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 2px 2px; border-bottom: 2px solid var(--ink); margin-top: 6px; }
 .sec-block { display: grid; gap: inherit; }
-/* A singer on the words view: the words first, not a big chord, up to a tablet held upright. */
-@media (max-width: 1100px) { body[data-inst="voice"][data-sheet="lyrics"] .now { display: none; } }
+/* A singer on the words view: the words first, not a big chord, up to a tablet held upright. The chart's
+   panel only: the stage's sung line is a .now too. */
+@media (max-width: 1100px) { body[data-inst="voice"][data-sheet="lyrics"] .panel > .now { display: none; } }
 .plays.band { flex-wrap: wrap; row-gap: 2px; }
 .band-hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { .band-hint { display: none; } } /* a mouse has the buttons' titles; a finger reads this */

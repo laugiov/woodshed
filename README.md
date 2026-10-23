@@ -93,10 +93,11 @@ the separation it was made with. The separated stems of a song take about 50 % m
 **For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
 words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,
 then, in the library, **Keep E♭ for the band** (the button names your key): every device opens the
-song in it. Tap a line's time to sing from there; stage mode shows the words big, your line lit, and
-the next part coming. The ChordPro export is in the key the page shows, the band's key included, and reads as
-a sheet: a line is never cut by a chord row, N.C. is never a chord to transpose, repeated rows are folded, and a
-key change is said where it happens.
+song in it. Tap a line's time to sing from there; stage mode shows the words big, your line lit at the
+top, and the next part coming. Stopped, the line you sing next comes first, marked **Next:**. The
+ChordPro export is in the key the page shows, the band's key included, and reads as a sheet: a line is
+never cut by a chord row, N.C. is never a chord to transpose, repeated rows are folded, and a key change
+is said where it happens.
 
 **The recording in your key.** Served by `woodshed app`, a transposed page offers **Play the
 recording 2 semitones up** (on by default for the voice, and for everyone in the band's saved key).
