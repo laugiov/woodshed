@@ -44,3 +44,12 @@ def test_woodshed_tools_wins_and_a_tilde_is_the_home(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("WOODSHED_TOOLS", "~/my tools")
     for system in ("darwin", "win32", "linux"):
         assert paths.tools_dir(system) == tmp_path / "my tools"
+
+
+def test_the_pinned_rubber_band_files_are_the_installers_ones() -> None:
+    root = Path(__file__).resolve().parents[1] / "scripts"
+    sh, ps1 = (root / "install.sh").read_text(encoding="utf-8"), (root / "install.ps1").read_text(encoding="utf-8")
+    pinned = paths.RUBBER_BAND_SHA256
+    assert f'rb_bin_sum="${{3:-{pinned["rubberband"]}}}"' in sh
+    assert f'[string]$ExeSha256 = "{pinned["rubberband.exe"]}"' in ps1
+    assert f'[string]$DllSha256 = "{pinned["sndfile.dll"]}"' in ps1

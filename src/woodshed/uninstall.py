@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import os
 import re
 import shutil
@@ -26,6 +27,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from woodshed import paths
 from woodshed.cache import cache_dir
 from woodshed.paths import absolute_env, data_home
 from woodshed.paths import tools_dir as tools_dir  # shared with pitch and the installers
@@ -39,9 +41,12 @@ QUESTION = (
     "Remove woodshed from this computer? Your songs stay where they are.\n"
     "Type y then Enter to remove it (Enter alone keeps everything): [y/N] "
 )
-# What woodshed puts in its tools folder: only these names are removed from it. Rubber Band's licence files only
-# beside its program (a folder of the user's may have a COPYING of its own).
-TOOL_FILES = ("uninstall-woodshed.sh", WINDOWS_SCRIPT, "rubberband", "rubberband.exe", "sndfile.dll")
+# What woodshed puts in its tools folder, the only files removed from it, each recognised by its content: the
+# Rubber Band files by their pinned sha256 (paths.RUBBER_BAND_SHA256), its licence only beside such a program,
+# the uninstall scripts by the line the installers write in them. A file of these names holding anything else
+# is the user's: kept, and listed.
+UNINSTALL_SCRIPTS = ("uninstall-woodshed.sh", WINDOWS_SCRIPT)
+SCRIPT_MARK = b"Made by the woodshed installer"
 TOOL_LICENCES = ("COPYING", "COPYING.txt")
 # uv keeps every download: `uv cache prune` frees nothing once woodshed is gone (seen on all three systems), so
 # woodshed's own entry and its heavy packages leave the cache (downloaded again if another program needs them).
@@ -93,14 +98,49 @@ def _remove_link(path: Path) -> None:
         os.rmdir(path)  # a junction or a folder link on Windows: rmdir removes the link, not the folder
 
 
-def _tool_files(folder: Path) -> list[Path]:
-    """The files woodshed put in its tools folder, the only ones taken from it."""
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _plain_file(path: Path) -> bool:
+    return path.is_file() and not _is_link(path)
+
+
+def _tool_files(folder: Path) -> tuple[list[Path], list[Path]]:
+    """The files woodshed put in its tools folder (the only ones taken from it), and the files there that only
+    bear one of their names (kept)."""
+    ours: list[Path] = []
+    foreign: list[Path] = []
     if not folder.is_dir():
-        return []
-    names = [n for n in TOOL_FILES if os.path.lexists(folder / n)]
-    if any(n.startswith("rubberband") for n in names):
-        names += [n for n in TOOL_LICENCES if os.path.lexists(folder / n)]
-    return [folder / n for n in names if _is_link(folder / n) or not (folder / n).is_dir()]
+        return ours, foreign
+    program = False
+    for name, digest in paths.RUBBER_BAND_SHA256.items():
+        f = folder / name
+        if not os.path.lexists(f):
+            continue
+        try:
+            same = _plain_file(f) and _sha256(f) == digest
+        except OSError:
+            same = False
+        (ours if same else foreign).append(f)
+        program = program or (same and name.startswith("rubberband"))
+    for name in TOOL_LICENCES:
+        f = folder / name
+        if os.path.lexists(f):
+            (ours if program and _plain_file(f) else foreign).append(f)
+    for name in UNINSTALL_SCRIPTS:
+        f = folder / name
+        if os.path.lexists(f):
+            try:
+                mine = _plain_file(f) and SCRIPT_MARK in f.read_bytes()[:4096]
+            except OSError:
+                mine = False
+            (ours if mine else foreign).append(f)
+    return ours, foreign
 
 
 def _has(pattern: bytes) -> Callable[[bytes], bool]:
@@ -178,8 +218,21 @@ def _shortcuts(system: str) -> list[Item]:
     ]  # fmt: skip
 
 
+def _same(a: Path, b: Path) -> bool:
+    """The same folder, also through a link or another letter case (macOS, Windows)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.normcase(str(a)) == os.path.normcase(str(b))
+
+
+def _inside(inner: Path, outer: Path) -> bool:
+    """`inner` is `outer` or inside it."""
+    return any(_same(q, outer) for q in (inner, *inner.parents))
+
+
 def _overlap(a: Path, b: Path) -> bool:
-    return a == b or a in b.parents or b in a.parents
+    return _inside(a, b) or _inside(b, a)
 
 
 def _where(path: Path) -> Path:
@@ -199,7 +252,9 @@ def plan(system: str, keep_self: bool = False) -> Plan:
         Item(cache / "models", "the downloaded models"),
     ]
     keep = (WINDOWS_SCRIPT,) if keep_self and system == "win32" else ()  # the .cmd running this one
-    if going := [f.name for f in _tool_files(tools) if f.name not in keep]:
+    ours, foreign = _tool_files(tools)
+    p.foreign += foreign
+    if going := [f.name for f in ours if f.name not in keep]:
         what = []
         if any(n.startswith("rubberband") for n in going):
             what.append("Rubber Band (the recording in your key) and its licence")
@@ -214,12 +269,13 @@ def plan(system: str, keep_self: bool = False) -> Plan:
             p.items.append(item)
         else:
             p.foreign.append(item.path)
-    p.then_rmdir.append(cache)
-    if not os.environ.get("WOODSHED_CACHE") and system == "win32":
-        p.then_rmdir.append(cache.parent)  # LOCALAPPDATA\woodshed, once Cache and tools are gone
-    p.then_rmdir.append(tools)  # only if left empty (a folder of the user's keeps its files)
-    if not os.environ.get("WOODSHED_TOOLS"):
-        p.then_rmdir.append(tools.parent)
+    # Only woodshed's own folders go once empty: a folder the user named (WOODSHED_CACHE, WOODSHED_TOOLS) stays.
+    if not os.environ.get("WOODSHED_CACHE"):
+        p.then_rmdir.append(cache)
+        if system == "win32":
+            p.then_rmdir.append(cache.parent)  # LOCALAPPDATA\woodshed, once Cache and tools are gone
+    if paths.chosen_tools() is None:
+        p.then_rmdir += [tools, tools.parent]
     p.registry_key = system == "win32" and not keep_self  # the shortcut's script removes it, after woodshed
     p.kept = [
         f"your songs and their practice pages: {library} (a library kept somewhere else is not looked at, and"
@@ -233,16 +289,17 @@ def plan(system: str, keep_self: bool = False) -> Plan:
 
     home = Path.home().resolve()
     for target in [cache, tools, *(i.path for i in p.items)]:
-        where = _where(target)
-        if _overlap(where, library):
-            p.refusal = (
-                f"{where} and your songs ({library}) are inside one another: nothing was removed, to keep"
-                " the songs safe. Move one of them, or remove woodshed's files by hand."
-            )
-        elif where == home or where in home.parents or where == Path(where.anchor):
-            p.refusal = f"{where} is not woodshed's own folder: nothing was removed."
-        if p.refusal:
-            break
+        # The path as named and where it leads: a link to the home folder is the home folder.
+        for where in dict.fromkeys((_where(target), target.resolve())):
+            if _overlap(where, library):
+                p.refusal = (
+                    f"{target} and your songs ({library}) are inside one another: nothing was removed, to keep"
+                    " the songs safe. Move one of them, or remove woodshed's files by hand."
+                )
+            elif _inside(home, where) or where == Path(where.anchor):
+                p.refusal = f"{target} is not woodshed's own folder: nothing was removed."
+            if p.refusal:
+                return p
     return p
 
 
@@ -265,9 +322,9 @@ def _delete_key(key: str) -> None:
 def _remove(item: Item) -> str:
     path = item.path
     if item.tools:
-        files = [f for f in _tool_files(path) if f.name not in item.keep]
+        files = [f for f in _tool_files(path)[0] if f.name not in item.keep]
         for f in files:
-            _remove_link(f) if _is_link(f) else f.unlink()
+            f.unlink()
         return f"{item.label}: {path} ({', '.join(f.name for f in files)})"
     if _is_link(path):
         _remove_link(path)

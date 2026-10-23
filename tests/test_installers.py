@@ -435,3 +435,15 @@ def test_the_cmd_lines_in_install_ps1_are_whole_powershell_strings() -> None:
     assert len(quoted) > 20
     for line in quoted:
         assert re.fullmatch(r"'(?:[^']|'')*',?", line), line
+
+
+def test_the_uninstall_cmd_is_utf8_and_says_so_to_cmd() -> None:
+    # A user's folder name in any language: the .cmd is UTF-8, and its second line switches the console to it.
+    from woodshed import uninstall
+
+    text = PS1.read_text(encoding="utf-8")
+    block = text[text.index("$Lines = @(") :]
+    assert block.split("\n")[1:3] == ["        '@echo off',", "        'chcp 65001 >nul',"]
+    assert "[Text.UTF8Encoding]::new($false)" in text and "[Text.Encoding]::ASCII" not in text  # no BOM: cmd reads it
+    assert uninstall.SCRIPT_MARK.decode() in block  # how the uninstall knows the .cmd is woodshed's
+    assert uninstall.SCRIPT_MARK.decode() in shell_function("uninstall_script")

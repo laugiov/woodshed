@@ -6,6 +6,7 @@ probed is a free one (or one a fake woodshed answers on)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from woodshed import cli, uninstall
+from woodshed import cli, paths, uninstall
 
 APP_ID = "io.github.laugiov.woodshed"
 
@@ -79,7 +80,14 @@ def fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Home:
     monkeypatch.setattr(uninstall, "_processes", lambda: [])
     monkeypatch.setattr(uninstall, "PORT", free_port())
     monkeypatch.setattr(uninstall, "_delete_key", h.deleted_keys.append)
+    # The pinned Rubber Band files, as fill_tools writes them (the real ones are a few MB of program).
+    monkeypatch.setattr(paths, "RUBBER_BAND_SHA256", {name: TOOL_SHA for name in paths.RUBBER_BAND_SHA256})
     return h
+
+
+TOOL = b"tool"
+TOOL_SHA = hashlib.sha256(TOOL).hexdigest()
+SCRIPT = b"#!/bin/sh\n# Made by the woodshed installer: removes woodshed from this computer\n"
 
 
 def fill_cache(h: Home) -> None:
@@ -89,10 +97,17 @@ def fill_cache(h: Home) -> None:
     (h.cache / "models" / "htdemucs_6s.th").write_bytes(b"m")
 
 
-def fill_tools(h: Home, *names: str) -> None:
-    h.tools.mkdir(parents=True, exist_ok=True)
+def fill_tools(h: Home, *names: str, folder: Path | None = None) -> None:
+    """Woodshed's own files: the Rubber Band ones as pinned, the uninstall scripts as the installers write them."""
+    folder = folder or h.tools
+    folder.mkdir(parents=True, exist_ok=True)
     for name in names or ("rubberband",):
-        (h.tools / name).write_text("tool", encoding="utf-8")
+        (folder / name).write_bytes(SCRIPT if name.startswith("uninstall-woodshed") else TOOL)
+
+
+def user_named(h: Home) -> set[Path]:
+    """The folders WOODSHED_CACHE and WOODSHED_TOOLS name: the user's, they stay even once emptied."""
+    return {h.cache, h.tools}
 
 
 def mac_app(apps: Path, name: str, bundle_id: str = APP_ID) -> Path:
@@ -133,7 +148,7 @@ def test_linux_removes_the_cache_tracks_the_tools_and_the_menu_entries_only(
     menu[0].write_text('[Desktop Entry]\nName=woodshed\nExec="/opt/uv/bin/woodshed" app\n', encoding="utf-8")
     menu[1].write_text(f'[Desktop Entry]\nExec=sh "{fake.tools}/uninstall-woodshed.sh"\n', encoding="utf-8")
     (apps / "other.desktop").write_text("[Desktop Entry]\nName=Other\n", encoding="utf-8")
-    before, expected = fake.files(), below(fake.cache, *menu, fake.tools)
+    before, expected = fake.files(), below(fake.cache, *menu, fake.tools) - user_named(fake)
 
     assert run(monkeypatch, "linux", "--yes") == 0
 
@@ -149,7 +164,7 @@ def test_mac_removes_both_apps_and_leaves_a_foreign_app(fake: Home, monkeypatch:
     apps = fake.home / "Applications"
     ours = [mac_app(apps, "woodshed.app"), mac_app(apps, "Uninstall woodshed.app", APP_ID + ".uninstall")]
     foreign = mac_app(apps, "Other.app", "com.example.other")
-    before, expected = fake.files(), below(fake.cache, *ours)
+    before, expected = fake.files(), below(fake.cache, *ours) - user_named(fake)
 
     assert run(monkeypatch, "darwin", "--yes") == 0
 
@@ -168,7 +183,7 @@ def test_windows_removes_the_shortcuts_the_tools_and_the_settings_entry_last(
     links[0].write_bytes(b"L\0\0\0" + "C:\\bin\\woodshed.exe".encode("utf-16-le"))
     links[1].write_bytes(b"L\0\0\0" + "C:\\tools\\uninstall-woodshed.cmd".encode("utf-16-le"))
     (programs / "Other.lnk").write_bytes(b"L\0\0\0other")
-    before, expected = fake.files(), below(fake.cache, *links, fake.tools)
+    before, expected = fake.files(), below(fake.cache, *links, fake.tools) - user_named(fake)
 
     assert run(monkeypatch, "win32", "--yes") == 0
 
@@ -253,8 +268,7 @@ def test_a_foreign_file_in_the_tools_folder_stays(fake: Home, monkeypatch: pytes
     (documents / "photos" / "band.jpg").write_bytes(b"jpg")
     (documents / "thesis.odt").write_bytes(b"odt")
     ours = [documents / n for n in ("rubberband", "COPYING", "uninstall-woodshed.sh")]
-    for f in ours:
-        f.write_text("woodshed's", encoding="utf-8")
+    fill_tools(fake, *(f.name for f in ours), folder=documents)
     before = fake.files()
     assert run(monkeypatch, "linux", "--yes") == 0
     assert before - fake.files() == set(ours)
@@ -605,4 +619,103 @@ def test_rubber_band_and_its_licence_are_said_to_go(
     assert run(monkeypatch, "linux", "--yes") == 0
     out = capsys.readouterr().out
     assert "Rubber Band (the recording in your key) and its licence" in out
-    assert not fake.tools.exists()
+    assert fake.tools.is_dir() and not any(fake.tools.iterdir())  # the folder WOODSHED_TOOLS names stays
+
+
+# Attacks from the adversarial review: a plausible setting must never cost the user a file.
+
+
+def test_a_tools_link_to_the_home_is_refused(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    # WOODSHED_TOOLS=~/lnk, lnk -> ~: before, ~/rubberband and ~/COPYING were deleted.
+    monkeypatch.setattr(uninstall, "LIBRARY", fake.root / "songs elsewhere")
+    fill_tools(fake, "rubberband", "COPYING", folder=fake.home)
+    link = fake.home / "lnk"
+    try:
+        link.symlink_to(fake.home, target_is_directory=True)
+    except OSError:
+        pytest.skip("links cannot be made here")
+    monkeypatch.setenv("WOODSHED_TOOLS", str(link))
+    before = fake.files()
+    assert run(monkeypatch, "linux", "--yes") == 1
+    assert fake.files() == before
+
+
+def test_a_relative_tools_setting_is_ignored(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    # WOODSHED_TOOLS=music, run from the home: before, ~/music/rubberband was deleted.
+    music = fake.home / "music"
+    fill_tools(fake, "rubberband", "COPYING", folder=music)
+    monkeypatch.chdir(fake.home)
+    monkeypatch.setenv("WOODSHED_TOOLS", "music")
+    assert paths.tools_dir("linux") == fake.data / "woodshed" / "tools"
+    before = fake.files()
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert fake.files() == before
+
+
+@pytest.mark.parametrize("value", ["~root/tools", "~nobody", "relative/tools"])
+def test_a_tools_setting_that_is_not_a_folder_of_its_own_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: str
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("WOODSHED_TOOLS", value)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    assert paths.tools_dir("linux") == tmp_path / ".local" / "share" / "woodshed" / "tools"
+
+
+def test_files_named_like_rubber_band_but_not_it_are_kept(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Before, any file named rubberband, sndfile.dll or COPYING went, whatever it held.
+    documents = fake.home / "Documents"
+    monkeypatch.setenv("WOODSHED_TOOLS", str(documents))
+    documents.mkdir()
+    for name in ("rubberband", "sndfile.dll", "COPYING", "uninstall-woodshed.sh"):
+        (documents / name).write_bytes(b"the user's own " + name.encode())
+    before = fake.files()
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert fake.files() == before
+    out = capsys.readouterr().out
+    assert str(documents / "rubberband") in out and "not made by woodshed" in out
+
+
+def test_the_licence_goes_only_beside_the_pinned_program(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    fill_tools(fake, "COPYING")
+    (fake.tools / "rubberband").write_bytes(b"another build")
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert (fake.tools / "COPYING").exists() and (fake.tools / "rubberband").exists()
+
+
+def test_folders_the_user_named_stay_when_emptied(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    # WOODSHED_CACHE and WOODSHED_TOOLS name the user's folders: before, rmdir took them once empty.
+    fill_cache(fake)
+    fill_tools(fake, "rubberband", "COPYING")
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert fake.cache.is_dir() and not any(fake.cache.iterdir())
+    assert fake.tools.is_dir() and not any(fake.tools.iterdir())
+
+
+def test_without_settings_woodshed_s_own_empty_folders_go(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("WOODSHED_CACHE", "WOODSHED_TOOLS"):
+        monkeypatch.delenv(name)
+    monkeypatch.setattr(uninstall, "cache_dir", lambda: fake.home / ".cache" / "woodshed")
+    (fake.home / ".cache" / "woodshed" / "stems").mkdir(parents=True)
+    fill_tools(fake, "rubberband", folder=fake.data / "woodshed" / "tools")
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert not (fake.home / ".cache" / "woodshed").exists() and (fake.home / ".cache").is_dir()
+    assert not (fake.data / "woodshed").exists() and fake.data.is_dir()
+
+
+def test_windows_cache_ignores_a_relative_localappdata(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Before, a missing or relative LOCALAPPDATA fell to ~/.cache/woodshed, and the uninstall's
+    # "LOCALAPPDATA\\woodshed" rmdir became ~/.cache.
+    import sys
+
+    from woodshed.cache import cache_dir
+
+    monkeypatch.delenv("WOODSHED_CACHE", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(sys, "platform", "win32")
+    for value in ("relative", ""):
+        monkeypatch.setenv("LOCALAPPDATA", value)
+        assert cache_dir() == tmp_path / "AppData" / "Local" / "woodshed" / "Cache"

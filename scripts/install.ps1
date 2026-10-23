@@ -24,14 +24,15 @@ $ErrorActionPreference = "Stop"
 # woodshed's tools folder, where its own programs go (Rubber Band, the uninstall script), as woodshed computes it
 # (paths.tools_dir): WOODSHED_TOOLS (a leading ~ is the home folder), else %LOCALAPPDATA%\woodshed\tools.
 # -Default: the folder without WOODSHED_TOOLS.
+# A relative WOODSHED_TOOLS or LOCALAPPDATA (it would depend on where the installer runs) is ignored, as woodshed
+# does: a folder counts with its drive (C:\...) or as a network share (\\server\...), or under ~.
 function Get-WoodshedTools([switch]$Default) {
-    $Chosen = if ($Default) { "" } else { $env:WOODSHED_TOOLS }
-    if ($Chosen) {
-        if ($Chosen -eq "~" -or $Chosen.StartsWith("~\") -or $Chosen.StartsWith("~/")) { return $env:USERPROFILE + $Chosen.Substring(1) }
-        return $Chosen
-    }
+    $Full = { param([string]$Path) ($Path -match '^[A-Za-z]:[\\/]') -or $Path.StartsWith('\\') }
+    $Chosen = if ($Default) { "" } else { [string]$env:WOODSHED_TOOLS }  # unset: "", never $null (no method on it)
+    if ($Chosen -eq "~" -or $Chosen.StartsWith("~\") -or $Chosen.StartsWith("~/")) { return $env:USERPROFILE + $Chosen.Substring(1) }
+    if ($Chosen -and (& $Full $Chosen)) { return $Chosen }
     $Local = $env:LOCALAPPDATA
-    if (-not $Local -or -not [IO.Path]::IsPathRooted($Local)) { $Local = [IO.Path]::Combine($env:USERPROFILE, "AppData", "Local") }
+    if (-not $Local -or -not (& $Full $Local)) { $Local = [IO.Path]::Combine($env:USERPROFILE, "AppData", "Local") }
     return [IO.Path]::Combine($Local, "woodshed", "tools")
 }
 
@@ -102,8 +103,18 @@ function Get-Rubberband {
         $dir = [IO.Directory]::GetDirectories($out)[0]
         $from = @{ exe = [IO.Path]::Combine($dir, "rubberband.exe"); dll = [IO.Path]::Combine($dir, "sndfile.dll") }
         if (-not ((& $same $from.exe $ExeSha256) -and (& $same $from.dll $DllSha256))) { throw "not the files the checksums name" }
+        # Someone else's licence in the folder WOODSHED_TOOLS names: never overwritten, and no Rubber Band there.
+        $licence = [IO.Path]::Combine($Tools, "COPYING.txt")
+        if ([IO.File]::Exists($licence)) {
+            $theirs = [IO.File]::ReadAllBytes($licence)
+            $ours = [IO.File]::ReadAllBytes([IO.Path]::Combine($dir, "COPYING.txt"))
+            if ([Convert]::ToBase64String($theirs) -ne [Convert]::ToBase64String($ours)) {
+                Write-Host "The recording in your key is off: the tools folder ($Tools) holds a COPYING.txt file that is not Rubber Band's, kept as it is. Point WOODSHED_TOOLS to a folder of woodshed's own."
+                return $false
+            }
+        }
         [void][IO.Directory]::CreateDirectory($Tools)
-        [IO.File]::Copy([IO.Path]::Combine($dir, "COPYING.txt"), [IO.Path]::Combine($Tools, "COPYING.txt"), $true)
+        [IO.File]::Copy([IO.Path]::Combine($dir, "COPYING.txt"), $licence, $true)
         [IO.File]::Copy($from.dll, $dll, $true)
         [IO.File]::Copy($from.exe, $exe, $true)
         if (-not (& $runs $exe)) {
@@ -131,7 +142,7 @@ function Add-WoodshedUninstall([string]$Exe, [string]$Tools, [bool]$Menu) {
     $Own = $Tools -eq (Get-WoodshedTools -Default)
     [void][IO.Directory]::CreateDirectory($Tools)
     $Script = [IO.Path]::Combine($Tools, "uninstall-woodshed.cmd")
-    # In the .cmd, the user's folders by name (%LOCALAPPDATA%...): its text stays ASCII whatever the user's name.
+    # In the .cmd, the user's folders by name (%LOCALAPPDATA%...), the same whatever the user's name.
     $InCmd = {
         param([string]$Path)
         $Path = $Path -replace "%", "%%"
@@ -149,6 +160,7 @@ function Add-WoodshedUninstall([string]$Exe, [string]$Tools, [bool]$Menu) {
     if ($Own) { $Last += ' & rd "%~dp0.." 2>nul' }
     $Lines = @(
         '@echo off',
+        'chcp 65001 >nul',
         'rem Made by the woodshed installer: removes woodshed from this computer, asking first. Your songs stay.',
         'setlocal',
         'title Uninstall woodshed',
@@ -182,7 +194,8 @@ function Add-WoodshedUninstall([string]$Exe, [string]$Tools, [bool]$Menu) {
         'exit /b 1'
     )
     # cmd.exe reads labels right only with Windows line endings.
-    [IO.File]::WriteAllText($Script, (($Lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+    # UTF-8 without a byte order mark (cmd.exe would read it as a command), the console switched to it above.
+    [IO.File]::WriteAllText($Script, (($Lines -join "`r`n") + "`r`n"), [Text.UTF8Encoding]::new($false))
 
     if ($Menu) {
         $Programs = [Environment]::GetFolderPath("Programs")

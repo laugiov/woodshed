@@ -71,13 +71,14 @@ EOF
 
 # woodshed's tools folder, where its own programs go (Rubber Band, the Linux uninstall script): as woodshed
 # computes it (paths.tools_dir in woodshed).
+# WOODSHED_TOOLS counts when absolute or under the home folder (~, ~/...); a relative value (it would depend on
+# where the installer runs) and ~user are ignored, as woodshed does.
 woodshed_tools_dir() {
-    if [ -n "${WOODSHED_TOOLS:-}" ]; then
-        case "$WOODSHED_TOOLS" in
-            "~" | "~/"*) printf '%s\n' "$HOME${WOODSHED_TOOLS#"~"}" ;;
-            *) printf '%s\n' "$WOODSHED_TOOLS" ;;
-        esac
-    elif [ "$(uname -s)" = "Darwin" ]; then
+    case "${WOODSHED_TOOLS:-}" in
+        "~" | "~/"*) printf '%s\n' "$HOME${WOODSHED_TOOLS#"~"}"; return 0 ;;
+        /*) printf '%s\n' "$WOODSHED_TOOLS"; return 0 ;;
+    esac
+    if [ "$(uname -s)" = "Darwin" ]; then
         printf '%s\n' "$HOME/Library/Application Support/woodshed/tools"
     else
         case "${XDG_DATA_HOME:-}" in
@@ -103,6 +104,7 @@ get_rubberband() {
         && "$rb_tools/rubberband" -V >/dev/null 2>&1; then
         return 0
     fi
+    rb_foreign=""
     rb_tmp="$(mktemp -d)" || rb_tmp=""
     if [ -n "$rb_tmp" ] \
         && curl -fsSL --retry 2 --connect-timeout 20 --max-time 300 -o "$rb_tmp/rb.tar.bz2" "$rb_url" \
@@ -110,6 +112,10 @@ get_rubberband() {
         && tar -xjf "$rb_tmp/rb.tar.bz2" -C "$rb_tmp" 2>/dev/null \
         && rb_dir="$(dirname "$(ls "$rb_tmp"/*/rubberband)")" \
         && [ "$($rb_hash "$rb_dir/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ] \
+        && if [ -e "$rb_tools/COPYING" ] && ! cmp -s "$rb_dir/COPYING" "$rb_tools/COPYING"; then
+            rb_foreign=1  # the folder holds someone else's licence: never overwritten
+            false
+        fi \
         && mkdir -p "$rb_tools" \
         && cp "$rb_dir/COPYING" "$rb_tools/COPYING" \
         && cp "$rb_dir/rubberband" "$rb_tools/.rubberband.part" \
@@ -122,7 +128,11 @@ get_rubberband() {
         fi
     else
         rm -f "$rb_tools/.rubberband.part"
-        printf '%s\n' "The recording in your key is off: Rubber Band could not be downloaded. Run the installer again later to add it."
+        if [ -n "${rb_foreign:-}" ]; then
+            printf '%s\n' "The recording in your key is off: the tools folder ($rb_tools) holds a COPYING file that is not Rubber Band's, kept as it is. Point WOODSHED_TOOLS to a folder of woodshed's own."
+        else
+            printf '%s\n' "The recording in your key is off: Rubber Band could not be downloaded. Run the installer again later to add it."
+        fi
     fi
     [ -z "$rb_tmp" ] || rm -rf "$rb_tmp"
     return 0

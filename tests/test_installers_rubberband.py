@@ -310,6 +310,9 @@ def test_the_shell_tools_folder_is_woodshed_s(tmp_path: Path, system: str) -> No
         {"XDG_DATA_HOME": str(tmp_path / "data")},
         {"XDG_DATA_HOME": "relative"},
         {"WOODSHED_TOOLS": "~/my tools"},
+        {"WOODSHED_TOOLS": "relative/tools"},
+        {"WOODSHED_TOOLS": "~root/tools"},
+        {"WOODSHED_TOOLS": str(tmp_path / "t")},
     ]
     for extra in cases:
         out = subprocess.run(["sh", "-c", script], env={**env, **extra}, capture_output=True, text=True, check=True)
@@ -349,3 +352,41 @@ def test_install_ps1_computes_the_tools_folder_once() -> None:
     assert text.count("$env:WOODSHED_TOOLS") == 1  # in Get-WoodshedTools only
     assert re.search(r"(?m)^\$Tools = Get-WoodshedTools$", text[guard:])
     assert "Get-Rubberband -Tools $Tools" in text and "Add-WoodshedUninstall $Exe $Tools" in text
+
+
+@posix_only
+def test_a_licence_that_is_not_rubber_band_s_is_never_overwritten(tmp_path: Path, served: tuple[Path, str]) -> None:
+    # WOODSHED_TOOLS naming a folder with the user's own COPYING: it stays as it was, and so does the folder.
+    folder, url = served
+    name, checksum, program = mac_archive(folder)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "COPYING").write_bytes(b"my project's licence")
+    code, out = get_rubberband(tmp_path, f"{url}/{name}", checksum, sha256(program))
+    assert code == 0
+    assert (tools / "COPYING").read_bytes() == b"my project's licence"
+    assert sorted(p.name for p in tools.iterdir()) == ["COPYING"]
+    lines = [line for line in out.splitlines() if line.strip()]
+    assert len(lines) == 1 and "COPYING" in lines[0] and "not Rubber Band's" in lines[0]
+
+
+def _function(text: str, name: str) -> str:
+    start = text.index(f"function {name}")
+    return text[start : text.index("\n}\n", start)]
+
+
+def test_get_rubberband_on_windows_never_overwrites_another_licence() -> None:
+    body = _function(PS1.read_text(encoding="utf-8"), "Get-Rubberband")
+    assert "not Rubber Band's" in body and "COPYING.txt" in body
+
+
+def test_install_ps1_ignores_a_relative_tools_setting() -> None:
+    body = _function(PS1.read_text(encoding="utf-8"), "Get-WoodshedTools")
+    # A drive (C:\\...) or a network share (\\\\server\\...): anything else depends on where it started.
+    assert "-match '^[A-Za-z]:[\\\\/]'" in body and "StartsWith('\\\\')" in body
+
+
+def test_get_woodshed_tools_never_calls_a_method_on_an_unset_variable() -> None:
+    # $env:WOODSHED_TOOLS unset is $null in PowerShell: $null.StartsWith(...) would stop the installer.
+    body = _function(PS1.read_text(encoding="utf-8"), "Get-WoodshedTools")
+    assert "[string]$env:WOODSHED_TOOLS" in body
