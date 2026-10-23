@@ -193,7 +193,7 @@ def _shortcuts(system: str) -> list[Item]:
         ]  # fmt: skip
     apps = _data_home() / "applications"
     return [
-        Item(apps / "woodshed.desktop", "the menu entry", ("", _has(rb'(?m)^Exec=.*woodshed"? app[ \t]*$'))),
+        Item(apps / "woodshed.desktop", "the menu entry", ("", _has(rb'(?m)^Exec=.*woodshed"? app[ \t\r]*$'))),
         Item(
             apps / "woodshed-uninstall.desktop", "the menu's Uninstall woodshed",
             ("", _has(rb"(?m)^Exec=.*uninstall-woodshed\.sh")),

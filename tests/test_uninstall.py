@@ -587,3 +587,12 @@ def test_the_real_process_list_holds_this_process_and_its_parent() -> None:
     procs = uninstall._processes()
     assert (os.getpid(), os.getppid()) in {(pid, ppid) for pid, ppid, _ in procs}
     assert len(uninstall._lineage(procs, os.getpid())) >= 2
+
+
+def test_a_menu_entry_with_windows_line_endings_is_still_ours(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    apps = fake.data / "applications"
+    apps.mkdir()
+    entry = apps / "woodshed.desktop"
+    entry.write_bytes(b'[Desktop Entry]\r\nName=woodshed\r\nExec="/opt/uv/bin/woodshed" app\r\n')
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert not entry.exists()
