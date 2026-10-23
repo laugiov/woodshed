@@ -175,9 +175,7 @@ def _to_check(song: Song, sections: list[dict[str, Any]], keys: Keys) -> str:
     return ", ".join(f"{part}, {bar_list(bars)} ({', '.join(names)})" for part, (bars, names) in parts.items())
 
 
-def _sung(
-    song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any]], keys: Keys
-) -> dict[int, list[str]]:
+def _sung(song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any]], keys: Keys) -> dict[int, list[str]]:
     """The rows of each sung section: its lines with the chords on their words, and the chords
     between lines on rows of their own. Placed as the page places them (lyrics.place_chords).
     Between lines only the changes are written: bars held on one chord are not counted there."""
