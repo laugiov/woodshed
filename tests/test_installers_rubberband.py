@@ -194,6 +194,34 @@ def test_a_tampered_windows_download_is_refused(tmp_path: Path, served: tuple[Pa
     assert not (tmp_path / "tools" / "rubberband.exe").exists()
 
 
+@pytest.mark.skipif(POWERSHELL is None, reason="needs PowerShell")
+def test_whatever_goes_wrong_the_windows_function_says_one_line_and_returns(tmp_path: Path) -> None:
+    assert POWERSHELL is not None
+    bad = f"{tmp_path}{os.sep}a|b"  # a folder name Windows refuses: the first file call throws
+    call = f". '{INSTALL_PS1}'; $ok = Get-Rubberband -Tools '{bad}' -Url 'http://127.0.0.1:9/x'; "
+    call += 'Write-Output "result=$ok"'
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", call],
+        capture_output=True, text=True, check=False, timeout=120,
+    )  # fmt: skip
+    assert proc.returncode == 0 and "result=False" in proc.stdout and OFF in proc.stdout, proc.stdout + proc.stderr
+
+
+def test_the_windows_install_never_stops_on_rubber_band() -> None:
+    # Windows PowerShell 5.1 started from PowerShell 7 finds no script-defined cmdlet (Get-FileHash stopped an
+    # install that way): .NET only, and the call itself in a try whose catch says one line.
+    text = INSTALL_PS1.read_text(encoding="utf-8")
+    for cmdlet in ("Get-FileHash", "Expand-Archive", "ForEach-Object", "Select-Object", "Get-ChildItem"):
+        assert cmdlet not in text, cmdlet
+    body = text[text.index("function Get-Rubberband") :]
+    assert "[CmdletBinding()]" in body[:100]  # -ErrorAction at the call needs it
+    calls = [line.strip() for line in text.splitlines() if "Get-Rubberband" in line and "function" not in line]
+    call = [line for line in calls if not line.startswith("#")]
+    assert call == ["try { $null = Get-Rubberband -ErrorAction Stop }"], calls
+    after = text[text.index(call[0]) :].splitlines()[1].strip()
+    assert after.startswith("catch { Write-Host") and OFF in after
+
+
 def test_the_windows_script_can_be_loaded_for_its_functions_alone() -> None:
     # CI dot-sources install.ps1 to run Get-Rubberband: loaded that way it must stop before installing anything.
     text = INSTALL_PS1.read_text(encoding="utf-8")
