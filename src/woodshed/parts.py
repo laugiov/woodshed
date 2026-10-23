@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Any
 
 import librosa
 import numpy as np
@@ -60,6 +61,34 @@ def _onsets(y: Audio, hop: int = HOP) -> tuple[Floats, Floats]:
 def _peak(env: Floats, times: Floats, t: float, before: float = 0.03, after: float = 0.03) -> float:
     m = (times >= t - before) & (times <= t + after)
     return float(np.max(env[m])) if m.any() else 0.0
+
+
+HEARD_DB = -50.0  # a second louder than this is a second the instrument plays
+HEARD_SHARE = 0.03  # it plays in at least this share of the song's seconds (a short intro counts)
+UNDER_LOUDEST_DB = 30.0  # further under the loudest instrument than this: what leaked into its stem
+
+
+def window_rms(y: npt.NDArray[np.floating[Any]], rate: int, seconds: float = 1.0) -> Floats:
+    """The RMS of each window of a mono (n) or multichannel (channels, n) or (n, channels) signal."""
+    mono = np.asarray(y, dtype=np.float64)
+    if mono.ndim == 2:
+        mono = mono.mean(axis=0 if mono.shape[0] < mono.shape[1] else 1)
+    size = max(1, int(rate * seconds))
+    n = mono.size // size
+    if n == 0:
+        return np.array([float(np.sqrt(np.mean(mono**2)))]) if mono.size else np.zeros(0)
+    return np.asarray(np.sqrt(np.mean(mono[: n * size].reshape(n, size) ** 2, axis=1)), dtype=np.float64)
+
+
+def heard(windows: Floats, loudest: float) -> bool:
+    """Whether an instrument plays in the song (spec 010), from its windows' RMS at the original level and the
+    loudest instrument's overall RMS: by what it plays, not by its average (a keys intro counts, a bleed does not)."""
+    if windows.size == 0:
+        return False
+    playing = windows > 10 ** (HEARD_DB / 20)
+    overall = float(np.sqrt(np.mean(windows**2)))
+    close = loudest <= 0 or overall >= loudest * 10 ** (-UNDER_LOUDEST_DB / 20)
+    return bool(playing.mean() >= HEARD_SHARE and close)
 
 
 def _silent(y: Audio) -> bool:

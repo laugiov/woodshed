@@ -35,7 +35,9 @@ def install_fake_demucs(monkeypatch: pytest.MonkeyPatch, calls: dict[str, Any], 
             calls["init"] = calls.get("init", 0) + 1
             calls["model_dir"] = hub_dir()
             calls["device"] = device
+            calls["model"] = model
             self.callback = callback
+            self.stems = next(m.stems for m in stems.MODELS.values() if m.name == model)
 
         def separate_tensor(self, wav: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, np.ndarray]]:
             calls["input"] = (wav.shape, sr)
@@ -43,7 +45,7 @@ def install_fake_demucs(monkeypatch: pytest.MonkeyPatch, calls: dict[str, Any], 
             for offset in (0, n // 2):
                 self.callback({"segment_offset": offset, "audio_length": n, "state": "end"})
             mix = np.zeros((2, n), dtype=np.float32)
-            levels = {name: peak * (i + 1) / 4 for i, name in enumerate(stems.STEM_NAMES)}
+            levels = {name: peak * (i + 1) / len(self.stems) for i, name in enumerate(self.stems)}
             parts = {name: np.full((2, n), level, dtype=np.float32) for name, level in levels.items()}
             return mix, parts
 
@@ -72,19 +74,19 @@ def test_separation_writes_lossless_stems_and_reuses_the_cache(
 ) -> None:
     calls: dict[str, Any] = {}
     install_fake_demucs(monkeypatch, calls)
-    first = stems.separate(song)
+    first = stems.separate(song, stems.FOUR)
     assert not first.from_cache and calls["init"] == 1 and calls["device"] == "cpu"
     assert (
         calls["model_dir"] == str(cache / "models")
         and hub_dir() == "/default"
         and sys.modules["torch.hub"]._hub_dir is None
     )
-    assert set(first.paths) == set(stems.STEM_NAMES)
+    assert set(first.paths) == set(stems.FOUR.stems)
     for path in first.paths.values():
         info = sf.info(path)
         assert path.suffix == ".flac" and info.subtype == "PCM_24" and info.samplerate == RATE and info.channels == 2
         assert path.is_relative_to(cache)
-    second = stems.separate(song)
+    second = stems.separate(song, stems.FOUR)
     assert second.from_cache and calls["init"] == 1  # Demucs not run again
 
 
@@ -99,14 +101,14 @@ def test_cache_key_follows_the_file_content(tmp_path: Path) -> None:
 def test_progress_is_reported_up_to_one(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     install_fake_demucs(monkeypatch, {})
     seen: list[float] = []
-    stems.separate(song, progress=seen.append)
+    stems.separate(song, stems.FOUR, progress=seen.append)
     assert seen == sorted(seen) and seen[-1] == 1.0 and all(0 <= p <= 1 for p in seen)
 
 
 def test_offline_mode_refuses_to_download(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     torch_state = install_fake_demucs(monkeypatch, {})
     with pytest.raises(StemsError, match="--offline"):
-        stems.separate(song, offline=True)
+        stems.separate(song, stems.FOUR, offline=True)
     assert torch_state["downloads"] == []
     assert not any(cache.rglob("*.flac")) and list((cache / "stems").iterdir()) == []  # nothing half-written
 
@@ -119,7 +121,7 @@ def test_a_failed_separation_leaves_no_partial_cache(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", boom)
     with pytest.raises(StemsError, match="out of memory"):
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)
     assert list((cache / "stems").iterdir()) == []
 
 
@@ -133,7 +135,7 @@ def test_ctrl_c_during_separation_leaves_no_temp_folder(
 
     monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)
     assert list((cache / "stems").iterdir()) == []
 
 
@@ -145,7 +147,7 @@ def test_a_model_load_error_is_typed(monkeypatch: pytest.MonkeyPatch, song: Path
 
     monkeypatch.setattr(sys.modules["demucs.api"].Separator, "__init__", broken)
     with pytest.raises(StemsError, match="unknown model"):
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)
 
 
 def test_a_concurrent_run_that_finished_first_is_reused(
@@ -153,7 +155,7 @@ def test_a_concurrent_run_that_finished_first_is_reused(
 ) -> None:
     calls: dict[str, Any] = {}
     install_fake_demucs(monkeypatch, calls)
-    winner = stems.separate(song)
+    winner = stems.separate(song, stems.FOUR)
     real_separate = sys.modules["demucs.api"].Separator.separate_tensor
 
     def racing(self: Any, wav: Any, sr: int) -> Any:
@@ -165,7 +167,7 @@ def test_a_concurrent_run_that_finished_first_is_reused(
     for p in winner.paths.values():
         p.unlink()
     monkeypatch.setattr(sys.modules["demucs.api"].Separator, "separate_tensor", racing)
-    again = stems.separate(song)
+    again = stems.separate(song, stems.FOUR)
     assert not again.from_cache and all(p.exists() for p in again.paths.values())
     assert [p.name for p in (cache / "stems").iterdir()] == [winner.folder.name]
 
@@ -174,7 +176,7 @@ def test_missing_extra_explains_the_cpu_install(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setitem(sys.modules, "demucs", None)
     monkeypatch.setitem(sys.modules, "demucs.api", None)
     with pytest.raises(MissingExtra) as exc:
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)
     message = str(exc.value)
     assert "woodshed[stems]" in message and "cpu" in message.lower()
 
@@ -197,26 +199,26 @@ def test_cache_dir_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 def test_a_stale_incomplete_cache_folder_is_replaced(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     install_fake_demucs(monkeypatch, {})
-    first = stems.separate(song)
+    first = stems.separate(song, stems.FOUR)
     first.paths["vocals"].unlink()  # deleted by hand, or left by an interrupted older version
-    again = stems.separate(song)
+    again = stems.separate(song, stems.FOUR)
     assert not again.from_cache and all(p.exists() for p in again.paths.values())
     assert [p.name for p in (cache / "stems").iterdir()] == [first.folder.name]
 
 
 def test_stems_louder_than_full_scale_share_one_gain(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     install_fake_demucs(monkeypatch, {}, peak=1.5)  # Demucs output is not limited to [-1, 1]
-    result = stems.separate(song)
+    result = stems.separate(song, stems.FOUR)
     assert result.gain == pytest.approx(stems.CEILING / 1.5)
-    levels = [float(sf.read(result.paths[name])[0].max()) for name in stems.STEM_NAMES]
+    levels = [float(sf.read(result.paths[name])[0].max()) for name in stems.FOUR.stems]
     # Nothing clipped: the stems keep their proportions, so they still add up to the mix.
     assert levels == pytest.approx([1.5 * (i + 1) / 4 * result.gain for i in range(4)], abs=1e-6)
-    assert stems.separate(song).gain == result.gain  # remembered with the cached stems
+    assert stems.separate(song, stems.FOUR).gain == result.gain  # remembered with the cached stems
 
 
 def test_quiet_stems_are_written_unchanged(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     install_fake_demucs(monkeypatch, {})
-    assert stems.separate(song).gain == 1.0
+    assert stems.separate(song, stems.FOUR).gain == 1.0
 
 
 def test_a_file_longer_than_the_limit_is_not_separated(
@@ -226,14 +228,14 @@ def test_a_file_longer_than_the_limit_is_not_separated(
     install_fake_demucs(monkeypatch, calls)
     monkeypatch.setattr("woodshed.audio.MAX_SECONDS", 1)
     with pytest.raises(AudioError, match="limit"):
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)
     assert "init" not in calls
 
 
 def test_demucs_gets_our_decoded_audio_never_the_file(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     calls: dict[str, Any] = {}
     install_fake_demucs(monkeypatch, calls)
-    stems.separate(song)
+    stems.separate(song, stems.FOUR)
     shape, sr = calls["input"]
     assert sr == stems.RATE and shape[0] == 2  # stereo, decoded by audio.load
 
@@ -252,7 +254,7 @@ def test_a_disguised_concat_list_never_reaches_demucs(
     disguised = tmp_path / "song.mp3"
     disguised.write_text(f"ffconcat version 1.0\nfile {secret.name}\n")
     with pytest.raises(AudioError, match="not supported"):
-        stems.separate(disguised)
+        stems.separate(disguised, stems.FOUR)
     assert "init" not in calls
 
 
@@ -280,11 +282,11 @@ def test_a_corrupt_gain_file_means_separating_again(
 ) -> None:
     calls: dict[str, Any] = {}
     install_fake_demucs(monkeypatch, calls)
-    first = stems.separate(song)
+    first = stems.separate(song, stems.FOUR)
     (first.folder / stems.GAIN_FILE).write_text(content)
-    again = stems.separate(song)
+    again = stems.separate(song, stems.FOUR)
     assert not again.from_cache and calls["init"] == 2 and again.gain == 1.0
-    assert stems.separate(song).from_cache and calls["init"] == 2  # the bad entry was replaced
+    assert stems.separate(song, stems.FOUR).from_cache and calls["init"] == 2  # the bad entry was replaced
 
 
 def test_a_missing_extra_is_reported_before_any_decoding(
@@ -298,4 +300,4 @@ def test_a_missing_extra_is_reported_before_any_decoding(
 
     monkeypatch.setattr("woodshed.audio.load", no_decode)
     with pytest.raises(MissingExtra):
-        stems.separate(song)
+        stems.separate(song, stems.FOUR)

@@ -1044,7 +1044,6 @@ def page_song(folder: Path) -> dict[str, Any]:
 def stems_folder(page: Path) -> Path:
     """The cached stems of the recording a page was built from."""
     from woodshed import stems
-    from woodshed.cache import cache_dir
     from woodshed.run import MANIFEST
 
     try:
@@ -1052,7 +1051,7 @@ def stems_folder(page: Path) -> Path:
         source = manifest["settings"]["source"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise LyricsError(f"{page}: no manifest; rebuild the page first") from exc
-    folder = cache_dir() / "stems" / f"{stems.MODEL}-{source}"
+    folder = stems.folder_of(source, stems.model_of(manifest["settings"]))
     if not (folder / "vocals.flac").is_file():
         raise LyricsError(f"{page}: the instrument tracks of this song are not in the cache; build it with stems")
     return folder

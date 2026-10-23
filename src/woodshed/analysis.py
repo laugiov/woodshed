@@ -129,7 +129,9 @@ def analyze(
 
     separated = None
     if use_stems:
-        separated = stems_result or stems.separate(src, offline=offline, progress=lambda f: report("stems", f))
+        separated = stems_result or stems.separate(
+            src, stems.DEFAULT, offline=offline, progress=lambda f: report("stems", f)
+        )
 
     report("beats", 0.0)
     downbeats: Floats | None = None
@@ -203,11 +205,24 @@ def _parts(
     }
     shift = parts.drum_grid_shift(track["drums"], times)
     grid = parts.Grid.from_beats(times + shift, built.first_beat, beats_per_bar, n_bars=len(built.bars))
+    guitar, keys = track["other"], track["other"]  # four stems: guitars and keys share one
+    if "guitar" in track:  # six stems (spec 010): the strumming from the guitar, the voicing from the keys
+        guitar, keys = track["guitar"], track["piano"] + track["other"]
+        level = {
+            name: parts.window_rms(y / separated.gain, audio.SR) for name, y in (("guitar", guitar), ("keys", keys))
+        }
+        others = (track[n] / separated.gain for n in ("drums", "bass", "vocals"))
+        loudest = max(
+            [float(np.sqrt(np.mean(y**2))) for y in others] + [float(np.sqrt(np.mean(w**2))) for w in level.values()]
+        )
+        silence = np.zeros_like(guitar)
+        guitar = guitar if parts.heard(level["guitar"], loudest) else silence
+        keys = keys if parts.heard(level["keys"], loudest) else silence
     return Parts(
         groove=parts.drum_groove(track["drums"], grid),
         bass=parts.bass_line(track["bass"], grid),
-        comp=parts.comp_rhythm(track["other"], grid),
-        voicings=parts.voicings(track["other"], grid),
+        comp=parts.comp_rhythm(guitar, grid),
+        voicings=parts.voicings(keys, grid),
         vocal=parts.vocal_range(track["vocals"]),
         grid_shift=shift,
     )

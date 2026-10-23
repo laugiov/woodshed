@@ -42,6 +42,8 @@ class Options:
     bpm: float | None = None
     bar_phase: int | None = None  # the bar lines the band chose: beats before the first bar line; automatic if None
     pitch: bool = True  # woodshed app renders a song's tracks in another key when asked (ffmpeg with Rubber Band)
+    # The separation: "four" (guitars and keys together) or "six" (apart); None: the page's own, six for a new one.
+    separation: str | None = None
 
 
 class Reporter:
@@ -105,7 +107,27 @@ def _analyze(src: Path, opts: Options, report: Reporter, use_stems: bool, separa
 MANIFEST = "woodshed.json"  # in each page folder: what the page was built from, to skip it next time
 
 
-def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
+def _separation(page: Path, opts: Options, report: Reporter | None = None) -> stems.Model:
+    """The model a page is separated with: the one asked for, else the page's own (a page built before six stems
+    keeps four: no rebuild, no new separation), else six for a new page. Offline without the six-stem weights but
+    with the four-stem ones: four, said once."""
+    if opts.separation in stems.MODELS:
+        return stems.MODELS[opts.separation]
+    try:
+        given = json.loads((page / MANIFEST).read_text(encoding="utf-8"))["settings"]
+        return stems.model_of(given if isinstance(given, dict) else {})
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    if opts.offline and not stems.downloaded(stems.DEFAULT) and stems.downloaded(stems.FOUR):
+        if report is not None:
+            report.say(
+                "  note: offline without the six-instrument model: guitars and keys stay together (--separation four)"
+            )
+        return stems.FOUR
+    return stems.DEFAULT
+
+
+def _settings(src: Path, opts: Options, use_stems: bool, model: stems.Model = stems.FOUR) -> dict[str, Any]:
     return {
         "version": __version__,
         "analysis": ANALYSIS_REVISION,
@@ -118,6 +140,8 @@ def _settings(src: Path, opts: Options, use_stems: bool) -> dict[str, Any]:
         "bpm": opts.bpm,
         # Only when chosen: every page built before stays up to date.
         **({"bar_phase": opts.bar_phase} if opts.bar_phase is not None else {}),
+        # Only for six stems: a page without it was separated with four, and stays up to date.
+        **({"separation": model.key} if use_stems and model is not stems.FOUR else {}),
     }
 
 
@@ -272,8 +296,9 @@ def first_pass(
     use_stems = opts.use_stems and stems_extra_installed()
     if opts.use_stems and not use_stems:
         report.say("  note: " + EXTRA_HINT)
-    settings = _settings(src, opts, use_stems)
     page = out / folder_name(opts.title)
+    model = _separation(page, opts, report)
+    settings = _settings(src, opts, use_stems, model)
     _note_older_pages(out, page, settings["source"], report)
     known = up_to_date(page, settings)
     if known is not None:
@@ -283,7 +308,7 @@ def first_pass(
     if known is not None:  # built by an older woodshed, same analysis: its page code only
         report.say(f"  page code updated {page}")
         return Pass(src, out, page, known, settings, False, opts)
-    cached = stems.cached(src) if use_stems else None
+    cached = stems.cached(src, model) if use_stems else None
     if use_stems and cached is None:
         seconds = audio.duration(src) * SEPARATION_SPEED
         song = _analyze(src, opts, report, False, None)
@@ -311,7 +336,8 @@ def second_pass(first: Pass, report: Reporter) -> Pass:
         f"{first.src.name}: separating the instruments, about {max(1, round(seconds / 60))} min on this computer"
     )
     try:
-        separated = stems.separate(first.src, offline=opts.offline, progress=report.stems)
+        model = stems.model_of(first.settings)
+        separated = stems.separate(first.src, model, offline=opts.offline, progress=report.stems)
         song = _analyze(first.src, opts, report, True, separated)
         page = build_page(song, first.src, first.out, separated)
     except WoodshedError:

@@ -18,8 +18,38 @@ from woodshed import audio
 from woodshed.cache import cache_dir
 from woodshed.errors import MissingExtra, StemsError
 
-STEM_NAMES = ("drums", "bass", "other", "vocals")
-MODEL = "htdemucs"
+
+@dataclass(frozen=True)
+class Model:
+    """A Demucs separation: its key in woodshed's settings, its Demucs name, the stems it writes."""
+
+    key: str
+    name: str
+    stems: tuple[str, ...]
+    signature: str  # the checkpoint's id: a file named after it in the model cache means downloaded
+    hub: str  # its Hugging Face repository
+
+
+FOUR = Model("four", "htdemucs", ("drums", "bass", "other", "vocals"), "955717e8", "adefossez/HTDemucs")
+# The guitar in its own stem; the piano too, though weak: the keys part is piano + other (spec 010).
+SIX = Model(
+    "six", "htdemucs_6s", ("drums", "bass", "other", "vocals", "guitar", "piano"), "5c90dfd2", "adefossez/HTDemucs-6s"
+)
+MODELS = {m.key: m for m in (FOUR, SIX)}
+DEFAULT = SIX  # for a new page; a page keeps the model it was separated with
+
+
+def model_of(settings: dict[str, Any]) -> Model:
+    """The model a page was separated with: written as `separation` since six stems; absent means four."""
+    return MODELS.get(str(settings.get("separation")), FOUR)
+
+
+def downloaded(model: Model) -> bool:
+    """The model's weights are in woodshed's model cache: a torch hub checkpoint or a Hugging Face snapshot file
+    named after its signature."""
+    return any((cache_dir() / "models").rglob(f"{model.signature}*"))
+
+
 CPU_HINT = (
     'stem separation needs the stems extra: pipx install "woodshed[stems]". '
     "To avoid a 5 GB CUDA download, install PyTorch for CPU: "
@@ -36,6 +66,7 @@ class Stems:
     # Common gain applied so that no stem clips in 24-bit FLAC (Demucs output can exceed full
     # scale). Playing the stems at 1 / gain restores the original level.
     gain: float = 1.0
+    model: Model = FOUR
 
 
 def fingerprint(path: Path) -> str:
@@ -74,27 +105,33 @@ def common_gain(signals: dict[str, np.ndarray]) -> float:
     return 1.0 if peak <= CEILING else CEILING / peak
 
 
-def _folder(src: Path, model: str) -> Path:
-    return cache_dir() / "stems" / f"{model}-{fingerprint(src)}"
+def folder_of(source: str, model: Model) -> Path:
+    """The cache folder of a recording's stems, by its fingerprint and the model that separated it."""
+    return cache_dir() / "stems" / f"{model.name}-{source}"
 
 
-def cached(path: str | Path, model: str = MODEL) -> Stems | None:
+def _folder(src: Path, model: Model) -> Path:
+    return folder_of(fingerprint(src), model)
+
+
+def cached(path: str | Path, model: Model) -> Stems | None:
     """The stems of this recording if they are already separated, else None (nothing is computed)."""
     folder = _folder(Path(path).expanduser().resolve(), model)
-    paths = {name: folder / f"{name}.flac" for name in STEM_NAMES}
+    paths = {name: folder / f"{name}.flac" for name in model.stems}
     if not _usable(folder, paths):
         return None
-    return Stems(folder, paths, from_cache=True, gain=_read_gain(folder) or 1.0)
+    return Stems(folder, paths, from_cache=True, gain=_read_gain(folder) or 1.0, model=model)
 
 
 def separate(
     path: str | Path,
+    model: Model,
     *,
     offline: bool = False,
     progress: Callable[[float], None] | None = None,
-    model: str = MODEL,
 ) -> Stems:
-    """Separate drums, bass, other and vocals. Cached: a song is only separated once."""
+    """Separate the model's stems (drums, bass, other, vocals; guitar and piano too with six). Cached: a song is
+    only separated once per model."""
     src = Path(path).expanduser().resolve()
     hit = cached(src, model)
     if hit is not None:
@@ -102,7 +139,7 @@ def separate(
             progress(1.0)
         return hit
     folder = _folder(src, model)
-    paths = {name: folder / f"{name}.flac" for name in STEM_NAMES}
+    paths = {name: folder / f"{name}.flac" for name in model.stems}
     try:  # before decoding: a missing extra must not cost a long decode first
         from demucs.api import LoadModelError, Separator
     except ImportError as exc:
@@ -121,11 +158,11 @@ def separate(
     tmp = Path(tempfile.mkdtemp(prefix=folder.name + ".", dir=folder.parent))
     try:
         with torch_models(offline):
-            separator = Separator(model=model, device="cpu", progress=False, callback=on_progress)
+            separator = Separator(model=model.name, device="cpu", progress=False, callback=on_progress)
             import torch
 
             _, separated = separator.separate_tensor(torch.from_numpy(stereo), RATE)
-        signals = {name: _as_array(separated[name]) for name in STEM_NAMES}
+        signals = {name: _as_array(separated[name]) for name in model.stems}
         gain = common_gain(signals)
         for name, signal in signals.items():
             # Lossless 24-bit FLAC: the stems are what the musician hears, quality is not traded.
@@ -137,17 +174,17 @@ def separate(
         if refusal is not None:  # Demucs wraps a refused download in LoadModelError
             raise StemsError(str(refusal)) from exc
         if isinstance(exc, LoadModelError):
-            raise StemsError(f"could not load the {model} model: {exc}") from exc
+            raise StemsError(f"could not load the {model.name} model: {exc}") from exc
         raise StemsError(f"separation failed: {exc}") from exc
     finally:  # also on Ctrl-C, the likely way to stop a long CPU separation
         shutil.rmtree(tmp, ignore_errors=True)
     if progress:
         progress(1.0)
-    return Stems(folder, paths, from_cache=False, gain=_read_gain(folder) or 1.0)
+    return Stems(folder, paths, from_cache=False, gain=_read_gain(folder) or 1.0, model=model)
 
 
 def _usable(folder: Path, paths: dict[str, Path]) -> bool:
-    """All four stems and a readable gain: an entry the cache can serve."""
+    """All the model's stems and a readable gain: an entry the cache can serve."""
     return _complete(paths) and _read_gain(folder) is not None
 
 

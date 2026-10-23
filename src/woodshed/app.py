@@ -539,13 +539,18 @@ class Library:
         with self.lock:
             self.reserved.discard(path.stem.lower())
 
-    def options(self, beats_per_bar: int = 4, sevenths: bool = False, bpm: float | None = None) -> Options:
+    def options(
+        self, beats_per_bar: int = 4, sevenths: bool = False, bpm: float | None = None, separation: str | None = None
+    ) -> Options:
         """The options of one song: the library's, with the ones given at upload."""
         if not 2 <= beats_per_bar <= 12 or (bpm is not None and not 30 <= bpm <= 300):
             raise ValueError("beats per bar 2 to 12, tempo 30 to 300 BPM")
+        if separation is not None and separation not in stems.MODELS:
+            raise ValueError("separation: four or six")
         return replace(
-            self.opts, out=None, open_page=False, title=None, beats_per_bar=beats_per_bar, sevenths=sevenths, bpm=bpm
-        )
+            self.opts, out=None, open_page=False, title=None, beats_per_bar=beats_per_bar, sevenths=sevenths, bpm=bpm,
+            separation=separation or self.opts.separation,
+        )  # fmt: skip
 
     @staticmethod
     def attempt(src: Path) -> Path:
@@ -602,6 +607,8 @@ class Library:
             given.get("sevenths") is True,
             float(bpm) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and 30 <= bpm <= 300 else None,
         )
+        # The page's own separation (absent: four, as every page built before six stems).
+        opts = replace(opts, separation=stems.model_of(given).key)
         return replace(opts, bar_phase=phase if type(phase) is int and 0 <= phase < per else None)
 
     def move_bars(self, data: Any, playing: Callable[[str], bool] | None = None) -> Job:
@@ -636,7 +643,7 @@ class Library:
         with_stems = given.get("stems") is True  # a page with parts keeps them, whatever the library runs with
         if with_stems and not stems_extra_installed():
             raise ValueError("the bar lines of this song need the stems extra")
-        if with_stems and stems.cached(src) is None:
+        if with_stems and stems.cached(src, stems.model_of(given)) is None:
             raise ValueError("the separated tracks are no longer in the cache: add the song again")
         with self.lock:
             if any(j.page == folder and j.status not in ("done", "failed") for j in self.jobs.values()):
@@ -1474,7 +1481,7 @@ class Handler(BaseHTTPRequestHandler):
 
         tempo = one("bpm")
         return self.server.library.options(
-            int(one("beats_per_bar") or 4), one("sevenths") == "1", float(tempo) if tempo else None
+            int(one("beats_per_bar") or 4), one("sevenths") == "1", float(tempo) if tempo else None, one("separation")
         )
 
     def _static(self, root: Path, rel: str) -> None:

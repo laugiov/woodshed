@@ -41,10 +41,9 @@ def install_full_length_demucs(monkeypatch: pytest.MonkeyPatch) -> None:
     install_fake_demucs(monkeypatch, {})
     monkeypatch.setitem(__import__("sys").modules, "beat_this", None)
 
-    def separate_tensor(self: object, wav: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        return wav, {
-            name: wav * share for name, share in (("drums", 0.3), ("bass", 0.3), ("other", 0.3), ("vocals", 0.1))
-        }
+    def separate_tensor(self: Any, wav: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        share = {"drums": 0.3, "bass": 0.3, "other": 0.3, "vocals": 0.1, "guitar": 0.2, "piano": 0.1}
+        return wav, {name: wav * share[name] for name in self.stems}  # the model's own stems
 
     monkeypatch.setattr(__import__("sys").modules["demucs.api"].Separator, "separate_tensor", separate_tensor)
 
@@ -111,7 +110,7 @@ def test_with_stems_the_mix_page_opens_first_then_the_full_page_replaces_it(
     first, final = seen
     assert first["pending"] is not None and first["pending"]["eta_seconds"] > 0
     assert [t["id"] for t in first["tracks"]] == ["mix"]
-    assert final["pending"] is None and len(final["tracks"]) == 9
+    assert final["pending"] is None and len(final["tracks"]) == 11  # six stems: guitar and keys apart
     assert len(opened) == 1  # opened once, on the first page; reloading shows the final one
     assert "reload" in capsys.readouterr().err.lower()
 

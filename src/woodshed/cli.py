@@ -47,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
         "-o", "--out", type=Path, metavar="DIR", help="where the page folders go (default: next to each song)"
     )
     parser.add_argument("--no-stems", action="store_true", help="analyse the mix only: no instrument tracks or parts")
+    parser.add_argument(
+        "--separation", choices=("four", "six"),
+        help="six: guitar and keys apart (default for a new page); four: together, the model of pages made before",
+    )  # fmt: skip
     parser.add_argument("--offline", action="store_true", help="never download models (they must be in the cache)")
     parser.add_argument("--no-open", action="store_true", help="do not open the page in the browser")
     parser.add_argument("--title", help="page title (one song only)")
@@ -114,6 +118,10 @@ def app_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-open", action="store_true", help="do not open the browser")
     parser.add_argument("--no-stems", action="store_true", help="analyse the mix only")
     parser.add_argument(
+        "--separation", choices=("four", "six"),
+        help="six: guitar and keys apart (default for a new page); four: together, the model of pages made before",
+    )  # fmt: skip
+    parser.add_argument(
         "--no-pitch", action="store_true", help="never render a song's tracks in another key (the singer's key)"
     )
     parser.add_argument("--offline", action="store_true", help="never download models")
@@ -147,7 +155,10 @@ def run_app(argv: Sequence[str]) -> int:
         parser.error("--cert and --key go together (or WOODSHED_CERT and WOODSHED_KEY)")
     from woodshed.run import Options
 
-    opts = Options(use_stems=not args.no_stems, offline=args.offline, open_page=False, pitch=not args.no_pitch)
+    opts = Options(
+        use_stems=not args.no_stems, offline=args.offline, open_page=False, pitch=not args.no_pitch,
+        separation=args.separation,
+    )  # fmt: skip
     try:
         serve(
             args.library, opts, args.host, args.port, open_browser=not args.no_open,
@@ -203,6 +214,7 @@ def run_pages(argv: Sequence[str]) -> int:
 
     opts = Options(
         out=args.out, use_stems=not args.no_stems, offline=args.offline, open_page=not args.no_open, title=args.title,
+        separation=args.separation,
         beats_per_bar=args.beats_per_bar, sevenths=args.sevenths, bpm=args.bpm, bar_phase=args.bar_phase,
     )  # fmt: skip
 
