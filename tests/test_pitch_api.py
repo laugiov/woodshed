@@ -136,10 +136,24 @@ def test_without_the_filter_the_program_renders(
     library_.interrupted()
 
 
+def test_the_library_says_what_stands_in_the_way(
+    server: app.AppServer, fake_ffmpeg: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An ffmpeg without the filter (Linux: rubberband-cli then), a program the system blocks (not the installer).
+    assert state(server)["ffmpeg"] is True
+    monkeypatch.setattr(pitch, "has_ffmpeg", lambda: False)
+    assert state(server)["ffmpeg"] is False
+    assert state(server)["blocked"] is False
+    monkeypatch.setattr(pitch, "blocked", lambda: True)
+    assert state(server)["blocked"] is True
+
+
 @pytest.mark.parametrize(("platform", "system"), [("darwin", "mac"), ("win32", "windows"), ("linux", "linux")])
 def test_the_library_says_its_system_for_the_one_step_that_adds_the_key(
     server: app.AppServer, monkeypatch: pytest.MonkeyPatch, platform: str, system: str
 ) -> None:
+    monkeypatch.setattr(pitch, "has_ffmpeg", lambda: True)  # no PATH lookup on a pretended system
+    monkeypatch.setattr(pitch, "blocked", lambda: False)
     monkeypatch.setattr(sys, "platform", platform)
     assert state(server)["system"] == system  # the page names the installer (Mac, Windows) or the package (Linux)
 

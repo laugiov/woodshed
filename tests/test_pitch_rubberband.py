@@ -156,6 +156,25 @@ def test_a_program_older_than_3_2_is_not_used(clean_lookup: Path, version: str, 
 @fake_only
 def test_nothing_found(clean_lookup: Path) -> None:
     assert pitch.tool() is None
+    assert not pitch.blocked()
+
+
+def blocked_program(folder: Path) -> Path:
+    """The installers' program, there but refused by the system (Smart App Control, an antivirus)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    program = folder / "rubberband"
+    program.write_text("#!/bin/sh\nexit 126\n", encoding="utf-8")
+    program.chmod(0o755)
+    return program
+
+
+@fake_only
+def test_a_program_in_the_tools_folder_that_cannot_run_is_said_blocked(clean_lookup: Path) -> None:
+    blocked_program(Path(os.environ["WOODSHED_TOOLS"]))
+    assert pitch.tool() is None and pitch.blocked()
+    fake_program(clean_lookup)  # another one on the PATH renders: nothing is blocked then
+    pitch.program.cache_clear()
+    assert pitch.tool() is not None and not pitch.blocked()
 
 
 # The render with a fake program.
@@ -213,7 +232,7 @@ def test_a_render_that_would_clip_is_refused(
 
 @fake_only
 def test_a_failed_program_says_why_without_this_computer_s_folders(
-    clean_lookup: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    clean_lookup: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     program = fake_program(Path(os.environ["WOODSHED_TOOLS"]))
     monkeypatch.setenv("FAKE_RB_FAIL", "1")
@@ -224,6 +243,9 @@ def test_a_failed_program_says_why_without_this_computer_s_folders(
         "jane" not in str(error.value) and "My Songs" not in str(error.value) and str(tmp_path) not in str(error.value)
     )
     assert not dst.exists() and leftovers(dst) == []
+    # The program's own reason goes to the server's console, its folders cut.
+    console = capsys.readouterr().err
+    assert "Failed to open input file" in console and "/srv/jane/" not in console and str(tmp_path) not in console
 
 
 @fake_only

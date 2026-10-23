@@ -839,6 +839,8 @@ class Library:
         # The system names the one step that adds the key when it cannot (the installer, or the package).
         system = {"darwin": "mac", "win32": "windows"}.get(sys.platform, "linux")
         state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch, "system": system}
+        # What stands in the way when it cannot: an ffmpeg without the filter, the program there but blocked.
+        state |= {"ffmpeg": pitch.has_ffmpeg(), "blocked": pitch.blocked()}
         return state | (
             self.renders.state(folder)
             if self.renders is not None

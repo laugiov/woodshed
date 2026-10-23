@@ -15,7 +15,7 @@
     const served = location.protocol === "http:" || location.protocol === "https:";
     const folder = decodeURIComponent(location.pathname.split("/").slice(-2)[0] || "");
     const originals = Object.fromEntries(song.tracks.map((t) => [t.id, t.file]));
-    let lib = null; // the library's answer: {can, off, system, keys, failed, eta}
+    let lib = null; // the library's answer: {can, off, system, ffmpeg, blocked, keys, failed, eta}
     let reason = served ? "asking" : "disk"; // why it cannot: disk, library (none or older), filter, off
     const asked = new Set(); // "up2|mix": asked by this page
     const broken = new Set(); // "up2|mix": a rendered file this browser could not play
@@ -245,11 +245,15 @@
         const why = {
           disk: W.t("The recording keeps its key. Open the page from the woodshed library to hear it in another key."),
           library: W.t("The recording keeps its key. Open the page from the woodshed library to hear it in another key."),
-          filter: {
-            mac: W.t("This library cannot change the key: run the woodshed installer again, then restart woodshed."),
-            windows: W.t("This library cannot change the key: run the woodshed installer again, then restart woodshed."),
-            linux: W.t("This library cannot change the key: install ffmpeg (sudo apt install ffmpeg), then restart woodshed."),
-          }[lib && lib.system] || W.t("This library cannot change the key: install the full ffmpeg (with Rubber Band), then restart woodshed."),
+          filter: lib && lib.blocked
+            ? W.t("Rubber Band is installed but this computer blocks it: allow woodshed's Rubber Band program in your security settings or antivirus, then restart woodshed.")
+            : {
+              mac: W.t("This library cannot change the key: run the woodshed installer again, then restart woodshed."),
+              windows: W.t("This library cannot change the key: run the woodshed installer again, then restart woodshed."),
+              linux: lib && lib.ffmpeg
+                ? W.t("This library cannot change the key: its ffmpeg has no Rubber Band filter. Install rubberband-cli 3.2 or newer (sudo apt install rubberband-cli), then restart woodshed.")
+                : W.t("This library cannot change the key: install ffmpeg (sudo apt install ffmpeg), then restart woodshed."),
+            }[lib && lib.system] || W.t("This library cannot change the key: install the full ffmpeg (with Rubber Band), then restart woodshed."),
           off: W.t("Changing the recording's key is off in this library."),
         }[st.why];
         return clear(box, h("p", { class: "part-note", "data-testid": "pitch-cannot" }, why));

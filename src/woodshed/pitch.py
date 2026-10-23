@@ -98,6 +98,17 @@ def program() -> str | None:
     return None
 
 
+def blocked() -> bool:
+    """The installers' program is in the tools folder but does not run (Smart App Control, an antivirus,
+    Gatekeeper) and nothing else renders: running the installer again would not help."""
+    name = "rubberband.exe" if sys.platform == "win32" else "rubberband"
+    return tool() is None and (tools_dir() / name).is_file()
+
+
+def has_ffmpeg() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
 def tool() -> tuple[str, str] | None:
     """What renders a key: ffmpeg with its filter (as before 017), else the Rubber Band program, else nothing."""
     if available():
@@ -211,6 +222,7 @@ def render(
             last = re.sub(r"(?:[A-Za-z]:)?[\\/]\S*[\\/]", "", last)  # file names, never this computer's folders
             if kind == "ffmpeg":
                 raise WoodshedError(f"ffmpeg could not change the key: {last}")
+            print(f"woodshed: Rubber Band could not change the key: {last}", file=sys.stderr)  # the console only
             raise WoodshedError("could not change the key")
         # The level back to the original's, never above the common ceiling: no clipped sample.
         source_rms, _ = _rms_and_peak(src)

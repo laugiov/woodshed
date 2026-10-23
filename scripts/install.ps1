@@ -51,9 +51,31 @@ function Get-Rubberband {
             finally { $stream.Dispose(); $sha.Dispose() }
             return $hex -eq $sum.ToLowerInvariant()
         }
+        # It runs (`-V`): Smart App Control or an antivirus may refuse the unsigned files. A .NET process, since
+        # Windows PowerShell stops on a native program's stderr under "Stop".
+        $runs = {
+            param($file)
+            try {
+                $info = [Diagnostics.ProcessStartInfo]::new()
+                $info.FileName = $file
+                $info.Arguments = "-V"
+                $info.UseShellExecute = $false
+                $info.CreateNoWindow = $true
+                $info.RedirectStandardInput = $true
+                $info.RedirectStandardOutput = $true
+                $info.RedirectStandardError = $true
+                $child = [Diagnostics.Process]::Start($info)
+                $child.StandardInput.Close()
+                $null = $child.StandardError.ReadToEnd()
+                $null = $child.StandardOutput.ReadToEnd()
+                if (-not $child.WaitForExit(20000)) { $child.Kill(); return $false }
+                return $child.ExitCode -eq 0
+            } catch { return $false }
+        }
         $exe = [IO.Path]::Combine($Tools, "rubberband.exe")
         $dll = [IO.Path]::Combine($Tools, "sndfile.dll")
-        if ((& $same $exe $ExeSha256) -and (& $same $dll $DllSha256)) { return $true }
+        # Skipped only when it is this program and it runs: one the system blocks is fetched (and said) again.
+        if ((& $same $exe $ExeSha256) -and (& $same $dll $DllSha256) -and (& $runs $exe)) { return $true }
         $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), "woodshed-rubberband-" + [Guid]::NewGuid().ToString("N"))
         [void][IO.Directory]::CreateDirectory($tmp)
         $zip = [IO.Path]::Combine($tmp, "rubberband.zip")
@@ -69,6 +91,10 @@ function Get-Rubberband {
         [IO.File]::Copy([IO.Path]::Combine($dir, "COPYING.txt"), [IO.Path]::Combine($Tools, "COPYING.txt"), $true)
         [IO.File]::Copy($from.dll, $dll, $true)
         [IO.File]::Copy($from.exe, $exe, $true)
+        if (-not (& $runs $exe)) {
+            Write-Host "The recording in your key is off: Rubber Band is installed but this computer blocks it. Allow it in Windows Security (or your antivirus), then restart woodshed."
+            return $false
+        }
         Write-Host "The recording in your key: Rubber Band is ready."
         return $true
     } catch {

@@ -27,6 +27,7 @@ INSTALL_PS1 = ROOT / "scripts" / "install.ps1"
 MAC = "rubberband-4.0.0-gpl-executable-macos"
 WINDOWS = "rubberband-4.0.0-gpl-executable-windows"
 OFF = "The recording in your key is off"
+BLOCKED = "Rubber Band is installed but this computer blocks it"
 
 
 def sha256(data: bytes) -> str:
@@ -51,9 +52,8 @@ def served(tmp_path: Path) -> Iterator[tuple[Path, str]]:
     server.server_close()
 
 
-def mac_archive(folder: Path) -> tuple[str, str, bytes]:
+def mac_archive(folder: Path, program: bytes = b"#!/bin/sh\necho 4.0.0 >&2\n") -> tuple[str, str, bytes]:
     """An archive laid out as breakfastquay.com's macOS one: its name, its checksum, the program's bytes."""
-    program = b"#!/bin/sh\necho 4.0.0 >&2\n"
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:bz2") as tar:
         for name, data in (("rubberband", program), ("COPYING", b"GPL"), ("rubberband-r3", b"other")):
@@ -112,6 +112,28 @@ def test_a_program_already_there_is_kept_and_a_wrong_one_replaced(tmp_path: Path
 
 
 @posix_only
+def test_a_program_there_that_cannot_run_is_fetched_again(tmp_path: Path, served: tuple[Path, str]) -> None:
+    # The right bytes are not enough to skip: it must run (here it lost its execute bit).
+    folder, url = served
+    name, checksum, program = mac_archive(folder)
+    assert get_rubberband(tmp_path, f"{url}/{name}", checksum, sha256(program))[0] == 0
+    (tmp_path / "tools" / "rubberband").chmod(0o644)
+    code, out = get_rubberband(tmp_path, f"{url}/{name}", checksum, sha256(program))
+    assert code == 0 and "Rubber Band is ready" in out, out
+    assert os.access(tmp_path / "tools" / "rubberband", os.X_OK)
+
+
+@posix_only
+def test_a_program_the_system_blocks_is_said_so(tmp_path: Path, served: tuple[Path, str]) -> None:
+    folder, url = served
+    name, checksum, program = mac_archive(folder, b"#!/bin/sh\nexit 126\n")  # refused, as Gatekeeper would
+    code, out = get_rubberband(tmp_path, f"{url}/{name}", checksum, sha256(program))
+    assert code == 0
+    assert BLOCKED in out and len([line for line in out.splitlines() if line.strip()]) == 1, out
+    assert (tmp_path / "tools" / "rubberband").read_bytes() == program  # in place: allowed later, it works
+
+
+@posix_only
 def test_the_pinned_release_is_the_official_one() -> None:
     script = shell_function("get_rubberband")
     assert f"https://breakfastquay.com/files/releases/{MAC}.tar.bz2" in script
@@ -141,76 +163,108 @@ def test_linux_does_not_fetch_it_and_names_the_package_that_has_the_filter(tmp_p
 
 # PowerShell (the Windows CI job; skipped where there is no PowerShell).
 
-POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
+# Users run Windows PowerShell 5.1 (the double-click installer); PowerShell 7 too when it is there.
+POWERSHELLS = [
+    found
+    for found in ((shutil.which("powershell"), shutil.which("pwsh")) if os.name == "nt" else (shutil.which("pwsh"),))
+    if found
+]
+each_powershell = pytest.mark.parametrize("shell", POWERSHELLS or [None], ids=lambda s: Path(s).stem if s else "none")
 
 
-def windows_zip(folder: Path) -> tuple[str, str, bytes, bytes]:
-    exe, dll = b"MZ fake rubberband", b"MZ fake sndfile"
+def windows_zip(folder: Path, exe: bytes = b"MZ fake rubberband", dll: bytes = b"MZ fake sndfile") -> tuple[str, str]:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as z:
         for name, data in (("rubberband.exe", exe), ("sndfile.dll", dll), ("COPYING.txt", b"GPL"), ("README.txt", b"")):
             z.writestr(f"{WINDOWS}/{name}", data)
     (folder / f"{WINDOWS}.zip").write_bytes(buffer.getvalue())
-    return f"{WINDOWS}.zip", sha256(buffer.getvalue()), exe, dll
+    return f"{WINDOWS}.zip", sha256(buffer.getvalue())
 
 
-def get_rubberband_ps(tmp_path: Path, url: str, checksum: str, exe: bytes, dll: bytes) -> tuple[str, str]:
-    assert POWERSHELL is not None
+def get_rubberband_ps(shell: str | None, tools: Path | str, url: str, checksum: str, exe: bytes, dll: bytes) -> str:
+    if shell is None:
+        pytest.skip("needs PowerShell")
     call = (
         f". '{INSTALL_PS1}'; "
-        f"$ok = Get-Rubberband -Tools '{tmp_path / 'tools'}' -Url '{url}' -Sha256 '{checksum}' "
+        f"$ok = Get-Rubberband -Tools '{tools}' -Url '{url}' -Sha256 '{checksum}' "
         f"-ExeSha256 '{sha256(exe)}' -DllSha256 '{sha256(dll)}'; Write-Output \"result=$ok\""
     )
     proc = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", call],
+        [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", call],
         capture_output=True, text=True, check=False, timeout=120,
     )  # fmt: skip
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    return proc.stdout, proc.stderr
+    return proc.stdout
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="needs PowerShell")
-def test_the_windows_download_is_checked_and_put_in_the_tools_folder(tmp_path: Path, served: tuple[Path, str]) -> None:
+def real_windows_program() -> tuple[bytes, bytes] | None:
+    """The real rubberband.exe and sndfile.dll, when the CI fetched them (WOODSHED_TOOLS): a program that runs."""
+    tools = Path(os.environ.get("WOODSHED_TOOLS", "-"))
+    if os.name != "nt" or not (tools / "rubberband.exe").is_file() or not (tools / "sndfile.dll").is_file():
+        return None
+    return (tools / "rubberband.exe").read_bytes(), (tools / "sndfile.dll").read_bytes()
+
+
+@each_powershell
+def test_the_windows_download_is_checked_kept_and_skipped(
+    tmp_path: Path, served: tuple[Path, str], shell: str | None
+) -> None:
+    real = real_windows_program()
+    if real is None:
+        pytest.skip("needs the real program (the Windows CI fetches it)")
     folder, url = served
-    name, checksum, exe, dll = windows_zip(folder)
-    out, _ = get_rubberband_ps(tmp_path, f"{url}/{name}", checksum, exe, dll)
-    assert "result=True" in out, out
+    exe, dll = real
+    name, checksum = windows_zip(folder, exe, dll)
+    out = get_rubberband_ps(shell, tmp_path / "tools", f"{url}/{name}", checksum, exe, dll)
+    assert "result=True" in out and "Rubber Band is ready" in out, out
     tools = tmp_path / "tools"
     assert (tools / "rubberband.exe").read_bytes() == exe and (tools / "sndfile.dll").read_bytes() == dll
     assert (tools / "COPYING.txt").read_bytes() == b"GPL"
-    (folder / name).unlink()  # already there: a skip, no download
-    out, _ = get_rubberband_ps(tmp_path, f"{url}/{name}", checksum, exe, dll)
-    assert "result=True" in out and OFF not in out, out
+    (folder / name).unlink()  # already there and it runs: a skip, no download
+    out = get_rubberband_ps(shell, tmp_path / "tools", f"{url}/{name}", checksum, exe, dll)
+    assert "result=True" in out and "Rubber Band" not in out, out
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="needs PowerShell")
-def test_a_tampered_windows_download_is_refused(tmp_path: Path, served: tuple[Path, str]) -> None:
+@each_powershell
+def test_a_windows_program_that_cannot_run_is_said_blocked_and_never_skipped(
+    tmp_path: Path, served: tuple[Path, str], shell: str | None
+) -> None:
     folder, url = served
-    name, checksum, exe, dll = windows_zip(folder)
+    exe, dll = b"MZ fake rubberband", b"MZ fake sndfile"  # the right bytes, but no program Windows will start
+    name, checksum = windows_zip(folder, exe, dll)
+    out = get_rubberband_ps(shell, tmp_path / "tools", f"{url}/{name}", checksum, exe, dll)
+    assert "result=False" in out and BLOCKED in out, out
+    assert (tmp_path / "tools" / "rubberband.exe").read_bytes() == exe
+    (folder / name).unlink()  # the same bytes there: not a skip, since it does not run
+    out = get_rubberband_ps(shell, tmp_path / "tools", f"{url}/{name}", checksum, exe, dll)
+    assert "result=False" in out and OFF in out, out
+
+
+@each_powershell
+def test_a_tampered_windows_download_is_refused(tmp_path: Path, served: tuple[Path, str], shell: str | None) -> None:
+    folder, url = served
+    exe, dll = b"MZ fake rubberband", b"MZ fake sndfile"
+    name, checksum = windows_zip(folder, exe, dll)
     with open(folder / name, "ab") as archive:
         archive.write(b"\0")
-    out, _ = get_rubberband_ps(tmp_path, f"{url}/{name}", checksum, exe, dll)
+    out = get_rubberband_ps(shell, tmp_path / "tools", f"{url}/{name}", checksum, exe, dll)
     assert "result=False" in out and OFF in out, out
     assert not (tmp_path / "tools" / "rubberband.exe").exists()
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="needs PowerShell")
-def test_whatever_goes_wrong_the_windows_function_says_one_line_and_returns(tmp_path: Path) -> None:
-    assert POWERSHELL is not None
-    bad = f"{tmp_path}{os.sep}a|b"  # a folder name Windows refuses: the first file call throws
-    call = f". '{INSTALL_PS1}'; $ok = Get-Rubberband -Tools '{bad}' -Url 'http://127.0.0.1:9/x'; "
-    call += 'Write-Output "result=$ok"'
-    proc = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", call],
-        capture_output=True, text=True, check=False, timeout=120,
-    )  # fmt: skip
-    assert proc.returncode == 0 and "result=False" in proc.stdout and OFF in proc.stdout, proc.stdout + proc.stderr
+@each_powershell
+def test_whatever_goes_wrong_the_windows_function_says_one_line_and_returns(tmp_path: Path, shell: str | None) -> None:
+    bad = f"{tmp_path}{os.sep}a|b"  # a folder name Windows refuses
+    out = get_rubberband_ps(shell, bad, "http://127.0.0.1:9/x", "0" * 64, b"", b"")
+    assert "result=False" in out and OFF in out, out
 
 
 def test_the_windows_install_never_stops_on_rubber_band() -> None:
     # Windows PowerShell 5.1 started from PowerShell 7 finds no script-defined cmdlet (Get-FileHash stopped an
     # install that way): .NET only, and the call itself in a try whose catch says one line.
     text = INSTALL_PS1.read_text(encoding="utf-8")
+    function = text[text.index("function Get-Rubberband") : text.index("\n}\n", text.index("function Get-Rubberband"))]
+    assert "New-Object" not in function and "Out-String" not in function
     for cmdlet in ("Get-FileHash", "Expand-Archive", "ForEach-Object", "Select-Object", "Get-ChildItem"):
         assert cmdlet not in text, cmdlet
     body = text[text.index("function Get-Rubberband") :]

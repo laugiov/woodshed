@@ -477,6 +477,8 @@
     "This library cannot change the key: install the full ffmpeg (with Rubber Band), then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : installe le ffmpeg complet (avec Rubber Band), puis relance woodshed.",
     "This library cannot change the key: run the woodshed installer again, then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : lance à nouveau l'installateur de woodshed, puis relance woodshed.",
     "This library cannot change the key: install ffmpeg (sudo apt install ffmpeg), then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : installe ffmpeg (sudo apt install ffmpeg), puis relance woodshed.",
+    "This library cannot change the key: its ffmpeg has no Rubber Band filter. Install rubberband-cli 3.2 or newer (sudo apt install rubberband-cli), then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : son ffmpeg n'a pas le filtre Rubber Band. Installe rubberband-cli 3.2 ou plus récent (sudo apt install rubberband-cli), puis relance woodshed.",
+    "Rubber Band is installed but this computer blocks it: allow woodshed's Rubber Band program in your security settings or antivirus, then restart woodshed.": "Rubber Band est installé mais cet ordinateur le bloque : autorise le programme Rubber Band de woodshed dans tes réglages de sécurité ou ton antivirus, puis relance woodshed.",
     "Changing the recording's key is off in this library.": "Le changement de tonalité de l'enregistrement est désactivé dans cette bibliothèque.",
     "The recording plays {shift}": "L'enregistrement joue {shift}",
     "Chords in {key}, the recording too.": "Accords en {key}, l'enregistrement aussi.",

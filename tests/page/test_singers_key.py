@@ -145,14 +145,18 @@ def test_where_the_recording_cannot_change_key_it_says_why(
     monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
     problems: list[str] = []
     monkeypatch.setattr(pitch, "program", lambda: None)  # no Rubber Band program either (spec 017)
-    for options, env, platform, sentence in (
-        ({"pitch": False}, "1", "linux", "is off in this library"),
-        ({}, "0", "linux", "install ffmpeg (sudo apt install ffmpeg), then restart woodshed"),
-        ({}, "0", "darwin", "run the woodshed installer again, then restart woodshed"),
+    for options, env, platform, ffmpeg, blocked, sentence in (
+        ({"pitch": False}, "1", "linux", True, False, "is off in this library"),
+        ({}, "0", "linux", False, False, "install ffmpeg (sudo apt install ffmpeg), then restart woodshed"),
+        ({}, "0", "linux", True, False, "Install rubberband-cli 3.2 or newer (sudo apt install rubberband-cli)"),
+        ({}, "0", "darwin", True, False, "run the woodshed installer again, then restart woodshed"),
+        ({}, "0", "darwin", False, True, "Rubber Band is installed but this computer blocks it"),
     ):
         monkeypatch.setenv("FAKE_RUBBERBAND", env)
+        monkeypatch.setattr(pitch, "has_ffmpeg", lambda ffmpeg=ffmpeg: ffmpeg)  # an ffmpeg without the filter
+        monkeypatch.setattr(pitch, "blocked", lambda blocked=blocked: blocked)  # the program there, refused
         monkeypatch.setattr(sys, "platform", platform)  # the one step named for this system
-        srv = serve(tmp_path / env / platform / str(len(options)), pages_root, **options)
+        srv = serve(tmp_path / env / platform / f"{ffmpeg}{blocked}{len(options)}", pages_root, **options)
         try:
             page = opened(browser, srv.url + "pop.woodshed/index.html", problems)
             page.evaluate("Woodshed.app.transposeTo(2)")

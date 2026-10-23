@@ -78,7 +78,9 @@ get_rubberband() {
     rb_bin_sum="${3:-bffe8a37f204958352e768fc4a751d3dbce18e3b42c2a3427a80498e7d8cee79}"
     rb_tools="${WOODSHED_TOOLS:-$HOME/Library/Application Support/woodshed/tools}"
     if command -v shasum >/dev/null 2>&1; then rb_hash="shasum -a 256"; else rb_hash="sha256sum"; fi
-    if [ -f "$rb_tools/rubberband" ] && [ "$($rb_hash "$rb_tools/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ]; then
+    # Skipped only when it is this program and it runs: one the system blocks is fetched (and said) again.
+    if [ -f "$rb_tools/rubberband" ] && [ "$($rb_hash "$rb_tools/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ] \
+        && "$rb_tools/rubberband" -V >/dev/null 2>&1; then
         return 0
     fi
     rb_tmp="$(mktemp -d)" || rb_tmp=""
@@ -93,7 +95,11 @@ get_rubberband() {
         && cp "$rb_dir/rubberband" "$rb_tools/.rubberband.part" \
         && chmod 755 "$rb_tools/.rubberband.part" \
         && mv -f "$rb_tools/.rubberband.part" "$rb_tools/rubberband"; then
-        printf '%s\n' "The recording in your key: Rubber Band is ready."
+        if "$rb_tools/rubberband" -V >/dev/null 2>&1; then
+            printf '%s\n' "The recording in your key: Rubber Band is ready."
+        else
+            printf '%s\n' "The recording in your key is off: Rubber Band is installed but this computer blocks it. Allow it in your security settings, then restart woodshed."
+        fi
     else
         rm -f "$rb_tools/.rubberband.part"
         printf '%s\n' "The recording in your key is off: Rubber Band could not be downloaded. Run the installer again later to add it."
