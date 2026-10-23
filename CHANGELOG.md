@@ -10,8 +10,16 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
 ### Added
 
+- **Uninstall woodshed** next to woodshed: in Applications on a Mac, the Start menu and Settings >
+  Apps on Windows, the menu on Linux. It asks once, removes woodshed and what it downloaded (about
+  1 GB), and keeps your songs.
+- A guide for each musician next to a short README: install, singers, parts, phones, editing,
+  exports, how it works, and what the app's messages mean. The first-install warnings of a Mac and
+  of Windows are drawn step by step.
 - A key change is said where the band meets it. On stage, two bars before it: "Key change next bar:
   D♭ major", and the top line always says the key of the bar you are in.
 - The guitar's shapes come grouped by key ("From bar 17: D♭ major"), with a word for the hands when
@@ -165,7 +173,8 @@ corrections and set list stay where they are.
   print for the music stand. A song's folder can be zipped and sent: it opens offline.
 - English or French, dark or light.
 
-[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/laugiov/woodshed/releases/tag/v0.5.0
 [0.4.0]: https://github.com/laugiov/woodshed/releases/tag/v0.4.0
 [0.3.0]: https://github.com/laugiov/woodshed/releases/tag/v0.3.0
 [0.2.0]: https://github.com/laugiov/woodshed/releases/tag/v0.2.0

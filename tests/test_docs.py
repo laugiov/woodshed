@@ -59,7 +59,10 @@ def test_the_changelog_speaks_to_musicians() -> None:
     assert "\N{EM DASH}" not in text
     # No internal references: spec or lot numbers, pull requests, issues.
     assert re.findall(r"\b(?:spec|lot|PR) ?\d+|#\d+", text, re.I) == []
-    for body in re.split(r"^## .+$", text, flags=re.M)[1:]:
+    heads = re.findall(r"^## (.+)$", text, flags=re.M)
+    for head, body in zip(heads, re.split(r"^## .+$", text, flags=re.M)[1:], strict=True):
+        if head == "[Unreleased]" and not body.strip():
+            continue  # right after a release: nothing yet
         assert re.search(r"^- ", body, re.M), "each section says what changed, in bullets"
 
 
