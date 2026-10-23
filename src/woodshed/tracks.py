@@ -9,6 +9,7 @@ would not fit comfortably in memory at once.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +58,40 @@ def _stem_block(handle: sf.SoundFile, start: int, length: int, gain: float) -> S
     return np.asarray(block[:2], dtype=np.float32)
 
 
+def heard_instruments(stems: Stems) -> frozenset[str]:
+    """The guitar and keys a six-stem separation heard (parts.heard), judged once on the stem files at their
+    original level: the page's tracks and its parts follow the same answer. Four stems: both, on one track."""
+    if stems.model is FOUR:
+        return frozenset({"guitar", "keys"})
+    stamp = tuple((str(p), p.stat().st_mtime_ns) for p in sorted(stems.paths.values()))
+    return _heard(stamp, stems.gain)
+
+
+@cache
+def _heard(stamp: tuple[tuple[str, int], ...], gain: float) -> frozenset[str]:
+    handles = {Path(p).stem: sf.SoundFile(p) for p, _ in stamp}
+    try:
+        n = max(f.frames for f in handles.values())
+        rate = next(iter(handles.values())).samplerate
+
+        def part(name: str, start: int, length: int) -> Stereo:
+            if name == "keys":
+                return sum(
+                    (_stem_block(handles[k], start, length, gain) for k in KEYS), np.zeros((2, length), np.float32)
+                )
+            return _stem_block(handles[name], start, length, gain)
+
+        levels = {
+            name: np.concatenate([window_rms(part(name, s, min(BLOCK, n - s)), rate) for s in range(0, n, BLOCK)])
+            for name in ("drums", "bass", "vocals", "guitar", "keys")
+        }
+    finally:
+        for f in handles.values():
+            f.close()
+    loudest = max(float(np.sqrt(np.mean(w**2))) if w.size else 0.0 for w in levels.values())
+    return frozenset(name for name in ("guitar", "keys") if heard(levels[name], loudest))
+
+
 def write_tracks(source: Path, stems: Stems | None, folder: Path) -> list[Track]:
     """Write every track into `folder/audio/`, and return the list the page offers. On a six-stem page a guitar
     or keys that is not heard gets no track (the page says so)."""
@@ -84,14 +119,9 @@ def write_tracks(source: Path, stems: Stems | None, folder: Path) -> list[Track]
             return stem if kind == "solo" else mix[:, start : start + length] - stem
 
         names = instruments(stems.model) if stems is not None else ()
-        if stems is not None and stems.model is not FOUR:
-            # Heard or not, judged at the original level on what each instrument plays (parts.heard).
-            levels = {
-                name: np.concatenate([window_rms(part(name, s, min(BLOCK, n - s)), RATE) for s in range(0, n, BLOCK)])
-                for name in names
-            }
-            loudest = max(float(np.sqrt(np.mean(w**2))) if w.size else 0.0 for w in levels.values())
-            names = tuple(name for name in names if name not in ("guitar", "keys") or heard(levels[name], loudest))
+        if stems is not None:  # an instrument not heard gets no track (the page says so)
+            found = heard_instruments(stems)
+            names = tuple(name for name in names if name not in ("guitar", "keys") or name in found)
         tracks = track_list(names)
         peak = max(
             float(np.max(np.abs(block_of(t.id, start)), initial=0.0)) for t in tracks for start in range(0, n, BLOCK)

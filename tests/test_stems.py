@@ -107,8 +107,11 @@ def test_progress_is_reported_up_to_one(monkeypatch: pytest.MonkeyPatch, song: P
 
 def test_offline_mode_refuses_to_download(monkeypatch: pytest.MonkeyPatch, song: Path, cache: Path) -> None:
     torch_state = install_fake_demucs(monkeypatch, {})
-    with pytest.raises(StemsError, match="--offline"):
+    with pytest.raises(StemsError, match="--offline") as refused:
         stems.separate(song, stems.FOUR, offline=True)
+    assert "--separation four" not in str(refused.value)
+    with pytest.raises(StemsError, match="--separation four"):  # the six-stem model missing: the way out said
+        stems.separate(song, stems.SIX, offline=True)
     assert torch_state["downloads"] == []
     assert not any(cache.rglob("*.flac")) and list((cache / "stems").iterdir()) == []  # nothing half-written
 

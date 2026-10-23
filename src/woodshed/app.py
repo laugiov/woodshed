@@ -518,7 +518,9 @@ class Library:
                 del self.jobs[key]
             jobs = [asdict(j) for j in self.jobs.values()]
         separates = self.opts.use_stems and stems_extra_installed()
-        return {"songs": self.pages(), "jobs": jobs, "separates": separates}
+        # What the library separates new songs with: the home page's "Guitar and keys apart" starts there.
+        separation = self.opts.separation or stems.DEFAULT.key
+        return {"songs": self.pages(), "jobs": jobs, "separates": separates, "separation": separation}
 
     def reserve(self, name: str) -> Path:
         """Where an upload goes: a safe name, unique by its stem (one page per stem), reserved
@@ -608,8 +610,10 @@ class Library:
             given.get("sevenths") is True,
             float(bpm) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and 30 <= bpm <= 300 else None,
         )
-        # The page's own separation (absent: four, as every page built before six stems).
-        opts = replace(opts, separation=stems.model_of(given).key)
+        # The separation of a page that has its instruments' tracks (absent: four, as every page built before six
+        # stems); a page without them is separated as a new one.
+        if given.get("stems") is True:
+            opts = replace(opts, separation=stems.model_of(given).key)
         return replace(opts, bar_phase=phase if type(phase) is int and 0 <= phase < per else None)
 
     def move_bars(self, data: Any, playing: Callable[[str], bool] | None = None) -> Job:

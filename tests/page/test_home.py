@@ -81,7 +81,7 @@ def test_guitar_and_keys_apart_is_an_option_when_the_library_separates(
     page.reload()
     page.get_by_test_id("drop").locator("summary").click()
     six = page.get_by_test_id("opt-six")
-    expect(six).to_be_checked()
+    expect(six).to_be_checked()  # the library separates new songs into six
     sent: list[str] = []
 
     def answer(route: Any) -> None:  # the upload is only looked at: nothing is separated
@@ -99,7 +99,11 @@ def test_guitar_and_keys_apart_is_an_option_when_the_library_separates(
             if len(sent) == count:
                 break
             page.wait_for_timeout(50)
-    assert len(sent) == 2 and "separation" not in sent[0] and "separation=four" in sent[1]
+    assert len(sent) == 2 and "separation=six" in sent[0] and "separation=four" in sent[1]
+    server.library.opts = replace(server.library.opts, separation="four")  # woodshed app --separation four
+    page.reload()
+    page.get_by_test_id("drop").locator("summary").click()
+    expect(six).not_to_be_checked()
 
 
 def test_a_title_cannot_inject_markup_in_the_library(page: Page, server: app.AppServer, tmp_path: Path) -> None:

@@ -112,15 +112,31 @@ def test_four_stems_keep_their_nine_tracks(tmp_path: Path) -> None:
     assert ids(found) == sorted(["mix", *(f"minus-{i}" for i in instruments), *(f"solo-{i}" for i in instruments)])
 
 
-@pytest.mark.parametrize("on_guitar", [True, False])
-def test_the_strumming_comes_from_the_guitar_and_the_voicing_from_the_keys(tmp_path: Path, on_guitar: bool) -> None:
+@pytest.mark.parametrize(
+    ("guitar", "keys"),
+    [
+        (True, False),  # the chords only on the guitar: a strumming grid, no keys voicing
+        (False, True),  # only on the keys: their voicing, and the strumming read from them
+        (False, False),  # neither: nothing read
+    ],
+)
+def test_the_strumming_comes_from_the_guitar_and_the_voicing_from_the_keys(
+    tmp_path: Path, guitar: bool, keys: bool
+) -> None:
     wav = synth.write("pop", tmp_path).wav
-    song = analysis.analyze(wav, use_stems=True, stems_result=six_stems(tmp_path, keys=not on_guitar, guitar=on_guitar))
+    song = analysis.analyze(wav, use_stems=True, stems_result=six_stems(tmp_path, keys=keys, guitar=guitar))
     assert song.parts is not None
-    comp_found = any(song.parts.comp)
-    voicing_found = any(song.parts.voicings)
-    assert comp_found is on_guitar  # the chords only on the guitar: a strumming grid, no keys voicing
-    assert voicing_found is not on_guitar
+    assert any(song.parts.comp) is (guitar or keys)
+    assert any(song.parts.voicings) is keys
+
+
+def test_the_parts_and_the_tracks_take_the_same_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wav = synth.write("pop", tmp_path).wav
+    separated = six_stems(tmp_path, keys=True)
+    monkeypatch.setattr(tracks, "heard_instruments", lambda s: frozenset({"guitar"}))  # one place decides
+    song = analysis.analyze(wav, use_stems=True, stems_result=separated)
+    assert song.parts is not None and not any(song.parts.voicings)
+    assert "solo-keys" not in ids(tracks.write_tracks(wav, separated, tmp_path / "page"))
 
 
 def test_a_synth_left_in_other_is_the_keys(tmp_path: Path) -> None:
@@ -133,9 +149,19 @@ def test_a_synth_left_in_other_is_the_keys(tmp_path: Path) -> None:
 
 
 def test_four_stem_parts_are_unchanged(tmp_path: Path) -> None:
+    from woodshed import audio
+
     wav = synth.write("pop", tmp_path).wav
-    song = analysis.analyze(wav, use_stems=True, stems_result=fake_stems("pop", tmp_path))
+    separated = fake_stems("pop", tmp_path)
+    song = analysis.analyze(wav, use_stems=True, stems_result=separated)
     assert song.parts is not None and any(song.parts.comp) and any(song.parts.voicings)
+    # Both read the one "other" track, never judged heard or not: as before six stems.
+    other = audio.load(separated.paths["other"])
+    times = np.asarray(song.beats)
+    shift = song.parts.grid_shift
+    grid = parts.Grid.from_beats(times + shift, song.structure.first_beat, 4, n_bars=len(song.structure.bars))
+    assert song.parts.comp == parts.comp_rhythm(other, grid)
+    assert song.parts.voicings == parts.voicings(other, grid)
 
 
 # The separation travels with the page (spec 010, R1b): absent means four, for every page built before.
@@ -170,6 +196,40 @@ def test_a_new_page_is_separated_with_six_and_says_so(tmp_path: Path, monkeypatc
     assert json.loads((out / "pop.woodshed" / MANIFEST).read_text(encoding="utf-8"))["settings"]["separation"] == "six"
 
 
+@pytest.mark.parametrize("change", ["mix only", "another recording"])
+def test_a_page_without_its_tracks_or_from_another_recording_is_separated_as_new(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    from woodshed import run
+    from woodshed.run import Options, Reporter, first_pass
+
+    monkeypatch.setattr(run, "stems_extra_installed", lambda: True)
+    four = fake_stems("pop", tmp_path)
+    monkeypatch.setattr(stems, "cached", lambda src, model: four if model is stems.FOUR else None)
+    wav = synth.write("pop", tmp_path).wav
+    out = tmp_path / "lib"
+    first = Options(out=out, open_page=False, separation="four", use_stems=change != "mix only")
+    first_pass(wav, first, Reporter(), out)
+    if change == "another recording":
+        other = synth.write("waltz", tmp_path / "other").wav
+        wav = wav.with_name("pop.wav")
+        wav.write_bytes(other.read_bytes())
+    asked: list[stems.Model] = []
+    monkeypatch.setattr(stems, "cached", lambda src, model: asked.append(model))
+    first_pass(wav, Options(out=out, open_page=False), Reporter(), out)
+    assert asked == [stems.SIX]
+
+
+def test_downloaded_ignores_a_download_cut_short(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
+    hub = tmp_path / "cache" / "models" / "checkpoints"
+    hub.mkdir(parents=True)
+    (hub / f"{stems.SIX.signature}.th.1f2e.partial").write_bytes(b"x")
+    assert not stems.downloaded(stems.SIX)
+    (hub / f"{stems.SIX.signature}.th").write_bytes(b"x")
+    assert stems.downloaded(stems.SIX)
+
+
 def test_offline_without_the_six_stem_weights_keeps_four(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from woodshed import run
     from woodshed.run import Options, Reporter
@@ -178,9 +238,10 @@ def test_offline_without_the_six_stem_weights_keeps_four(tmp_path: Path, monkeyp
     said: list[str] = []
     report = Reporter()
     monkeypatch.setattr(report, "say", said.append)
-    model = run._separation(tmp_path / "new.woodshed", Options(offline=True), report)
+    song = tmp_path / "new.wav"
+    model = run._separation(song, tmp_path / "new.woodshed", Options(offline=True), report)
     assert model is stems.FOUR and any("--separation four" in line for line in said)
-    assert run._separation(tmp_path / "new.woodshed", Options(), report) is stems.SIX  # online: six
+    assert run._separation(song, tmp_path / "new.woodshed", Options(), report) is stems.SIX  # online: six
 
 
 def test_the_words_find_the_stems_of_the_page_s_own_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,8 +264,10 @@ def test_the_library_keeps_a_page_s_separation(tmp_path: Path) -> None:
     from woodshed.run import Options
 
     lib = app.Library(tmp_path / "library", Options(use_stems=False, open_page=False))
-    assert lib._options_of({}).separation == "four"  # resumed or bar lines moved: as it was built
-    assert lib._options_of({"separation": "six"}).separation == "six"
+    assert lib._options_of({"stems": True}).separation == "four"  # resumed or bar lines moved: as it was built
+    assert lib._options_of({"stems": True, "separation": "six"}).separation == "six"
+    assert lib._options_of({}).separation is None  # no tracks yet (resumed, mix only): separated as a new page
+    assert lib._options_of({"stems": False}).separation is None
     assert lib.options(separation="four").separation == "four"
     with pytest.raises(ValueError):
         lib.options(separation="five")

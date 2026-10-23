@@ -182,15 +182,19 @@
       ];
     }
 
+    // The strumming: from the guitar, else from the keys (a six-stem page with no guitar heard).
     function comping() {
       if (!parts) return null;
-      return [
-        h("div", { class: "label subhead" }, W.t("Rhythm: when the chords hit")),
-        rhythmGrid(W.t("Chords"), parts.comp, song.per, "compGrid"),
-        h("p", { class: "src-note" }, app.sharedStem
-          ? W.t("From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits: I.hitsText(parts.comp, song.per) })
-          : W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits: I.hitsText(parts.comp, song.per) })),
-      ];
+      const head = h("div", { class: "label subhead" }, W.t("Rhythm: when the chords hit"));
+      const from = app.sharedStem ? "shared" : !app.notHeard("guitar") ? "guitar" : !app.notHeard("piano") ? "keys" : "";
+      if (!from) return [head, h("p", { class: "src-note", "data-testid": "comp-not-heard" }, W.t("No guitar or keys heard in this song."))];
+      const hits = I.hitsText(parts.comp, song.per);
+      const said = {
+        shared: W.t("From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
+        guitar: W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
+        keys: W.t("From the isolated keys track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
+      }[from];
+      return [head, rhythmGrid(W.t("Chords"), parts.comp, song.per, "compGrid"), h("p", { class: "src-note" }, said)];
     }
 
     // The tab of one bar, two beats a line: it never scrolls sideways, on a phone or in the side panel.
@@ -296,7 +300,9 @@
           ),
         ),
       ];
-      if (parts) {
+      if (parts && app.notHeard("piano")) {
+        out.push(h("div", { class: "label subhead" }, W.t("On the record, this bar")), h("p", { class: "src-note", "data-testid": "voicing-not-heard" }, W.t("No keys heard in this song.")), comping());
+      } else if (parts) {
         const pcs = parts.voicings[curBar(s)] || [];
         out.push(
           h("div", { class: "label subhead" }, W.t("On the record, this bar")),
@@ -309,7 +315,7 @@
           ),
           h("p", { class: "src-note" }, app.sharedStem
             ? W.t("Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.")
-            : W.t("Upper notes heard on the isolated keys track. The keyboard often leaves the root to the bass.")),
+            : W.t("Upper notes heard on the isolated keys track: the piano, and what is not drums, bass, voice or guitar (synths, organ, strings). The keyboard often leaves the root to the bass.")),
           comping(),
         );
       }

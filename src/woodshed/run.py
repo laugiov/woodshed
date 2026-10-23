@@ -107,15 +107,16 @@ def _analyze(src: Path, opts: Options, report: Reporter, use_stems: bool, separa
 MANIFEST = "woodshed.json"  # in each page folder: what the page was built from, to skip it next time
 
 
-def _separation(page: Path, opts: Options, report: Reporter | None = None) -> stems.Model:
-    """The model a page is separated with: the one asked for, else the page's own (a page built before six stems
-    keeps four: no rebuild, no new separation), else six for a new page. Offline without the six-stem weights but
-    with the four-stem ones: four, said once."""
+def _separation(src: Path, page: Path, opts: Options, report: Reporter | None = None) -> stems.Model:
+    """The model a page is separated with: the one asked for, else the page's own when it was separated from
+    this recording (a page built before six stems keeps four: no rebuild, no new separation), else six for a new
+    page. Offline without the six-stem weights but with the four-stem ones: four, said once."""
     if opts.separation in stems.MODELS:
         return stems.MODELS[opts.separation]
     try:
         given = json.loads((page / MANIFEST).read_text(encoding="utf-8"))["settings"]
-        return stems.model_of(given if isinstance(given, dict) else {})
+        if given["stems"] is True and given["source"] == stems.fingerprint(src):
+            return stems.model_of(given)
     except (OSError, ValueError, KeyError, TypeError):
         pass
     if opts.offline and not stems.downloaded(stems.DEFAULT) and stems.downloaded(stems.FOUR):
@@ -297,7 +298,7 @@ def first_pass(
     if opts.use_stems and not use_stems:
         report.say("  note: " + EXTRA_HINT)
     page = out / folder_name(opts.title)
-    model = _separation(page, opts, report)
+    model = _separation(src, page, opts, report)
     settings = _settings(src, opts, use_stems, model)
     _note_older_pages(out, page, settings["source"], report)
     known = up_to_date(page, settings)

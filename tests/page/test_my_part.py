@@ -321,3 +321,26 @@ def test_six_stem_files_are_named_for_the_instrument(browser: Browser, pages_roo
         "guitar": ["guitar alone.flac", "without guitar.flac"],
         "piano": ["keys alone.flac", "without keys.flac"],
     }
+
+
+def test_with_no_guitar_the_strumming_is_read_from_the_keys(open_page: Any) -> None:
+    o = open_page("pop", six=True, guitar=False)
+    desk = o.page.get_by_test_id("desk")
+    o.js("Woodshed.app.setInstrument('guitar')")
+    expect(o.page.get_by_test_id("part-not-heard")).to_have_text("No guitar heard in this song: the full mix plays.")
+    expect(desk).to_contain_text("From the isolated keys track: chords on")
+    o.js("Woodshed.app.setInstrument('piano')")
+    expect(o.page.get_by_test_id("part-alone")).to_be_visible()
+    expect(desk).to_contain_text("Upper notes heard on the isolated keys track: the piano")
+
+
+def test_with_neither_guitar_nor_keys_the_panels_say_so(open_page: Any) -> None:
+    o = open_page("pop", six=False, guitar=False)
+    desk = o.page.get_by_test_id("desk")
+    o.js("Woodshed.app.setInstrument('piano')")
+    expect(desk.get_by_test_id("voicing-not-heard")).to_have_text("No keys heard in this song.")
+    expect(desk.get_by_test_id("comp-not-heard")).to_have_text("No guitar or keys heard in this song.")
+    expect(desk.get_by_test_id("hear-voicing")).to_have_count(0)
+    o.js("Woodshed.app.setInstrument('guitar')")
+    expect(desk.get_by_test_id("comp-not-heard")).to_be_visible()
+    expect(desk).not_to_contain_text("chords on .")

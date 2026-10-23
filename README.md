@@ -87,7 +87,8 @@ the page's common gain, not the original file's level.
 (the piano, plus synths and organ, which land on no other track). A page holds 11 tracks instead of 9, about
 20 % more disk. To keep guitars and keys on one track, as pages made before 0.4.0 do, uncheck **Guitar and
 keys apart** under **Options for the next songs** (from the command line: `--separation four`). A page keeps
-the separation it was made with.
+the separation it was made with. The separated stems of a song take about 50 % more room in the cache;
+`woodshed cache --clear` frees it, the old four-instrument stems included.
 
 **For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
 words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,

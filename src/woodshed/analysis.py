@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from woodshed import __version__, audio, beats, meter, parts, stems, structure, theory
+from woodshed import __version__, audio, beats, meter, parts, stems, structure, theory, tracks
 from woodshed.engine import Decoded, decode
 from woodshed.engine.decoding import MIN_CLARITY
 from woodshed.engine.features import Spectral, beat_accents, spectral, sync
@@ -207,17 +207,11 @@ def _parts(
     grid = parts.Grid.from_beats(times + shift, built.first_beat, beats_per_bar, n_bars=len(built.bars))
     guitar, keys = track["other"], track["other"]  # four stems: guitars and keys share one
     if "guitar" in track:  # six stems (spec 010): the strumming from the guitar, the voicing from the keys
-        guitar, keys = track["guitar"], track["piano"] + track["other"]
-        level = {
-            name: parts.window_rms(y / separated.gain, audio.SR) for name, y in (("guitar", guitar), ("keys", keys))
-        }
-        others = (track[n] / separated.gain for n in ("drums", "bass", "vocals"))
-        loudest = max(
-            [float(np.sqrt(np.mean(y**2))) for y in others] + [float(np.sqrt(np.mean(w**2))) for w in level.values()]
-        )
-        silence = np.zeros_like(guitar)
-        guitar = guitar if parts.heard(level["guitar"], loudest) else silence
-        keys = keys if parts.heard(level["keys"], loudest) else silence
+        found = tracks.heard_instruments(separated)  # the same answer as the page's tracks
+        silence = np.zeros_like(track["guitar"])
+        keys = track["piano"] + track["other"] if "keys" in found else silence
+        # No guitar: the strumming of the keys, as on a four-stem page; neither: nothing to read.
+        guitar = track["guitar"] if "guitar" in found else keys
     return Parts(
         groove=parts.drum_groove(track["drums"], grid),
         bass=parts.bass_line(track["bass"], grid),

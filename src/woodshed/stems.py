@@ -47,7 +47,8 @@ def model_of(settings: dict[str, Any]) -> Model:
 def downloaded(model: Model) -> bool:
     """The model's weights are in woodshed's model cache: a torch hub checkpoint or a Hugging Face snapshot file
     named after its signature."""
-    return any((cache_dir() / "models").rglob(f"{model.signature}*"))
+    partial = (".partial", ".incomplete", ".lock")  # a download cut short is not the model
+    return any(not p.name.endswith(partial) for p in (cache_dir() / "models").rglob(f"{model.signature}*"))
 
 
 CPU_HINT = (
@@ -172,7 +173,8 @@ def separate(
     except Exception as exc:  # Demucs and torch raise plain RuntimeError, OSError...
         refusal = offline_cause(exc)
         if refusal is not None:  # Demucs wraps a refused download in LoadModelError
-            raise StemsError(str(refusal)) from exc
+            other = "" if model is FOUR else " (or --separation four: the four-instrument model, if it is on disk)"
+            raise StemsError(f"{refusal}{other}") from exc
         if isinstance(exc, LoadModelError):
             raise StemsError(f"could not load the {model.name} model: {exc}") from exc
         raise StemsError(f"separation failed: {exc}") from exc

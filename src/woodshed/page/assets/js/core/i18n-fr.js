@@ -471,8 +471,12 @@
     "No keys heard in this song: the full mix plays.": "Aucun clavier entendu dans ce morceau : le mix complet joue.",
     "From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.":
       "D'après la piste séparée de la guitare : accords sur {hits}. Plus gros point : frappé dans plus de mesures.",
-    "Upper notes heard on the isolated keys track. The keyboard often leaves the root to the bass.":
-      "Notes du haut entendues sur la piste séparée des claviers. Le clavier laisse souvent la fondamentale à la basse.",
+    "Upper notes heard on the isolated keys track: the piano, and what is not drums, bass, voice or guitar (synths, organ, strings). The keyboard often leaves the root to the bass.":
+      "Notes du haut entendues sur la piste séparée des claviers : le piano, et ce qui n'est ni batterie, ni basse, ni voix, ni guitare (synthés, orgue, cordes). Le clavier laisse souvent la fondamentale à la basse.",
+    "From the isolated keys track: chords on {hits}. Bigger dot: hit in more bars.":
+      "D'après la piste séparée des claviers : accords sur {hits}. Plus gros point : frappé dans plus de mesures.",
+    "No guitar or keys heard in this song.": "Aucune guitare ni aucun clavier entendus dans ce morceau.",
+    "No keys heard in this song.": "Aucun clavier entendu dans ce morceau.",
     "Vocals alone": "Voix seule",
 
     // The band (views/band.js)
