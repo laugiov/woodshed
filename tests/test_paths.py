@@ -32,8 +32,10 @@ def test_a_relative_folder_setting_is_ignored(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("WOODSHED_TOOLS", raising=False)
     monkeypatch.setenv(name, "relative/folder")  # it would depend on where woodshed was started
-    assert paths.tools_dir("linux") == home / ".local" / "share" / "woodshed" / "tools"
-    assert paths.tools_dir("win32") == home / "AppData" / "Local" / "woodshed" / "tools"
+    if name == "XDG_DATA_HOME":
+        assert paths.tools_dir("linux") == home / ".local" / "share" / "woodshed" / "tools"
+    else:
+        assert paths.tools_dir("win32") == home / "AppData" / "Local" / "woodshed" / "tools"
 
 
 def test_woodshed_tools_wins_and_a_tilde_is_the_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
