@@ -147,11 +147,16 @@
       return at;
     };
     // Stopped: the line to sing from here, the first not over yet (rows: app.words.rows()), lit only when
-    // the cursor is inside it. A line of a part before the cursor's is left out: after Part ⏭ the part's own
-    // first line comes first, a pickup sung just before the part included. first: rows.length when none.
+    // the cursor is inside it. A line whose words are all sung before the cursor's part (a note held into it)
+    // is left out: after Part ⏭ the part's own first line comes first, a pickup of any length included.
+    // first: rows.length when none.
+    const lastSung = (r) => {
+      const starts = r.line.words.map((w) => w.start).filter((t) => Number.isFinite(t));
+      return starts.length ? song.barAt(Math.max(...starts)) : r.firstBar;
+    };
     app.lineStopped = (rows, s) => {
       const part = app.sectionOf(Math.floor(s.beat / song.per));
-      let first = rows.findIndex((r) => r.line.end > s.time && !(part && r.firstBar < part.start));
+      let first = rows.findIndex((r) => r.line.end > s.time && !(part && lastSung(r) < part.start));
       if (first < 0) first = rows.length;
       return { first, inside: first < rows.length && rows[first].line.start <= s.time };
     };

@@ -172,11 +172,12 @@ def test_part_next_while_stopped_shows_the_part_first_line_with_next(open_page: 
     expect(first_line(o)).to_contain_text("radio")  # the chorus's line, not the verse's held word
 
 
-def test_part_next_while_stopped_lights_a_pickup_line(open_page: Any) -> None:
+@pytest.mark.parametrize("beats", [0.5, 3])
+def test_part_next_while_stopped_lights_a_pickup_line(open_page: Any, beats: float) -> None:
     o = open_page("pop", variant="lyrics-named")
     data = json.loads((o.folder / "lyrics.json").read_text())
     beat = (bar_start(o, 1) - bar_start(o, 0)) / o.js("Woodshed.current.per")
-    shifted(data["lines"][1], -beat / 2)  # the chorus line starts on the and of 4, before the chorus
+    shifted(data["lines"][1], -beat * beats)  # the chorus line starts on the and of 4, or on beat 2, before it
     set_words(o, data)
     on_stage(o)
     at(o, bar_start(o, 1), False)
@@ -215,3 +216,60 @@ def test_next_in_french(open_page: Any) -> None:
     on_stage(o, "Voix")
     at(o, 0, False)
     expect(o.page.get_by_test_id("stage-next-label")).to_have_text("Ensuite\u00a0:")
+
+
+def stage_order(o: Any) -> list[str]:
+    """What the words column shows, top down: key, part, label, now, ready, later."""
+    js = """[...document.getElementById('stLyrics').children].map((el) =>
+      el.matches('[data-testid=stage-key-words]') ? 'key' : el.matches('[data-testid=stage-next-label]') ? 'label'
+      : el.classList.contains('st-next-part') ? 'part' : el.classList.contains('st-progress') ? 'progress'
+      : ['now', 'ready', 'later'].find((c) => el.classList.contains(c)) || el.className)"""
+    order: list[str] = o.js(js)
+    return order
+
+
+def test_stopped_before_a_key_change_the_key_line_comes_first_then_next(open_page: Any) -> None:
+    o = open_page("lift", variant="lyrics-lift")
+    data = json.loads((o.folder / "lyrics.json").read_text())
+    bars = o.js("Woodshed.current.bars.length")
+    data["sections"] = [{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": bars}]  # one part
+    set_words(o, data)
+    on_stage(o)
+    at(o, bar_start(o, 13) + 0.1, False)  # the line over bars 15-18 next, the key changing inside it
+    order = stage_order(o)
+    assert order[:3] == ["key", "label", "ready"], order
+
+
+def test_stopped_in_a_loop_wrapped_back_the_loop_s_line_comes_next(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    on_stage(o)
+    data = lyrics_for(o.js("Woodshed.current.song"), 1)
+    set_words(o, data)
+    o.js("Woodshed.app.setLoop([0, 3], true)")
+    at(o, bar_start(o, 0) + 0.05, False)  # wrapped back to the loop's start, stopped
+    expect(first_line(o)).to_have_class("st-line ready")
+    expect(o.page.get_by_test_id("stage-next-label")).to_have_count(1)
+
+
+def test_a_song_with_no_parts_still_says_next(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-nosections")
+    on_stage(o)
+    at(o, 0.0, False)
+    expect(o.page.get_by_test_id("stage-next-label")).to_have_count(1)
+    expect(first_line(o)).to_have_class("st-line ready")
+
+
+def test_next_reads_from_a_mic_stand_and_stands_apart_from_the_chords(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics")
+    o.page.set_viewport_size({"width": 390, "height": 844})
+    data = lyrics_for(o.js("Woodshed.current.song"), 1)
+    set_words(o, data)
+    on_stage(o)
+    at(o, 0.0, False)
+    label = o.page.get_by_test_id("stage-next-label")
+    size = label.evaluate("(el) => parseFloat(getComputedStyle(el).fontSize)")
+    assert size >= 15
+    gap = o.js("""(() => { const l = document.querySelector('[data-testid=stage-next-label]').getBoundingClientRect();
+      const c = document.querySelector('#stLyrics .st-line .lc, #stLyrics .st-line').getBoundingClientRect();
+      return c.top - l.bottom; })()""")
+    assert gap >= 4

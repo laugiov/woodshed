@@ -690,8 +690,7 @@ body.following #playBtn { opacity: 0.45; }
 .stage-lyrics .nb { display: inline; margin: 0; }  /* no bar lines on the stand: the words flow */
 .stage-lyrics .st-line .lwords { font-size: clamp(24px, min(3.6vw, 6vh), 54px); }
 .stage-lyrics .st-line.later { opacity: 0.8; }
-.stage-lyrics .st-line.ready { color: var(--ink); opacity: 1; } /* stopped: the line to sing next, its full size, not lit */
-.st-next-label { font-family: var(--font-body); font-weight: 700; font-size: clamp(13px, min(1.8vw, 2.6vh), 20px); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.st-next-label { font-family: var(--font-body); font-weight: 700; font-size: clamp(15px, min(2vw, 2.8vh), 22px); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; } /* stopped: "Next:" over the line to sing, apart from its chords */
 .stage-lyrics .st-line.later .lwords { font-size: clamp(20px, min(2.9vw, 4.8vh), 43px); }
 #stage.st-voice .stage-lyrics .st-line .lwords { font-size: clamp(26px, min(5vw, 6.5vh), 72px); }
 #stage.st-voice .stage-lyrics .lw .lc { font-size: 0.5em; min-height: 1.2em; color: var(--muted); }
