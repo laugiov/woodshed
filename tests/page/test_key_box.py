@@ -96,11 +96,47 @@ def test_part_skips_and_the_count_in_light_the_bar_s_key(open_page: Any) -> None
     expect(lit(page)).to_have_text("D♭")
     o.js("Woodshed.app.prevPart(); Woodshed.app.prevPart()")  # Part ⏮ twice: the part before
     expect(lit(page)).to_have_text("C")
-    o.js("Woodshed.app.store.set({ countIn: true }); Woodshed.app.seekBar(20)")
+    # The count-in never moves the cursor: the bar counted into is the cursor's bar, its key lit throughout.
+    o.js("Woodshed.app.store.set({ countIn: true }); Woodshed.app.seekBar(16)")  # the first D♭ bar
     page.get_by_test_id("play").click()
     until(page, "Woodshed.app.counting()")
-    expect(lit(page)).to_have_text("D♭")  # the bar counted into
+    expect(lit(page)).to_have_text("D♭")
+    page.wait_for_timeout(700)
+    assert o.js("Woodshed.app.counting()") is True
+    expect(lit(page)).to_have_text("D♭")
+    expect(box(page)).to_have_text("C → D♭")
     page.get_by_test_id("play").click()  # cancelled
+
+
+def test_a_loop_across_the_change_lights_c_again_after_the_wrap(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    page = o.page
+    o.js("Woodshed.app.setInstrument('guitar')")
+    o.js("Woodshed.app.setLoop([14, 17], true)")  # bars 15-18: C, C, D♭, D♭
+    o.js("Woodshed.app.transport.seek(Woodshed.current.bars[17].end - 0.5)")
+    expect(lit(page)).to_have_text("D♭")
+    page.get_by_test_id("play").click()
+    until(page, "Woodshed.app.store.get().beat < 16 * Woodshed.current.per")  # wrapped to bar 15
+    expect(lit(page)).to_have_text("C")
+    expect(box(page)).to_have_text("C → D♭")
+    page.get_by_test_id("play").click()
+
+
+def test_the_chart_s_key_note_names_the_keys_as_the_box(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    o.js("Woodshed.app.transposeTo(1)")
+    note = o.page.get_by_test_id("key-note")
+    expect(note).to_contain_text("Chords in D♭ → D")
+    expect(note).to_contain_text("the recording plays in C → D♭")
+
+
+def test_the_panel_title_and_the_badge_are_read_apart(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    o.js("Woodshed.app.setInstrument('bass')")
+    at(o.page, 17)
+    expect(o.page.get_by_test_id("key-now")).to_be_visible()
+    # What a screen reader reads of the title line: never "Your bassnow in D♭ major".
+    assert o.js("document.querySelector('.desk-head .label').textContent") == "Your bass, now in D♭ major"
 
 
 def test_two_regions_in_the_same_key_are_lit_by_position(open_page: Any, pages_root: str) -> None:
@@ -255,5 +291,6 @@ def test_the_recording_s_pitch_switch_names_the_keys_as_the_box(browser: Browser
     page = opened(browser, lift_server.url + "lift.woodshed/index.html", problems)
     page.evaluate("Woodshed.app.setInstrument('bass'); Woodshed.app.transposeTo(1)")
     expect(page.get_by_test_id("pitch-switch")).to_contain_text("(in D♭ → D)")
+    expect(page.get_by_test_id("band-key-keep")).to_have_text("Keep D♭ → D for the band")
     page.context.close()
     assert problems == []

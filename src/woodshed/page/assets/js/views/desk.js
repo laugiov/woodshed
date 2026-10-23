@@ -594,7 +594,7 @@
     store.on((s) => renderKeyNow(s));
 
     function render(s) {
-      $("deskTitle").textContent = TITLES()[s.inst];
+      clear($("deskTitle"), TITLES()[s.inst], h("span", { class: "sr-only" }, ", ")); // read apart from the badge: "Your bass, now in B♭ major"
       renderKeyBox(s);
       badgeOf = "";
       renderKeyNow(s);
