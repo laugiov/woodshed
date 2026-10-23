@@ -146,6 +146,21 @@ def test_a_key_changed_while_its_file_starts_keeps_the_music(browser: Browser, s
     assert problems == []
 
 
+def test_a_key_no_longer_wanted_before_its_file_is_ready_leaves_nothing_behind(
+    browser: Browser, server: app.AppServer
+) -> None:
+    problems: list[str] = []
+    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, "", ipad=False)
+    playing(page)
+    page.evaluate("window.__wanted = false")  # another key asked before this one could even load
+    said = page.evaluate("Woodshed.app.transport.setFile('mix', 'audio/minus-bass.flac', () => window.__wanted)")
+    assert said is True
+    assert page.evaluate("Woodshed.app.transport.fileOf('mix')") == "audio/mix.flac"
+    assert not page.evaluate("document.querySelector(`audio[data-file='audio/mix.flac']`).paused")
+    assert page.evaluate("document.querySelector(`audio[data-file='audio/minus-bass.flac']`)") is None
+    assert problems == []
+
+
 def test_a_key_the_browser_refuses_keeps_the_original_file_playing(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE, ipad=False)

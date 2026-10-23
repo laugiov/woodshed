@@ -201,7 +201,11 @@
           delete els[id + "|" + file];
           return false;
         }
-        if (!still()) return true; // asked for a key no longer wanted: the old file plays on
+        if (!still()) {
+          to.remove(); // asked for a key no longer wanted: the old file plays on, nothing kept
+          delete els[id + "|" + file];
+          return true;
+        }
         to.currentTime = from.currentTime;
         const wasPlaying = !from.paused;
         const took = await takeOver(from, to);
