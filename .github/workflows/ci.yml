@@ -120,13 +120,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: bash scripts/ci-apt.sh ffmpeg
-      # Saved only after the real tests pass, so only with both models complete. Bump the key
-      # when a model changes.
+      # Saved only after the real tests pass, so only with every model complete. Bump the key
+      # when a model changes: the older cache is restored first, so only the new model downloads.
       - id: models
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: .woodshed-cache/models
           key: woodshed-models-v2
+          restore-keys: woodshed-models-
       # CPU-only torch comes from the PyTorch index set in pyproject.toml (no 5 GB CUDA download).
       - run: uv run --frozen --extra stems --group dev pytest -q -m stems
       - if: success() && matrix.python == '3.13' && steps.models.outputs.cache-hit != 'true'
