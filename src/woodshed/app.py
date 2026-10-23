@@ -1147,17 +1147,29 @@ def _checked_corrections(data: Any, removals: bool = False) -> dict[str, Any]:
     return {"key": key, "fixes": {k: None if v is None else list(v) for k, v in fixes.items()}}
 
 
+class NotLeader(PermissionError):
+    """An update refused because the device does not lead: the answer carries the band as it is now,
+    so the device follows it (or, when nobody leads after the app restarted, claims again)."""
+
+    def __init__(self, message: str, state: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.state = state
+
+
 class Live:
     """Where the band is: the leader's song and position, kept in memory and sent to followers.
 
-    One leader at a time: a device that claims the lead gets it, the previous leader sees on the
-    stream that it now follows. Updates from a device that is not the leader are refused.
+    One leader at a time: a device that claims the lead over the leader it heard (or over nobody)
+    gets it, the previous leader sees on the stream that it now follows; a second claim over the same
+    leader is refused. Updates from a device that is not the leader are refused. Every state is
+    numbered (`v`), under a `boot` id that changes when the app restarts and counts from 0 again.
     """
 
     def __init__(self) -> None:
         self.cond = threading.Condition()
         self.state: dict[str, Any] = {"leader": None}
         self.version = 0
+        self.boot = secrets.token_hex(6)
         self.followers = 0
         self.closed = False
         self.fixes: dict[str, int] = {}  # page folder -> revision of its corrections, told to followers
@@ -1193,11 +1205,14 @@ class Live:
         """The state as the stream sends it."""
         with self.cond:
             return {
-                **self.state,
+                **self._numbered(),
                 **({"fixes": dict(self.fixes)} if self.fixes else {}),
                 **({"moved": dict(self.moved)} if self.moved else {}),
                 **({"updated": dict(self.updated)} if self.updated else {}),
             }
+
+    def _numbered(self) -> dict[str, Any]:
+        return {**self.state, "v": self.version, "boot": self.boot}
 
     def update(self, data: Any, library_root: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
@@ -1211,9 +1226,13 @@ class Live:
                 if leader == who:
                     self.state = {"leader": None}
                     self._changed()
-                return self.state
-            if data.get("lead") is not True and leader != who:
-                raise PermissionError("another device leads the band")
+                return self._numbered()
+            claim = data.get("lead") is True
+            if not claim and leader != who:
+                raise NotLeader("another device leads the band", {**self._numbered(), "now": time.time()})
+            over = data.get("over")
+            if over is not None and not (isinstance(over, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", over)):
+                raise ValueError("over: the id of the device that led, or null")
             song = data.get("song")
             if not isinstance(song, str) or not song.endswith(".woodshed") or "/" in song or song.startswith("."):
                 raise ValueError("song: a page folder of the library")
@@ -1230,6 +1249,11 @@ class Live:
                 isinstance(loop, list) and len(loop) == 2 and all(type(x) is int and 0 <= x < 100_000 for x in loop)
             ):
                 raise ValueError("loop: two bar numbers, or null")
+            # A claim names the leader it heard: two devices tapping Lead at once over the same leader,
+            # the first wins. A claim without `over` (a page older than 0.5.1) takes the lead as before.
+            gone = self.state.get("playing") is True and time.time() - self.state.get("at", 0) > LEADER_GONE
+            if claim and "over" in data and leader not in (None, who, over) and not gone:
+                raise NotLeader("another device took the lead first", {**self._numbered(), "now": time.time()})
             self.state = {
                 "leader": who,
                 "song": song,
@@ -1240,7 +1264,7 @@ class Live:
                 "at": time.time(),  # the server clock when `time` was true
             }
             self._changed()
-            return self.state
+            return self._numbered()
 
     def _changed(self) -> None:
         self.version += 1
@@ -1420,7 +1444,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/token":
             # Read by the song pages of this server only: no CORS header, so another site's page
             # cannot read the answer, and the Host check stops DNS rebinding.
-            self._json(HTTPStatus.OK, {"token": self.server.token})
+            self._json(HTTPStatus.OK, {"token": self.server.token, "boot": self.server.live.boot})
         elif path == "/api/setlist":
             self._json(HTTPStatus.OK, {"songs": self.server.library.setlist()})
         elif path == "/api/pitch":
@@ -1586,6 +1610,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, self.server.main.network_state())
             else:
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
+        except NotLeader as exc:
+            self._json(HTTPStatus.CONFLICT, {"error": str(exc), "state": exc.state})  # the body was read
         except (PermissionError, WoodshedError) as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (ValueError, OSError) as exc:

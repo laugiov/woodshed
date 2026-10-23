@@ -76,7 +76,7 @@ class Stream:
 
 def test_a_song_page_gets_the_token_from_its_own_server(server: app.AppServer) -> None:
     status, headers, body = request(server, "GET", "/api/token")
-    assert status == 200 and json.loads(body) == {"token": server.token}
+    assert status == 200 and json.loads(body) == {"token": server.token, "boot": server.live.boot}
     assert "access-control-allow-origin" not in headers  # another site's page cannot read it
     status, _, _ = request(server, "GET", "/api/token", host="evil.example:80")
     assert status == 421
@@ -86,7 +86,8 @@ def test_the_leader_moves_and_followers_hear_it(server: app.AppServer) -> None:
     follower = Stream(server)
     try:
         assert follower.response.getheader("Content-Type", "").startswith("text/event-stream")
-        assert follower.next() == {"leader": None, "now": pytest.approx(time.time(), abs=5)}
+        first = {"leader": None, "v": 0, "boot": server.live.boot, "now": pytest.approx(time.time(), abs=5)}
+        assert follower.next() == first
         status, state = post(server, "/api/live", live(lead=True))
         assert status == 200 and state["leader"] == LEADER and state["song"] == "One.woodshed"
         event = follower.next()
@@ -104,12 +105,77 @@ def test_only_the_leader_moves_the_band_until_another_device_takes_the_lead(serv
     post(server, "/api/live", live(lead=True))
     status, answer = post(server, "/api/live", live(OTHER, time=99.0))
     assert status == 409 and "another device" in answer["error"]
+    assert answer["state"]["leader"] == LEADER  # the band as it is: a leader whose app restarted sees nobody
     status, state = post(server, "/api/live", live(OTHER, lead=True, time=99.0))
     assert status == 200 and state["leader"] == OTHER
     status, _ = post(server, "/api/live", live(time=1.0))  # the old leader now follows
     assert status == 409
     status, state = post(server, "/api/live", {"id": OTHER, "release": True})
-    assert status == 200 and state == {"leader": None}
+    assert status == 200 and state["leader"] is None
+
+
+# Taking the lead (spec 023): numbered states, and the first of two claims over the same leader wins.
+
+
+def test_every_state_is_numbered_for_this_run_of_the_app(server: app.AppServer) -> None:
+    follower = Stream(server)
+    try:
+        seen = [follower.next()]
+        answers = [post(server, "/api/live", live(lead=True))[1]]
+        seen.append(follower.next())
+        answers.append(post(server, "/api/live", live(time=20.0))[1])
+        seen.append(follower.next())
+        answers.append(post(server, "/api/live", {"id": LEADER, "release": True})[1])
+        seen.append(follower.next())
+        events = [e for e in seen if isinstance(e, dict)]
+        assert len(events) == 4
+        versions = [e["v"] for e in events]
+        assert versions == sorted(set(versions))  # strictly increasing
+        assert [a["v"] for a in answers] == versions[1:]  # the answer says the number the stream says
+        assert {e["boot"] for e in events + answers} == {server.live.boot}
+    finally:
+        follower.close()
+    assert app.Live().boot != server.live.boot  # a restarted app counts from 0 again, under another boot
+
+
+def test_a_claim_over_the_leader_it_heard_wins_and_a_second_one_is_refused(server: app.AppServer) -> None:
+    assert post(server, "/api/live", live(lead=True, over=None))[0] == 200  # nobody led
+    status, state = post(server, "/api/live", live(OTHER, lead=True, over=LEADER))
+    assert status == 200 and state["leader"] == OTHER
+    status, answer = post(server, "/api/live", live("third-device-333", lead=True, over=LEADER, time=50.0))
+    assert status == 409 and answer["error"] == "another device took the lead first"
+    taken = answer["state"]  # the device follows at once, without waiting for the stream
+    assert (taken["leader"], taken["time"], taken["v"]) == (OTHER, 12.5, state["v"])
+    assert taken["boot"] == server.live.boot and taken["now"] == pytest.approx(time.time(), abs=5)
+    assert post(server, "/api/live", live("third-device-333", lead=True, over=None))[0] == 409  # it heard nobody
+    assert post(server, "/api/live", live(OTHER, lead=True, over=LEADER))[0] == 200  # its own lead again
+
+
+def test_a_claim_takes_over_a_playing_leader_gone_silent(server: app.AppServer) -> None:
+    post(server, "/api/live", live(lead=True, playing=True))
+    with server.live.cond:
+        server.live.state["at"] -= app.LEADER_GONE + 1  # its phone locked mid-song
+    status, state = post(server, "/api/live", live(OTHER, lead=True, over=None))
+    assert status == 200 and state["leader"] == OTHER
+
+
+def test_a_stopped_leader_is_not_taken_over_by_a_claim_over_nobody(server: app.AppServer) -> None:
+    post(server, "/api/live", live(lead=True, playing=False))
+    with server.live.cond:
+        server.live.state["at"] -= app.LEADER_GONE + 1  # stopped: it says nothing, and still leads
+    assert post(server, "/api/live", live(OTHER, lead=True, over=None))[0] == 409
+
+
+def test_a_claim_without_over_from_an_older_page_still_wins(server: app.AppServer) -> None:
+    post(server, "/api/live", live(lead=True))
+    status, state = post(server, "/api/live", live(OTHER, lead=True))  # a 0.5.0 page: the last claim wins
+    assert status == 200 and state["leader"] == OTHER
+
+
+@pytest.mark.parametrize("over", ["x", 12, True, "../etc"])
+def test_the_leader_a_claim_takes_over_from_is_checked(server: app.AppServer, over: Any) -> None:
+    status, answer = post(server, "/api/live", live(lead=True, over=over))
+    assert status == 400 and answer["error"]
 
 
 @pytest.mark.parametrize(

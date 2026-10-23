@@ -556,7 +556,16 @@
 
     // The band (views/band.js)
     "the app did not answer": "l'app n'a pas répondu",
-    "Another device leads the band now: you follow it.": "Un autre appareil mène le groupe maintenant : tu le suis.",
+    "another device leads the band": "un autre appareil mène le groupe",
+    "another device took the lead first": "un autre appareil a pris la tête avant toi",
+    "Another device leads the band now: you follow it. The sound now plays on the device that leads.":
+      "Un autre appareil mène le groupe maintenant : tu le suis. Le son joue maintenant sur l'appareil qui mène.",
+    "This device leads the band: the sound plays here now.": "Cet appareil mène le groupe : le son joue ici maintenant.",
+    "Another device took the lead first: you follow it.": "Un autre appareil a pris la tête avant toi : tu le suis.",
+    "Could not lead the band: {why}. You still follow.": "Impossible de mener le groupe : {why}. Tu suis toujours.",
+    "This device leads the band, stopped: the browser blocked the sound, press play.":
+      "Cet appareil mène le groupe, à l'arrêt : le navigateur a bloqué le son, appuie sur lecture.",
+    "Taking the lead…": "Prise de la tête…",
     "Saved on this device only: the app did not answer, the band does not see it yet.":
       "Enregistré sur cet appareil seulement : l'app n'a pas répondu, le groupe ne le voit pas encore.",
     "The band had no leader: this device leads again.": "Le groupe n'avait plus de meneur : cet appareil mène de nouveau.",

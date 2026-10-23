@@ -34,6 +34,9 @@ corrections and set list stay where they are.
 - A song page's footer says which version runs the page and which one found its chords: "Page:
   woodshed 0.5.0 · chords and beats found by woodshed 0.4.0 (still current)". After an update it
   no longer says "Made with woodshed 0.4.0" on a page the library had already brought up to date.
+- Tapping **Lead** on a phone that follows now takes over the band: the song goes on from where the
+  band is, and the device that led follows. It used to stop the band and leave nobody leading. If
+  two devices tap Lead at once, the first leads and the other is told.
 
 ## [0.5.0] - 2026-10-23
 

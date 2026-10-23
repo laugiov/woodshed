@@ -31,6 +31,11 @@ With Docker, publish the port to the network instead: in `compose.yaml`, `"8000:
 One device leads, every phone on the network follows to the bar. Start, stop, loop and seek once,
 for the whole band.
 
+Any device can take over: tap Lead on a phone that follows and the song goes on from where the band
+is, playing or stopped. The sound moves with the lead: only the device that leads plays, so the old
+leader goes quiet and follows. If two of you tap Lead at the same moment, the first one leads and
+the other is told and keeps following.
+
 ## Stage mode
 
 The chord now and next in huge type, the words, where you are in the section. Readable from the

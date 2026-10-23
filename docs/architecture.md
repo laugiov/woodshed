@@ -554,7 +554,10 @@ One device leads, others follow. It is built on `Live` in `app.py` and `page/ass
 
 - The leader posts its song, position, speed, loop and play state to `POST /api/live`.
 - Followers open `GET /api/live`, a **Server-Sent Events** stream. Each event carries the leader's state and the server clock, so a follower can measure its offset.
-- Server state is in memory. One leader at a time: a device that claims the lead takes it, and updates from a non-leader are refused.
+- Server state is in memory. One leader at a time: updates from a non-leader are refused (409, with the current `state`: a leader whose app restarted sees that nobody leads and claims again).
+- Every state is numbered: answers and events carry `v` (it grows with each change) and `boot` (new at each start of the app, which counts from 0 again; `/api/token` gives it too). A page acts on no event older than its own accepted claim of the same `boot`.
+- **Taking the lead** (`lead: true`) names the leader the device heard in `over` (or `null`). The claim is accepted when the leader is none, the claimer, `over`, or a playing leader silent for `LEADER_GONE`; otherwise 409 with `error` and the current `state`, so the device follows at once (two taps at once: the first wins). A claim without `over` (a page of 0.5.0) takes the lead as before.
+- A follower that taps Lead does not lead until the library agrees: it sends nothing else meanwhile, the old leader keeps the band. While the band plays it starts its own sound in the tap (the browser allows it there), at the band's place projected to now, at the band's tempo and loop, waits for the sound (3 s at most), seeks to the projected place again and claims with `playing: true`. The sound moves with the lead: the old leader hears the new one on the stream, stops its sound and follows. A sound the browser refuses: it leads, stopped at that place, and says so. A refused claim: it keeps following.
 - Limits: 32 open streams, 4 KB per update, a keep-alive ping every 15 seconds.
 
 ### Shared corrections

@@ -160,3 +160,30 @@ def test_every_text_the_page_shows_from_python_has_its_french() -> None:
 def test_every_french_text_keeps_the_names_it_fills_in() -> None:
     names = re.compile(r"\{(\w+)\}")
     assert [en for en, fr in french().items() if sorted(names.findall(en)) != sorted(names.findall(fr))] == []
+
+
+NBSP = chr(0xA0)
+
+
+def test_a_french_colon_has_its_no_break_space() -> None:
+    """French typography: a no-break space (U+00A0) before ":" and ";", never a plain space or none."""
+    bad = [
+        fr
+        for en, fr in french().items()
+        if ": " in en
+        and any(fr[i - 1] != NBSP for i, c in enumerate(fr) if c in ":;" and fr[i + 1 : i + 2] in (" ", ""))
+    ]
+    assert bad == []
+
+
+def test_taking_the_lead_is_said_in_french() -> None:
+    fr = french()
+    for en in (
+        "Another device took the lead first: you follow it.",
+        "Could not lead the band: {why}. You still follow.",
+        "This device leads the band, stopped: the browser blocked the sound, press play.",
+        "Taking the lead…",
+        "Another device leads the band now: you follow it. The sound now plays on the device that leads.",
+        "This device leads the band: the sound plays here now.",
+    ):
+        assert en in fr, en
