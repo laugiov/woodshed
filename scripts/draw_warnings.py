@@ -389,7 +389,8 @@ def main(argv: list[str]) -> None:
     out.mkdir(parents=True, exist_ok=True)
     for p in PICTURES:
         svg = draw(p)
-        (out / f"{p.name}.svg").write_text(svg, encoding="utf-8")
+        # LF on every system: the files are compared byte for byte
+        (out / f"{p.name}.svg").write_bytes(svg.encode("utf-8"))
         print(f"{p.name}.svg: {len(svg.encode())} bytes")
 
 
