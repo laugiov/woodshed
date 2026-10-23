@@ -404,7 +404,9 @@
                   key: h("b", null, chordNode(song.keyName(best))),
                 }),
                 " ",
-                h("button", { type: "button", class: "btn", "data-testid": "fit-key", onclick: () => app.transposeTo(best) }, W.t("Transpose to {key} ({n})", { key: W.prettyText(song.keyName(best)), n: (best > 0 ? "+" : "") + best })),
+                h("button", { type: "button", class: "btn", "data-testid": "fit-key", onclick: () => app.transposeTo(best) }, W.t("Transpose to {key} ({n})", { key: W.prettyText(song.keyName(best, 0)), n: (best > 0 ? "+" : "") + best }) +
+                  // After a key change the song ends higher: said with the key to choose (spec 012).
+                  (song.regionCount > 1 ? W.t(", ends in {key}", { key: W.prettyText(song.keyName(best, song.regionCount - 1)) }) : "")),
               );
       } else fit = h("p", { class: "fit" }, W.t("Pick your voice type to see the best key."));
       return [

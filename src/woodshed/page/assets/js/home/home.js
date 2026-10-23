@@ -161,6 +161,8 @@
         const band = s.band || {};
         const facts = [];
         if (s.key) facts.push(h("span", { class: "sk" + (band.key ? " band-key" : "") }, chordNode(band.key || s.key), band.key ? " " + W.t("(the band's key)") : ""));
+        const end = endKey(s);
+        if (end) facts.push(h("span", { class: "sk", "data-testid": "set-key-end" }, "→ ", chordNode(end)));
         if (s.bpm) facts.push(h("span", { class: "sb" }, s.bpm + " BPM"));
         if (s.duration) facts.push(h("span", { class: "sl" }, fmt(s.duration)));
         const noteEl = editing === folder
@@ -216,6 +218,8 @@
     if (song) {
       tags.push(h("span", { class: "fact" }, song.bpm + " BPM"), h("span", { class: "fact" }, fmt(song.duration)));
       if (song.meter && song.meter !== "4/4") tags.push(h("span", { class: "fact", translate: "no" }, song.meter));
+      const end = endKey(song);
+      if (end) tags.push(h("span", { class: "fact", "data-testid": "key-end" }, W.nodes(W.t("ends in {key}"), { key: chordNode(end) })));
       if (song.complete && song.stems) tags.push(h("span", { class: "tag on" }, W.t("Parts")));
       if (song.words) tags.push(h("span", { class: "tag on" }, W.t("Words")));
       if (song.doubts) tags.push(h("span", { class: "tag warn" }, song.doubts === 1 ? W.t("1 to check") : W.t("{n} to check", { n: song.doubts })));
@@ -383,6 +387,13 @@
       refresh();
     }
   }
+
+  // The key a song ends in after a key change, in the band's key when it has one (spec 012).
+  const endKey = (song) => {
+    if (!song || !Array.isArray(song.key_end) || song.key_end.length !== 12) return null;
+    const t = song.band && typeof song.band.transpose === "number" ? song.band.transpose : 0;
+    return song.key_end[((t % 12) + 12) % 12];
+  };
 
   // "beyonce" finds "Beyoncé": accents and case aside.
   const fold = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();

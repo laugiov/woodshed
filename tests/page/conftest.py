@@ -97,8 +97,9 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     named = data["song"].pop("_lyrics_sections", None)
     late = data["song"].pop("_lyrics_late", False)
     midline = data["song"].pop("_lyrics_midline", False)
+    at = data["song"].pop("_lyrics_at", 0)
     if data["song"].pop("_lyrics", False):
-        lyrics = lyrics_for(data["song"])
+        lyrics = lyrics_for(data["song"], at)
         if late:  # a line whose only word comes late in bar 2, after both of its chord changes
             start, end = data["song"]["bars"][1]["start"], data["song"]["bars"][1]["end"]
             first = {**lyrics["lines"][0], "words": lyrics["lines"][0]["words"][:1]}
@@ -135,9 +136,9 @@ def _no_sections(song: dict[str, Any]) -> None:
     song["sections"] = []
 
 
-def lyrics_for(song: dict[str, Any]) -> dict[str, Any]:
-    """Two sung lines on pop (bars 1-4, 5-6): a word at each bar start and one in between; bars 7-8
-    are not sung (an ending)."""
+def lyrics_for(song: dict[str, Any], at: int = 0) -> dict[str, Any]:
+    """Two sung lines on pop (bars 1-4, 5-6, or from bar `at`): a word at each bar start and one in between;
+    bars 7-8 are not sung (an ending)."""
     starts = [b["start"] for b in song["bars"]]
 
     def words(bars: range, texts: list[str]) -> list[dict[str, Any]]:
@@ -153,9 +154,9 @@ def lyrics_for(song: dict[str, Any]) -> dict[str, Any]:
         "version": 1, "language": "en", "text": "", "chords": [],
         "lines": [
             {**line, "text": "Morning comes in on the harbour road,",
-             "words": words(range(0, 4), ["Morning", "comes", "in", "on", "the", "harbour", "road,", "yes"])},
+             "words": words(range(at, at + 4), ["Morning", "comes", "in", "on", "the", "harbour", "road,", "yes"])},
             {**line, "text": "the radio hums", "backing": ["hums"], "check": "placed by the order of the text",
-             "words": words(range(4, 6), ["the", "radio", "hums", "what"])},
+             "words": words(range(at + 4, at + 6), ["the", "radio", "hums", "what"])},
             {**line, "text": "not in this recording", "sung": False, "check": "not heard",
              "words": [{"text": "not", "start": None, "end": None}]},
         ],
@@ -164,6 +165,12 @@ def lyrics_for(song: dict[str, Any]) -> dict[str, Any]:
 
 def _with_lyrics(song: dict[str, Any]) -> None:
     song["_lyrics"] = True  # marker: the folder gets lyrics.js below
+
+
+def _lyrics_over_the_lift(song: dict[str, Any]) -> None:
+    """lift with its first sung line over bars 15-18: the key changes inside it (spec 012)."""
+    song["_lyrics"] = True
+    song["_lyrics_at"] = 14
 
 
 def _lyrics_named(song: dict[str, Any]) -> None:
@@ -255,6 +262,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "groove-diffuse": _groove_diffuse,
     "lyrics-stacked": _lyrics_stacked,
     "lyrics-midline": _lyrics_midline,
+    "lyrics-lift": _lyrics_over_the_lift,
 }  # fmt: skip
 
 

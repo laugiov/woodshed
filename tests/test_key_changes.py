@@ -47,3 +47,13 @@ def test_key_at_reads_the_region_of_a_bar() -> None:
     c, db = theory.Key(0, "maj"), theory.Key(1, "maj")
     found = [KeyRegion(0, c), KeyRegion(16, db)]
     assert [analysis.key_at(found, b) for b in (0, 15, 16, 30)] == [c, c, db, db]
+
+
+def test_the_library_shows_the_key_it_starts_and_ends_in(tmp_path: Path) -> None:
+    from woodshed import run
+
+    song = analysis.analyze(synth.write("lift", tmp_path).wav, use_stems=False)
+    info = run.summary(song, tmp_path / "lift.woodshed")
+    assert info["key"] == "C" and info["key_end"][0] == "Db" and info["key_end"][2] == "Eb"
+    one = run.summary(analysis.analyze(synth.write("pop", tmp_path).wav, use_stems=False), tmp_path / "pop.woodshed")
+    assert "key_end" not in one

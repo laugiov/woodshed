@@ -278,6 +278,7 @@
       };
       const out = [];
       let shown = -1;
+      const keySaid = new Set(); // a key change inside sung lines: said once, above the line it falls in
       for (const x of blocks) {
         const k = sections.length ? song.sectionIndex(x.at, sections) : -1;
         while (k > shown) {
@@ -290,6 +291,12 @@
         }
         const r = x.row;
         const last = r.bars[r.bars.length - 1].bar;
+        for (const [u, region] of changeAt) {
+          if (u >= r.bars[0].bar && u <= last && !keySaid.has(u)) {
+            keySaid.add(u);
+            out.push(h("div", { class: "lkey", "data-testid": "key-change-words" }, W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, region)) })));
+          }
+        }
         out.push(
           h(
             "div",

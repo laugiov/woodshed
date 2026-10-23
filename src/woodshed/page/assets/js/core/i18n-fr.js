@@ -428,6 +428,8 @@
     "{n} semitones down": "{n} demi-tons plus bas",
     "Play the recording {shift}": "Jouer l'enregistrement {shift}",
     "in {key}": "en {key}",
+    "ends in {key}": "finit en {key}",
+    ", ends in {key}": ", finit en {key}",
     On: "Activé",
     Off: "Désactivé",
     "Preparing the recording {shift}… about {n} s": "Préparation de l'enregistrement {shift}… environ {n} s",

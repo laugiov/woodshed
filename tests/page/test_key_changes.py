@@ -71,3 +71,39 @@ def test_the_exports_say_the_change_where_it_happens_as_python_does(open_page: A
         m16 = xml.split('<measure number="16">')[1].split("</measure>")[0]
         assert m16.endswith('<barline location="right"><bar-style>light-light</bar-style></barline>')
         assert "<root-step>G</root-step><root-alter>-1</root-alter>" in xml  # Gb, not F#
+
+
+def test_in_the_words_the_change_is_said_above_its_line(open_page: Any) -> None:
+    o = open_page("lift", variant="lyrics-lift")
+    mark = o.page.get_by_test_id("key-change-words")
+    expect(mark).to_have_count(1)
+    expect(mark).to_have_text("→ D♭ major")
+    nxt = o.js("document.querySelector('[data-testid=key-change-words]').nextElementSibling.dataset.from")
+    assert nxt == "14"  # the line holding bar 17
+
+
+def test_the_library_says_the_key_a_song_ends_in(page: Any, pages_root: str, tmp_path: Any, monkeypatch: Any) -> None:
+    import json
+    import shutil
+    import threading
+
+    from tests.page.conftest import built
+    from woodshed import app
+    from woodshed.run import Options
+
+    monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
+    srv = app.AppServer(app.Library(tmp_path / "library", Options(use_stems=False, open_page=False)))
+    folder = srv.library.root / "Lift.woodshed"
+    shutil.copytree(built("pop", True, pages_root), folder)
+    ends = ["Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B", "C"]
+    summary = {"title": "Lift", "stems": True, "key": "C", "key_end": ends, "bpm": 120, "meter": "4/4", "duration": 58}
+    (folder / "woodshed.json").write_text(
+        json.dumps({"settings": {}, "summary": summary, "complete": True, "doubts": 0})
+    )
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        page.goto(srv.url)
+        expect(page.get_by_test_id("key-end")).to_have_text("ends in D♭")
+    finally:
+        srv.shutdown()
+        srv.server_close()

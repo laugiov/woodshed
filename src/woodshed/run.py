@@ -23,7 +23,7 @@ from woodshed.analysis import analyze
 from woodshed.build import build as build_page
 from woodshed.build import folder_name, page_revision, refresh_code
 from woodshed.errors import WoodshedError
-from woodshed.model import Song
+from woodshed.model import KeyRegion, Song
 
 BPM_TOLERANCE = 0.15  # a --bpm hint further than this from the result gets a note
 SEPARATION_SPEED = 1.5  # seconds of CPU separation per second of audio, measured (a 4-minute song, laptop)
@@ -156,12 +156,20 @@ def _settings(src: Path, opts: Options, use_stems: bool, model: stems.Model = st
 
 def summary(song: Song, page: Path) -> dict[str, Any]:
     """What the songbook index shows for a page."""
-    key = theory.Key(song.key.tonic, song.key.mode)
+    regions = song.key_regions or [KeyRegion(0, song.key)]
+    first, last = regions[0].key, regions[-1].key
+
+    def name(key: theory.Key, t: int = 0) -> str:
+        moved = theory.Key((key.tonic + t) % 12, key.mode)
+        return theory.spell(moved.tonic, moved) + ("" if moved.mode == "maj" else "m")
+
     doubts = len({c.doubt.id for b in song.structure.bars for c in b.chords if c.doubt and c.doubt.counts})
     return {
         "title": song.title,
         "folder": page.name,
-        "key": theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m"),
+        "key": name(first),  # the key the song starts in
+        # The key it ends in after a key change, per transposition (the band's key moves it): spec 012.
+        **({"key_end": [name(last, t) for t in range(12)]} if len(regions) > 1 else {}),
         "bpm": math.floor(song.bpm + 0.5),
         "meter": f"{song.beats_per_bar}/4",
         "duration": math.floor(round(song.duration, 2) + 0.5),  # as the page rounds it (halves up)

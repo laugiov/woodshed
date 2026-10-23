@@ -21,7 +21,7 @@ Progress = Callable[[str, float], None]
 # Bumped whenever the analysis gives different results for the same file: pages built by an older
 # revision are then rebuilt by the next run instead of being kept as up to date.
 # Any change to the engine, features or structure that changes labels needs a bump too.
-REVISION = 3  # 2: silence judged on absolute level (soft verses kept); 3: doubt kinds, sections
+REVISION = 4  # 2: silence judged on absolute level (soft verses kept); 3: doubt kinds, sections; 4: key regions
 Floats = npt.NDArray[np.float64]
 # Below this share of tracked downbeats on one residue, the downbeats are too inconsistent to set
 # the bar phase and the chord changes decide instead.
