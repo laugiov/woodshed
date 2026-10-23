@@ -46,7 +46,7 @@ def test_songs_are_short_enough_for_fast_tests() -> None:
     assert all(synth.render(n).mix.size / synth.SR <= (70.0 if n in KEY_SONGS else 30.0) for n in synth.SONGS)
 
 
-KEY_SONGS = {"lift", "lift2", "lift4", "lift8", "bridge", "mixolydian"}
+KEY_SONGS = {"lift", "lift2", "lift4", "lift8", "bridge", "mixolydian", "vamp"}
 
 
 def test_write_creates_wav_and_lab(tmp_path: Path) -> None:

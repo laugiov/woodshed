@@ -99,10 +99,12 @@ SONGS: dict[str, Spec] = {
     "lift8": Spec(120, 4, (*_loop(POP, 4), *_loop(_up(POP, 1), 2))),
     "bridge": Spec(120, 4, (*_loop(POP, 4), *_loop([("Am", 4), ("Em", 4), ("F", 4), ("E", 4)], 2), *_loop(POP, 2))),
     "mixolydian": Spec(120, 4, (*_loop(POP, 2), *_loop([("C", 4), ("Bb", 4), ("F", 4), ("C", 4)], 2), *_loop(POP, 2))),
+    # A rock I-bVII vamp: every chord fits F major better than C, but C stays the tonic.
+    "vamp": Spec(120, 4, (*_loop(POP, 2), *_loop([("C", 4), ("Bb", 4)], 4), *_loop(POP, 2))),
 }
 KEYS = {
     "pop": "C", "ballad": "C", "waltz": "D", "funk": "Ab", "rock": "C", "pickup": "C",
-    "lift": "C", "lift2": "C", "lift4": "C", "lift8": "C", "bridge": "C", "mixolydian": "C",
+    "lift": "C", "lift2": "C", "lift4": "C", "lift8": "C", "bridge": "C", "mixolydian": "C", "vamp": "C",
 }  # fmt: skip
 # The key changes each song holds: (bar, key), the first at bar 0 (spec 012).
 KEY_REGIONS = {

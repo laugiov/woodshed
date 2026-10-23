@@ -107,3 +107,10 @@ def test_the_library_says_the_key_a_song_ends_in(page: Any, pages_root: str, tmp
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_a_chord_typed_after_the_lift_is_spelled_in_the_new_key(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    o.js("Woodshed.app.typeBars([19], [[4, 'F#']])")  # typed with a sharp: the key of D-flat spells it G-flat
+    expect(bar(o, 19)).to_contain_text("G♭")
+    expect(bar(o, 19).locator(".rn")).to_have_text("IV")

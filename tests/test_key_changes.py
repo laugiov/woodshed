@@ -57,3 +57,20 @@ def test_the_library_shows_the_key_it_starts_and_ends_in(tmp_path: Path) -> None
     assert info["key"] == "C" and info["key_end"][0] == "Db" and info["key_end"][2] == "Eb"
     one = run.summary(analysis.analyze(synth.write("pop", tmp_path).wav, use_stems=False), tmp_path / "pop.woodshed")
     assert "key_end" not in one
+
+
+def test_a_vamp_that_fits_another_key_keeps_its_tonic() -> None:
+    """With a chroma that says nothing, a C-Bb vamp fits F major better than C: only the tonic evidence (C on
+    every other bar, never F) keeps the key."""
+    import numpy as np
+
+    from woodshed.engine import decoding as dec
+
+    names, roots, quals, _ = dec.build_chords(False, dec.Config())
+    index = {name: i for i, name in enumerate(names)}
+    bars = ["C", "G", "Am", "F"] * 6 + ["C", "A#"] * 8
+    states = np.repeat([index[b] for b in bars], 4)
+    flat = np.ones((12, states.size))
+    voiced = np.ones(states.size, dtype=bool)
+    found = dec.key_signatures(states, roots, quals, flat, flat, voiced, 4, 0, "maj", dec.Config())
+    assert found == [(0, 0)]
