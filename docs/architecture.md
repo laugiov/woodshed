@@ -561,9 +561,12 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 
 `src/woodshed/uninstall.py` (spec 018) removes what woodshed and its installers put on the computer, after one question (`--yes` skips it):
 
-- the cache's `stems/` and `models/` only (never the rest of `cache_dir()`), woodshed's tools folder (`tools_dir()`: `WOODSHED_TOOLS`, else `~/Library/Application Support/woodshed/tools`, `%LOCALAPPDATA%\woodshed\tools` or `$XDG_DATA_HOME/woodshed/tools`), then those folders' parents only when left empty;
+- the cache's `stems/` and `models/` only (never the rest of `cache_dir()`), and in woodshed's tools folder (`tools_dir()`: `WOODSHED_TOOLS`, else `~/Library/Application Support/woodshed/tools`, `%LOCALAPPDATA%\woodshed\tools` or `$XDG_DATA_HOME/woodshed/tools`) only the files woodshed puts there, by name (`TOOL_FILES`: the uninstall scripts, Rubber Band's program and DLL, and its `COPYING` files only beside its program), never the folder's other files nor a folder of the same name: `WOODSHED_TOOLS` may name a folder of the user's; the folder itself goes only when left empty and not a link, then those folders' parents only when left empty;
 - the shortcuts: `~/Applications/woodshed.app` and `Uninstall woodshed.app` (only with woodshed's bundle id), the Linux `woodshed.desktop` and `woodshed-uninstall.desktop`, the Windows Start menu's `woodshed.lnk` and `Uninstall woodshed.lnk`, and the HKCU `...\CurrentVersion\Uninstall\woodshed` key, last;
-- a link is removed, never what it points to.
+- a link or a Windows junction is removed, never what it points to (junctions found with `os.path.isjunction`, or the reparse-point attribute before Python 3.12);
+- a shortcut goes only when it is woodshed's: the Mac apps by their bundle id, the `.desktop` files by their `Exec` line (`woodshed" app`, `uninstall-woodshed.sh`), the `.lnk` files by their target (`woodshed.exe`, `uninstall-woodshed.cmd`). The installers write the `Exec` paths quoted and escaped as the Desktop Entry spec says (`desktop_quote` in `install.sh`).
+
+A file that cannot be removed (another program holds it) is listed with the reason; the rest still goes, the Settings entry stays, and the command exits 1 so the shortcut stops before `uv tool uninstall`: run again, it finishes. When the process list cannot be read, it says so in one line and relies on the port check.
 
 It never touches the library (`~/woodshed`, listed as kept) and refuses, removing nothing, when the library and a folder it would remove contain each other, when a folder is the home or a parent of it, while woodshed runs (its port answers, or a `woodshed` process other than itself and its ancestors: on Windows the shortcut's `woodshed.exe` is a grandparent, through the environment's `python.exe` launcher), outside a uv tool install (no `uv-receipt.toml` in `sys.prefix`) and in Docker (`WOODSHED_CONTAINER`).
 

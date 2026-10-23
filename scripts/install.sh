@@ -116,6 +116,12 @@ sh_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+# A path as one argument of a menu entry's Exec line (Desktop Entry spec): quoted, with ", `, $ and \
+# escaped, then every backslash doubled again for the file's string rules; % doubled.
+desktop_quote() {
+    printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')"
+}
+
 # The script the Uninstall shortcuts run: woodshed removes its cache, tools and shortcuts (asking first),
 # then uv removes woodshed once it has exited. $1: the folder of the woodshed command, $2: uv.
 uninstall_script() {
@@ -140,7 +146,9 @@ if ! $(sh_quote "$2") tool uninstall woodshed; then
     exit 1
 fi
 # woodshed's downloads in uv's cache (uninstall.CACHED in woodshed): only those packages, never the whole cache.
-$(sh_quote "$2") cache clean woodshed torch torchaudio demucs llvmlite numba scipy scikit-learn sympy numpy >/dev/null 2>&1 || true
+echo ""
+echo "Cleaning woodshed's big packages (torch, numpy...) from uv's cache: other Python programs may download them again if they need them."
+$(sh_quote "$2") cache clean woodshed torch torchaudio demucs llvmlite numba scipy scikit-learn sympy numpy || true
 echo ""
 echo "woodshed is removed. Your songs stay where they are."
 pause
@@ -210,7 +218,7 @@ linux_uninstall_entry() {
 Type=Application
 Name=Uninstall woodshed
 Comment=Remove woodshed from this computer (your songs stay)
-Exec=sh "$tools/uninstall-woodshed.sh"
+Exec=sh $(desktop_quote "$tools/uninstall-woodshed.sh")
 Terminal=true
 Categories=AudioVideo;Audio;Music;
 EOF
@@ -285,7 +293,7 @@ if [ "$(uname -s)" = "Linux" ] && [ "${WOODSHED_NO_MENU:-0}" != "1" ]; then
 Type=Application
 Name=woodshed
 Comment=Your songs as practice rooms for the band
-Exec="$BIN/woodshed" app
+Exec=$(desktop_quote "$BIN/woodshed") app
 Terminal=true
 Categories=AudioVideo;Audio;Music;
 EOF

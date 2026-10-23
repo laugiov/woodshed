@@ -215,7 +215,9 @@ function Add-WoodshedUninstall([string]$Exe, [bool]$Menu) {
         ((& $InCmd $Uv) + ' tool uninstall woodshed'),
         'if errorlevel 1 goto :failed',
         # woodshed's downloads in uv's cache (uninstall.CACHED in woodshed): only those, never the whole cache.
-        ((& $InCmd $Uv) + ' cache clean woodshed torch torchaudio demucs llvmlite numba scipy scikit-learn sympy numpy >nul 2>&1'),
+        'echo.',
+        'echo Cleaning woodshed''s big packages (torch, numpy...) from uv''s cache: other Python programs may download them again if they need them.',
+        ((& $InCmd $Uv) + ' cache clean woodshed torch torchaudio demucs llvmlite numba scipy scikit-learn sympy numpy'),
         ('reg delete "HKCU\' + $Key + '" /f >nul 2>&1'),
         'echo.',
         'echo woodshed is removed. Your songs stay where they are.',

@@ -1,12 +1,14 @@
 """woodshed uninstall: remove what woodshed and its installers put on this computer, never the songs.
 
 What goes, after one question: the separated tracks and the models in the cache (`stems/` and `models/` only,
-never the cache folder's other files), woodshed's tools folder, and the shortcuts the installers made (the Mac
+never the cache folder's other files), the files woodshed puts in its tools folder (by name, never the folder's
+other files: WOODSHED_TOOLS may name a folder of the user's), and the shortcuts the installers made (the Mac
 apps, the Linux menu entries, the Windows Start menu shortcuts and the Settings > Apps entry). Then woodshed
 itself, which a running program cannot do: the shortcuts run `woodshed uninstall --keep-self` and then `uv tool
 uninstall woodshed` once it has exited; typed in a terminal, the command prints that last step.
 
-A link is removed, never what it points to. It refuses while woodshed runs, outside a uv tool install, in
+A link (or a Windows junction) is removed, never what it points to. A file that stays locked stops it before
+woodshed itself goes, so the shortcut can be run again. It refuses while woodshed runs, outside a uv tool install, in
 Docker, and when the library and a folder it would remove contain each other.
 """
 
@@ -17,9 +19,10 @@ import contextlib
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,13 +33,24 @@ LIBRARY = Path("~/woodshed")  # the library the shortcuts open
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\woodshed"
 APP_ID = "io.github.laugiov.woodshed"  # the Mac apps' bundle identifiers start with it
 WINDOWS_SCRIPT = "uninstall-woodshed.cmd"  # in the tools folder, what the Start menu and Settings run
-QUESTION = "Remove woodshed from this computer? Your songs stay where they are. [y/N] "
+QUESTION = (
+    "Remove woodshed from this computer? Your songs stay where they are.\n"
+    "Type y then Enter to remove it (Enter alone keeps everything): [y/N] "
+)
+# What woodshed puts in its tools folder: only these names are removed from it. Rubber Band's licence files only
+# beside its program (a folder of the user's may have a COPYING of its own).
+TOOL_FILES = ("uninstall-woodshed.sh", WINDOWS_SCRIPT, "rubberband", "rubberband.exe", "sndfile.dll")
+TOOL_LICENCES = ("COPYING", "COPYING.txt")
 # uv keeps every download: `uv cache prune` frees nothing once woodshed is gone (seen on all three systems), so
 # woodshed's own entry and its heavy packages leave the cache (downloaded again if another program needs them).
 # Never `uv cache clean` alone: that empties the cache of every other uv program too.
 CACHED = ("woodshed", "torch", "torchaudio", "demucs", "llvmlite", "numba", "scipy", "scikit-learn", "sympy", "numpy")
 LAST_STEP = ("uv tool uninstall woodshed", "uv cache clean " + " ".join(CACHED))
-RUNNING = "woodshed is running: close its window first (the library in the browser), then try again."
+RUNNING = (
+    "woodshed is still running: close its Terminal window (Mac) or its black window (Windows), not only the"
+    " browser tab, then try again."
+)
+NO_PROCESS_LIST = "(woodshed could not list this computer's programs: it only checked woodshed's port)"
 EXIT_OK, EXIT_STOPPED = 0, 1
 
 
@@ -78,24 +92,68 @@ def tools_dir(system: str | None = None) -> Path:
     return _data_home() / "woodshed" / "tools"
 
 
+def _is_junction(path: Path) -> bool:
+    """A Windows junction (mklink /J): a link to a folder that is not a symlink."""
+    isjunction = getattr(os.path, "isjunction", None)  # Python 3.12+
+    if isjunction is not None:
+        return bool(isjunction(path))
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return bool(getattr(info, "st_file_attributes", 0) & 0x400) and stat.S_ISDIR(info.st_mode)  # REPARSE_POINT
+
+
+def _is_link(path: Path) -> bool:
+    return path.is_symlink() or _is_junction(path)
+
+
+def _remove_link(path: Path) -> None:
+    """The link only: what it points to stays."""
+    try:
+        os.unlink(path)
+    except (IsADirectoryError, PermissionError):
+        os.rmdir(path)  # a junction or a folder link on Windows: rmdir removes the link, not the folder
+
+
+def _tool_files(folder: Path) -> list[Path]:
+    """The files woodshed put in its tools folder, the only ones taken from it."""
+    if not folder.is_dir():
+        return []
+    names = [n for n in TOOL_FILES if os.path.lexists(folder / n)]
+    if any(n.startswith("rubberband") for n in names):
+        names += [n for n in TOOL_LICENCES if os.path.lexists(folder / n)]
+    return [folder / n for n in names if _is_link(folder / n) or not (folder / n).is_dir()]
+
+
+def _has(pattern: bytes) -> Callable[[bytes], bool]:
+    return lambda data: re.search(pattern, data) is not None
+
+
+def _holds(text: str) -> Callable[[bytes], bool]:
+    """A .lnk file holds its target's path, often in UTF-16."""
+    return lambda data: text.encode() in data.lower() or text.encode("utf-16-le") in data.lower()
+
+
 @dataclass(frozen=True)
 class Item:
-    """One thing to remove. A folder goes with its contents, except the names in `keep` (then it stays)."""
+    """One thing to remove. `tools`: a folder of which only woodshed's files go (then the folder if empty)."""
 
     path: Path
     label: str
-    marker: tuple[str, str] | None = None  # (file inside, text it holds): only a file of ours goes
+    ours_if: tuple[str, Callable[[bytes], bool]] | None = None  # (file inside, test): only a file of ours goes
+    tools: bool = False
     keep: tuple[str, ...] = ()
 
     def ours(self) -> bool:
-        if self.marker is None or self.path.is_symlink():
+        if self.ours_if is None or _is_link(self.path):
             return True
-        inside, text = self.marker
+        inside, test = self.ours_if
         try:
             data = (self.path / inside if inside else self.path).read_bytes()
         except OSError:
             return False
-        return text.encode() in data or text.encode("utf-16-le") in data  # a .lnk holds UTF-16 paths
+        return test(data)
 
 
 @dataclass
@@ -104,6 +162,7 @@ class Plan:
     then_rmdir: list[Path] = field(default_factory=list)  # removed only when left empty
     registry_key: bool = False
     foreign: list[Path] = field(default_factory=list)  # a file named as ours, not made by woodshed: kept
+    failed: list[str] = field(default_factory=list)  # what could not be removed, and why
     kept: list[str] = field(default_factory=list)
     refusal: str | None = None
 
@@ -111,22 +170,35 @@ class Plan:
 def _shortcuts(system: str) -> list[Item]:
     if system == "darwin":
         apps = Path.home() / "Applications"
+        plist = "Contents/Info.plist"
         return [
-            Item(apps / "woodshed.app", "the woodshed app", ("Contents/Info.plist", APP_ID)),
-            Item(apps / "Uninstall woodshed.app", "the Uninstall woodshed app", ("Contents/Info.plist", APP_ID)),
-        ]
+            Item(
+                apps / "woodshed.app", "the woodshed app",
+                (plist, _has(rb"<string>io\.github\.laugiov\.woodshed</string>")),
+            ),
+            Item(
+                apps / "Uninstall woodshed.app", "the Uninstall woodshed app",
+                (plist, _has(rb"<string>io\.github\.laugiov\.woodshed\.uninstall</string>")),
+            ),
+        ]  # fmt: skip
     if system == "win32":
         roaming = _absolute_env("APPDATA") or Path.home() / "AppData" / "Roaming"
         programs = roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"
         return [
-            Item(programs / "woodshed.lnk", "the Start menu shortcut", ("", "woodshed")),
-            Item(programs / "Uninstall woodshed.lnk", "the Start menu's Uninstall woodshed", ("", "woodshed")),
-        ]
+            Item(programs / "woodshed.lnk", "the Start menu shortcut", ("", _holds("woodshed.exe"))),
+            Item(
+                programs / "Uninstall woodshed.lnk", "the Start menu's Uninstall woodshed",
+                ("", _holds(WINDOWS_SCRIPT)),
+            ),
+        ]  # fmt: skip
     apps = _data_home() / "applications"
     return [
-        Item(apps / "woodshed.desktop", "the menu entry", ("", "woodshed")),
-        Item(apps / "woodshed-uninstall.desktop", "the menu's Uninstall woodshed", ("", "woodshed")),
-    ]
+        Item(apps / "woodshed.desktop", "the menu entry", ("", _has(rb'(?m)^Exec=.*woodshed"? app[ \t]*$'))),
+        Item(
+            apps / "woodshed-uninstall.desktop", "the menu's Uninstall woodshed",
+            ("", _has(rb"(?m)^Exec=.*uninstall-woodshed\.sh")),
+        ),
+    ]  # fmt: skip
 
 
 def _overlap(a: Path, b: Path) -> bool:
@@ -148,8 +220,10 @@ def plan(system: str, keep_self: bool = False) -> Plan:
         *_shortcuts(system),
         Item(cache / "stems", "the separated tracks"),
         Item(cache / "models", "the downloaded models"),
-        Item(tools, "woodshed's tools", keep=(WINDOWS_SCRIPT,) if keep_self and system == "win32" else ()),
     ]
+    keep = (WINDOWS_SCRIPT,) if keep_self and system == "win32" else ()  # the .cmd running this one
+    if [f for f in _tool_files(tools) if f.name not in keep]:
+        candidates.append(Item(tools, "woodshed's files in its tools folder", tools=True, keep=keep))
     for item in candidates:
         if not os.path.lexists(item.path):
             continue
@@ -160,16 +234,22 @@ def plan(system: str, keep_self: bool = False) -> Plan:
     p.then_rmdir.append(cache)
     if not os.environ.get("WOODSHED_CACHE") and system == "win32":
         p.then_rmdir.append(cache.parent)  # LOCALAPPDATA\woodshed, once Cache and tools are gone
+    p.then_rmdir.append(tools)  # only if left empty (a folder of the user's keeps its files)
     if not os.environ.get("WOODSHED_TOOLS"):
         p.then_rmdir.append(tools.parent)
     p.registry_key = system == "win32" and not keep_self  # the shortcut's script removes it, after woodshed
-    p.kept = [f"your songs and their practice pages: {library}"]
+    p.kept = [
+        f"your songs and their practice pages: {library} (a library kept somewhere else is not looked at, and"
+        " stays too)"
+    ]
     if system == "win32":
         p.kept.append("ffmpeg, if the installer added it (to remove it: winget uninstall Gyan.FFmpeg)")
-    p.kept.append("uv and the Python it downloaded, and the line it added to your PATH")
+    p.kept.append(
+        "uv, a helper other programs may use, with the Python it downloaded and the line it added to your PATH"
+    )
 
     home = Path.home().resolve()
-    for target in [cache, *(i.path for i in p.items)]:
+    for target in [cache, tools, *(i.path for i in p.items)]:
         where = _where(target)
         if _overlap(where, library):
             p.refusal = (
@@ -201,32 +281,35 @@ def _delete_key(key: str) -> None:
 
 def _remove(item: Item) -> str:
     path = item.path
-    if path.is_symlink():
-        path.unlink()
+    if item.tools:
+        files = [f for f in _tool_files(path) if f.name not in item.keep]
+        for f in files:
+            _remove_link(f) if _is_link(f) else f.unlink()
+        return f"{item.label}: {path} ({', '.join(f.name for f in files)})"
+    if _is_link(path):
+        _remove_link(path)
         return f"{item.label}: {path} (a link: only the link, not what it points to)"
     if path.is_dir():
-        if item.keep:
-            for child in path.iterdir():
-                if child.name in item.keep:
-                    continue
-                if child.is_dir() and not child.is_symlink():
-                    shutil.rmtree(child)
-                else:
-                    child.unlink()
-        else:
-            shutil.rmtree(path)
+        shutil.rmtree(path)
     else:
         path.unlink()
     return f"{item.label}: {path}"
 
 
 def remove(p: Plan) -> list[str]:
-    """Carry the plan out: the shortcuts first, then the files, the empty folders, the Settings entry last."""
-    done = [_remove(item) for item in p.items]
+    """Carry the plan out: the shortcuts first, then the files, the empty folders, the Settings entry last. What
+    cannot be removed (a file another program holds open) is noted in `p.failed`, and the rest still goes."""
+    done = []
+    for item in p.items:
+        try:
+            done.append(_remove(item))
+        except OSError as exc:
+            p.failed.append(f"{item.label}: {item.path}: {exc.strerror or exc}")
     for folder in p.then_rmdir:
-        with contextlib.suppress(OSError):
-            folder.rmdir()  # only when empty
-    if p.registry_key:
+        if not _is_link(folder):  # rmdir would remove a junction itself
+            with contextlib.suppress(OSError):
+                folder.rmdir()  # only when empty
+    if p.registry_key and not p.failed:  # kept to try again from Settings > Apps
         _delete_key(UNINSTALL_KEY)
     return done
 
@@ -325,9 +408,12 @@ def _running(system: str) -> str | None:
     from woodshed.app import running_url
 
     if running_url(PORT) is not None:
-        return f"{RUNNING} (it answers on port {PORT})"
-    pid = other_woodshed(_processes(), _script(), system)
-    return f"{RUNNING} (woodshed is process {pid})" if pid is not None else None
+        return RUNNING
+    processes = _processes()
+    if not processes:
+        print(NO_PROCESS_LIST)
+        return None
+    return RUNNING if other_woodshed(processes, _script(), system) is not None else None
 
 
 def _installed_by_uv() -> bool:
@@ -379,7 +465,14 @@ def main(argv: Sequence[str]) -> int:
         print(f"  - {item.label}: {item.path}{_size(item.path)}")
     if p.registry_key:
         print("  - woodshed's entry in Settings > Apps")
-    print("  - woodshed itself" + (", once this window's next step runs" if args.keep_self else ""))
+    if args.keep_self:
+        print("  - woodshed itself (removed right after, in this window)")
+    else:
+        print("  - woodshed itself (with the two commands printed at the end)")
+    print(
+        "  - woodshed's big packages in uv's cache (torch, numpy...): other Python programs may download them"
+        " again if they need them"
+    )
     print("It keeps:")
     for line in p.kept:
         print(f"  - {line}")
@@ -400,6 +493,13 @@ def main(argv: Sequence[str]) -> int:
         print("Removed:")
         for line in done:
             print(f"  - {line}")
+    if p.failed:
+        print("Not removed (another program may be using it):")
+        for line in p.failed:
+            print(f"  - {line}")
+        print("woodshed itself stays, so you can try again: close the programs using these files, then run")
+        print("Uninstall woodshed again.")
+        return EXIT_STOPPED
     if not args.keep_self:
         print("")
         print("Last step: woodshed cannot remove itself while it runs. Type these two commands:")

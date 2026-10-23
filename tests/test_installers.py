@@ -335,8 +335,8 @@ def test_the_shortcuts_clean_the_same_packages_from_uv_cache_as_woodshed_says() 
 
     clean = uninstall.LAST_STEP[1].removeprefix("uv ")
     assert clean.startswith("cache clean woodshed ") and "torch" in clean
-    assert f") {clean} >/dev/null" in INSTALL_SH.read_text(encoding="utf-8")
-    assert f"' {clean} >nul" in PS1.read_text(encoding="utf-8")
+    assert f") {clean} || true\n" in INSTALL_SH.read_text(encoding="utf-8")
+    assert f"' {clean}')," in PS1.read_text(encoding="utf-8")
 
 
 def test_the_windows_installer_registers_the_uninstall_woodshed_knows() -> None:
@@ -361,3 +361,77 @@ def test_the_windows_installer_registers_the_uninstall_woodshed_knows() -> None:
         assert value in text, value
     # The tools folder as woodshed computes it on Windows.
     assert 'Join-Path $env:LOCALAPPDATA "woodshed\\tools"' in text and "$env:WOODSHED_TOOLS" in text
+
+
+@posix_only
+def test_uv_shows_its_cache_cleaning_in_the_uninstall_window(tmp_path: Path) -> None:
+    # The cache lock can make uv wait for another uv: its own messages say so, nothing is hidden.
+    bin_dir, uv, _ = uninstall_stubs(tmp_path)
+    script = tmp_path / "u.sh"
+    make = shell_function("sh_quote") + shell_function("uninstall_script") + 'uninstall_script "$1" "$2" > "$3"'
+    subprocess.run(["sh", "-c", make, "sh", str(bin_dir), str(uv), str(script)], check=True)
+    [line] = [ln for ln in script.read_text(encoding="utf-8").splitlines() if "cache clean" in ln]
+    assert ">/dev/null" not in line
+    out = run_uninstall_script(script, tmp_path).stdout
+    assert "other Python programs may download them again" in out
+    ps1 = [ln for ln in PS1.read_text(encoding="utf-8").splitlines() if "cache clean" in ln]
+    assert ps1 and not [ln for ln in ps1 if ">nul" in ln]
+
+
+def desktop_exec_args(value: str) -> list[str]:
+    """An Exec value as a desktop environment reads it (Desktop Entry spec 1.5)."""
+    unescaped = re.sub(r"\\(.)", lambda m: {"s": " ", "n": "\n", "t": "\t", "r": "\r"}.get(m[1], m[1]), value)
+    args, i = [], 0
+    while i < len(unescaped):
+        if unescaped[i] == " ":
+            i += 1
+            continue
+        if unescaped[i] == '"':
+            i, arg = i + 1, ""
+            while unescaped[i] != '"':
+                if unescaped[i] == "\\":
+                    assert unescaped[i + 1] in '"`$\\', f"a stray backslash in {value!r}"
+                    i += 1
+                else:
+                    assert unescaped[i] not in "`$", f"{unescaped[i]} must be escaped in {value!r}"
+                arg += unescaped[i]
+                i += 1
+            args.append(arg)
+            i += 1
+        else:
+            end = unescaped.find(" ", i)
+            end = len(unescaped) if end < 0 else end
+            args.append(unescaped[i:end])
+            i = end
+    return [a.replace("%%", "%") for a in args]
+
+
+@posix_only
+@pytest.mark.parametrize("folder", ["/opt/jane/.local/bin", '/opt/a "b" $HOME `x` \\y 100%/bin'])
+def test_the_menu_entries_quote_the_path_as_the_desktop_spec_says(folder: str) -> None:
+    quote = shell_function("desktop_quote") + 'desktop_quote "$1"'
+    quoted = subprocess.run(["sh", "-c", quote, "sh", f"{folder}/woodshed"], capture_output=True, text=True, check=True)
+    assert desktop_exec_args(quoted.stdout + " app") == [f"{folder}/woodshed", "app"]
+
+
+@posix_only
+def test_install_sh_quotes_both_menu_entries(tmp_path: Path) -> None:
+    code, out, _ = run_install(tmp_path, "Linux", "x86_64", WOODSHED_NO_MENU="0", WOODSHED_TOOLS=str(tmp_path / "t$x"))
+    assert code == 0, out
+    apps = tmp_path / "home" / ".local" / "share" / "applications"
+    for name, args in (
+        ("woodshed.desktop", [f"{tmp_path / 'b.in (x+y)'}/woodshed", "app"]),
+        ("woodshed-uninstall.desktop", ["sh", f"{tmp_path / 't$x'}/uninstall-woodshed.sh"]),
+    ):
+        [line] = [ln for ln in (apps / name).read_text(encoding="utf-8").splitlines() if ln.startswith("Exec=")]
+        assert desktop_exec_args(line.removeprefix("Exec=")) == args
+
+
+def test_the_cmd_lines_in_install_ps1_are_whole_powershell_strings() -> None:
+    # In PowerShell a ' inside '...' is written ''; one alone ends the string (and breaks the installer).
+    text = PS1.read_text(encoding="utf-8")
+    block = text[text.index("$Lines = @(") : text.index("\n    )\n", text.index("$Lines = @("))]
+    quoted = [ln.strip() for ln in block.splitlines()[1:] if ln.strip().startswith("'")]
+    assert len(quoted) > 20
+    for line in quoted:
+        assert re.fullmatch(r"'(?:[^']|'')*',?", line), line

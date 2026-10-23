@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import socket
 import threading
 from collections.abc import Iterator
@@ -128,8 +130,8 @@ def test_linux_removes_the_cache_tracks_the_tools_and_the_menu_entries_only(
     apps = fake.data / "applications"
     apps.mkdir()
     menu = [apps / "woodshed.desktop", apps / "woodshed-uninstall.desktop"]
-    for entry in menu:
-        entry.write_text("[Desktop Entry]\nName=woodshed\nExec=woodshed app\n", encoding="utf-8")
+    menu[0].write_text('[Desktop Entry]\nName=woodshed\nExec="/opt/uv/bin/woodshed" app\n', encoding="utf-8")
+    menu[1].write_text(f'[Desktop Entry]\nExec=sh "{fake.tools}/uninstall-woodshed.sh"\n', encoding="utf-8")
     (apps / "other.desktop").write_text("[Desktop Entry]\nName=Other\n", encoding="utf-8")
     before, expected = fake.files(), below(fake.cache, *menu, fake.tools)
 
@@ -163,8 +165,8 @@ def test_windows_removes_the_shortcuts_the_tools_and_the_settings_entry_last(
     programs = fake.roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"
     programs.mkdir(parents=True)
     links = [programs / "woodshed.lnk", programs / "Uninstall woodshed.lnk"]
-    for link in links:
-        link.write_bytes(b"L\0\0\0" + "C:\\bin\\woodshed.exe".encode("utf-16-le"))
+    links[0].write_bytes(b"L\0\0\0" + "C:\\bin\\woodshed.exe".encode("utf-16-le"))
+    links[1].write_bytes(b"L\0\0\0" + "C:\\tools\\uninstall-woodshed.cmd".encode("utf-16-le"))
     (programs / "Other.lnk").write_bytes(b"L\0\0\0other")
     before, expected = fake.files(), below(fake.cache, *links, fake.tools)
 
@@ -229,6 +231,93 @@ def test_a_foreign_file_in_the_cache_folder_stays(fake: Home, monkeypatch: pytes
     assert not (fake.cache / "stems").exists() and not (fake.cache / "models").exists()
 
 
+def test_a_shortcut_named_like_ours_but_not_ours_stays(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    apps = fake.data / "applications"
+    apps.mkdir()
+    (apps / "woodshed.desktop").write_text("[Desktop Entry]\nName=woodshed notes\nExec=gedit notes\n", encoding="utf-8")
+    (apps / "woodshed-uninstall.desktop").write_text("[Desktop Entry]\nExec=woodshed-cleaner\n", encoding="utf-8")
+    programs = fake.roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    programs.mkdir(parents=True)
+    (programs / "woodshed.lnk").write_bytes("C:\\notes\\woodshed.txt".encode("utf-16-le"))
+    before = fake.files()
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert run(monkeypatch, "win32", "--yes") == 0
+    assert fake.files() == before
+
+
+def test_a_foreign_file_in_the_tools_folder_stays(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    # WOODSHED_TOOLS set to a folder of the user's: only the files woodshed puts there go.
+    documents = fake.home / "Documents"
+    monkeypatch.setenv("WOODSHED_TOOLS", str(documents))
+    (documents / "photos").mkdir(parents=True)
+    (documents / "photos" / "band.jpg").write_bytes(b"jpg")
+    (documents / "thesis.odt").write_bytes(b"odt")
+    ours = [documents / n for n in ("rubberband", "COPYING", "uninstall-woodshed.sh")]
+    for f in ours:
+        f.write_text("woodshed's", encoding="utf-8")
+    before = fake.files()
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert before - fake.files() == set(ours)
+
+
+def test_a_licence_file_alone_is_not_taken_for_rubber_bands(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    fill_tools(fake, "COPYING", "uninstall-woodshed.sh")  # a folder's own licence, no Rubber Band beside it
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert (fake.tools / "COPYING").exists() and not (fake.tools / "uninstall-woodshed.sh").exists()
+
+
+def test_a_folder_named_like_a_tool_stays(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    (fake.tools / "rubberband").mkdir(parents=True)
+    (fake.tools / "rubberband" / "song.wav").write_bytes(b"x")
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert (fake.tools / "rubberband" / "song.wav").exists()
+
+
+def test_a_junction_is_removed_as_a_link(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Windows junction (mklink /J) looks like a folder: what it points to must not be emptied.
+    fill_cache(fake)
+    stems = fake.cache / "stems"
+    unlinked: list[Path] = []
+    monkeypatch.setattr(uninstall, "_is_junction", lambda p: Path(p) == stems)
+    monkeypatch.setattr(uninstall, "_remove_link", unlinked.append)
+    assert run(monkeypatch, "win32", "--yes") == 0
+    assert unlinked == [stems]
+    assert (stems / "htdemucs_6s-abc" / "vocals.flac").exists()
+    assert not (fake.cache / "models").exists()
+
+
+def test_the_junction_test_reads_the_reparse_point_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class Stat:
+        st_file_attributes = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
+        st_mode = 0o040755
+
+    monkeypatch.delattr(os.path, "isjunction", raising=False)  # Python before 3.12
+    monkeypatch.setattr(os, "lstat", lambda _p: Stat())
+    assert uninstall._is_junction(tmp_path) is True
+    Stat.st_file_attributes = 0
+    assert uninstall._is_junction(tmp_path) is False
+
+
+def test_a_locked_file_stops_before_woodshed_itself(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fill_cache(fake)
+    real = shutil.rmtree
+
+    def locked(path: Path) -> None:
+        if path.name == "stems":
+            raise PermissionError(13, "The process cannot access the file", str(path))
+        real(path)
+
+    monkeypatch.setattr(shutil, "rmtree", locked)
+    assert run(monkeypatch, "win32", "--yes") == 1
+    assert (fake.cache / "stems").exists() and not (fake.cache / "models").exists()  # the others still go
+    out = capsys.readouterr().out
+    assert "Not removed" in out and "stems" in out and "cannot access" in out
+    assert "uv tool uninstall" not in out
+    assert fake.deleted_keys == []  # Settings > Apps keeps the entry, to try again
+
+
 def test_a_linked_stems_folder_loses_the_link_only(
     fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -243,12 +332,15 @@ def test_a_linked_stems_folder_loses_the_link_only(
     tools_target = fake.root / "my tools"
     tools_target.mkdir()
     (tools_target / "rubberband").write_text("tool", encoding="utf-8")
+    (tools_target / "mine.txt").write_text("mine", encoding="utf-8")
     fake.tools.symlink_to(tools_target, target_is_directory=True)
 
     assert run(monkeypatch, "linux", "--yes") == 0
 
-    assert not os.path.lexists(fake.cache / "stems") and not os.path.lexists(fake.tools)
-    assert (elsewhere / "a.flac").exists() and (tools_target / "rubberband").exists()
+    assert not os.path.lexists(fake.cache / "stems") and (elsewhere / "a.flac").exists()
+    # The tools folder as a link: woodshed's files in it go, the link and the rest stay.
+    assert fake.tools.is_symlink() and (tools_target / "mine.txt").exists()
+    assert not (tools_target / "rubberband").exists()
     assert "link" in capsys.readouterr().out
 
 
@@ -313,7 +405,9 @@ def test_refuses_while_the_app_answers_on_its_port(
     before = fake.files()
     assert run(monkeypatch, "linux", "--yes") == 1
     assert fake.files() == before
-    assert "woodshed is running: close its window first" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert uninstall.RUNNING in err and not re.search(r"process \d", err)
+    assert "close its Terminal window (Mac) or its black window (Windows), not only the browser tab" in err
 
 
 def test_refuses_while_another_woodshed_process_runs(
@@ -326,7 +420,16 @@ def test_refuses_while_another_woodshed_process_runs(
     before = fake.files()
     assert run(monkeypatch, "linux", "--yes") == 1
     assert fake.files() == before
-    assert "close its window first" in capsys.readouterr().err
+    assert uninstall.RUNNING in capsys.readouterr().err
+
+
+def test_an_unreadable_process_list_falls_back_to_the_port(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fill_cache(fake)
+    monkeypatch.setattr(uninstall, "_processes", lambda: [])
+    assert run(monkeypatch, "linux", "--yes") == 0
+    assert capsys.readouterr().out.count("only checked woodshed's port") == 1
 
 
 def test_itself_and_its_ancestors_do_not_count_as_running(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -374,14 +477,14 @@ def test_a_parent_loop_ends(fake: Home) -> None:
     assert uninstall.others_running(loop, "x", "win32", me=500) is False
 
 
-def test_refuses_with_the_process_named(
+def test_refuses_a_running_windows_woodshed(
     fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(uninstall, "_processes", lambda: [*WINDOWS_TREE, (700, 4, "woodshed.exe")])
     monkeypatch.setattr(os, "getpid", lambda: 500)
     fill_cache(fake)
     assert run(monkeypatch, "win32", "--yes") == 1
-    assert "process 700" in capsys.readouterr().err
+    assert uninstall.RUNNING in capsys.readouterr().err
 
 
 def test_refuses_in_docker(fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -434,8 +537,26 @@ def test_the_question_names_the_songs_and_yes_removes(
     monkeypatch.setattr(uninstall, "_system", lambda: "linux")
     monkeypatch.setattr("builtins.input", answer)
     assert uninstall.main([]) == 0
-    assert asked == ["Remove woodshed from this computer? Your songs stay where they are. [y/N] "]
+    assert asked == [uninstall.QUESTION]
+    assert "Remove woodshed from this computer? Your songs stay where they are." in uninstall.QUESTION
+    assert "Type y then Enter to remove it" in uninstall.QUESTION and uninstall.QUESTION.endswith("[y/N] ")
     assert not (fake.cache / "stems").exists()
+
+
+@pytest.mark.parametrize("keep_self", [False, True])
+def test_the_list_says_plainly_what_goes_and_what_stays(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], keep_self: bool
+) -> None:
+    fill_cache(fake)
+    assert run(monkeypatch, "linux", "--yes", *(["--keep-self"] if keep_self else [])) == 0
+    out = capsys.readouterr().out
+    if keep_self:
+        assert "woodshed itself (removed right after, in this window)" in out
+    # uv's cache: what is cleaned, and what it means for other programs.
+    assert "woodshed's big packages in uv's cache (torch, numpy...)" in out
+    assert "other Python programs may download them again" in out
+    assert "uv, a helper other programs may use" in out
+    assert f"{fake.library} (a library kept somewhere else is not looked at, and stays too)" in out
 
 
 def test_end_of_input_is_a_no(fake: Home, monkeypatch: pytest.MonkeyPatch) -> None:
