@@ -319,7 +319,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .key-change .check { color: var(--warn); }
 .shape-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; margin: 10px 0 2px; }
 .shape-group .hint { white-space: nowrap; }
-.voice-moves { margin-bottom: 12px; }
 .shape-group b { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .shape-hands { grid-column: 1 / -1; margin: 4px 0 0; }
 .bar .key-change { position: absolute; left: 4px; top: -1.4em; font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; pointer-events: none; }
@@ -624,6 +623,12 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .range svg { width: 100%; height: auto; display: block; }
 .fit { font-size: 14px; margin: 8px 0 0; }
 .fit b { color: var(--accent); }
+/* The voice after a key change (spec 024): the change said as plainly as the best key, then what the voice does. */
+.voice-changes { margin: 0 0 12px; }
+.voice-moves { font-size: 14px; color: var(--ink); margin: 0 0 4px; }
+.voice-moves b { color: var(--accent); white-space: nowrap; }
+.voice-ending { font-size: 13px; color: var(--ink); margin: 0 0 8px; }
+.voice-ending.higher, .voice-ending.lower { color: var(--warn); font-weight: 600; }
 .toast { bottom: calc(var(--dock-h, 90px) + 12px + env(safe-area-inset-bottom, 0px)); }
 .stage-top .map { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .stage-top .st-section { font-family: var(--font-chord); font-size: clamp(26px, 4vw, 48px); color: var(--ink); line-height: 1; }

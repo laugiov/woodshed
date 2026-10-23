@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import __version__, audio, lyrics, pitch, stems
+from woodshed import __version__, audio, build, lyrics, pitch, stems
 from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
@@ -115,7 +115,8 @@ class Job:
     message: str = ""
     page: str | None = None  # the page folder, as soon as a first page exists
     started: float = field(default_factory=time.time)
-    kind: str = "song"  # song (an analysis), words (lyrics placed on a page), bars (the bar lines moved)
+    # song (an analysis), words (lyrics placed on a page), bars (the bar lines moved), voice (spec 024, not listed)
+    kind: str = "song"
     ended: float | None = None  # done or failed: shown a while after this, not after it started
     notes: list[str] = field(default_factory=list)  # what the user should know about the result
 
@@ -158,6 +159,7 @@ class Library:
         self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
         self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
         self.on_band: Callable[[str, int], None] | None = None  # told when band choices changed (Live.corrected)
+        self.on_reload: Callable[[str], None] | None = None  # told when a page's data changed (Live.page_updated)
         # The recording in another key (spec 007): rendered one track at a time, never during an analysis.
         self.renders = (
             pitch.Renders(self.root, busy=lambda: self.running is not None, free_margin=FREE_MARGIN)
@@ -215,6 +217,39 @@ class Library:
             except (WoodshedError, OSError) as exc:  # one page held open or not writable: the others still are
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
         return updated
+
+    def measure_voices(self) -> list[str]:
+        """Pages built before the voice's range per key region (spec 024) get it, measured on their own vocal
+        track: queued behind any analysis, never during the start. A measure that fails leaves the page as it
+        was, so the next start tries again: the page's own data says what is measured, not its page revision."""
+        queued = []
+        for manifest in sorted(self.root.glob(f"*.woodshed/{MANIFEST}")):
+            page = manifest.parent
+            if page.is_symlink() or not build.needs_vocal_regions(page):
+                continue
+            job = Job(secrets.token_hex(6), page.name, page=page.name, kind="voice")  # the library's own: not listed
+            self.queue.put((job, page, self.opts, False, None))
+            queued.append(page.name)
+        return queued
+
+    def _measure_voice(self, job: Job, page: Path) -> None:
+        try:
+            with self.lock:
+                if self.stopping.is_set():
+                    return
+                self.running = page  # the renders wait, as for an analysis
+            job.status = "measuring"
+            if build.add_vocal_regions(page) and self.on_reload is not None:
+                self.on_reload(page.name)
+            job.status = "done"
+        except Exception as exc:  # the page stays as it was, measured again at the next start
+            job.status, job.message = "failed", str(exc)
+            print(f"woodshed app: {page.name}: the voice range per key was not measured ({exc})", flush=True)
+        finally:
+            job.ended = time.time()
+            with self.lock:
+                self.running = None
+            self.queue.task_done()
 
     def _page_song(self, page: Path) -> dict[str, Any] | None:
         """A page's song data, read once per build of the page (its doubts are counted every poll)."""
@@ -730,6 +765,9 @@ class Library:
     def _work(self) -> None:
         while True:
             job, path, opts, uploaded, words = self.queue.get()
+            if job.kind == "voice":
+                self._measure_voice(job, path)
+                continue
             if words is not None:
                 self._place_words(job, path, words, opts)
                 continue
@@ -1070,6 +1108,7 @@ class Live:
         self.closed = False
         self.fixes: dict[str, int] = {}  # page folder -> revision of its corrections, told to followers
         self.moved: dict[str, int] = {}  # page folder -> how many times its bar lines moved: open pages reload
+        self.updated: dict[str, int] = {}  # page folder -> how many times the library rewrote its data: pages reload
 
     def corrected(self, folder: str, rev: int) -> None:
         """The chart of a page was corrected: the followers hear it and read it again."""
@@ -1081,6 +1120,12 @@ class Live:
         """A page's bar lines moved: the devices that have it open load it again."""
         with self.cond:
             self.moved[folder] = self.moved.get(folder, 0) + 1
+            self._changed()
+
+    def page_updated(self, folder: str) -> None:
+        """The library rewrote a page's data (the voice range per key, spec 024): the open pages load it again."""
+        with self.cond:
+            self.updated[folder] = self.updated.get(folder, 0) + 1
             self._changed()
 
     def playing(self, folder: str) -> bool:
@@ -1097,6 +1142,7 @@ class Live:
                 **self.state,
                 **({"fixes": dict(self.fixes)} if self.fixes else {}),
                 **({"moved": dict(self.moved)} if self.moved else {}),
+                **({"updated": dict(self.updated)} if self.updated else {}),
             }
 
     def update(self, data: Any, library_root: Path) -> dict[str, Any]:
@@ -1641,6 +1687,7 @@ class AppServer(ThreadingHTTPServer):
         self.library = library
         library.on_bars = self.live.bars_moved
         library.on_band = self.live.corrected
+        library.on_reload = self.live.page_updated
         self.network = host not in LOOPBACK
         self._addresses: list[str] | None = None
         self.token = secrets.token_urlsafe(24)
@@ -1890,6 +1937,9 @@ def serve(
             print(f"woodshed app: {len(updated)} page(s) updated to this version's page", flush=True)
         for job in library.resume():
             print(f"woodshed app: {job.name}: {job.message or 'resumed'}", flush=True)
+        measured = library.measure_voices()  # in the background, after the songs resumed
+        if measured:
+            print(f"woodshed app: {len(measured)} page(s) get the voice range per key, in the background", flush=True)
         print(f"woodshed app: {server.url}  (library: {library.root}; Ctrl-C to stop)", flush=True)
         if open_browser:
             webbrowser.open(server.url)

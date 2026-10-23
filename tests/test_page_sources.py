@@ -46,7 +46,8 @@ def test_the_page_forbids_remote_content() -> None:
 DATA_FORMATS = {
     (2, 1): ("9ab2b7d621a5157b", "6c8a1aef3cb83902"),
     # Key regions (spec 012). Then meta.analysis (spec 026): optional, the page code reads data without it.
-    (3, 2): ("ef4e36f6adb5b538", "3001f6cba1d9ac6b"),
+    # Then parts.vocal.regions (spec 024): optional, the page code reads data without it (the voice panel as before).
+    (3, 2): ("558a55151c63f33c", "3001f6cba1d9ac6b"),
 }
 
 

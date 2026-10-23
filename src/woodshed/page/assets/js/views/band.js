@@ -172,6 +172,7 @@
     // comes back to the screen, and when the stream says another device corrected this song.
     let fixesRev = -1;
     let movedSeen = null; // how many times the library moved this page's bar lines, when first heard
+    let updatedSeen = null; // how many times the library rewrote this page's data (spec 024), when first heard
     let editsRead = false; // the first answer only fills the page in
     async function loadFixes() {
       const r = await api(
@@ -248,12 +249,29 @@
     });
     window.addEventListener("online", () => loadFixes()); // back on the network: what waited is shared
 
+    // The library measured something new into this page (the voice range per key, spec 024): loaded again,
+    // never under the music nor the chart being edited.
+    function reloadWhenFree() {
+      const busy = (s) => s.playing || s.editing;
+      if (!busy(store.get())) return location.reload();
+      const off = store.on((s) => {
+        if (!busy(s)) {
+          off();
+          location.reload();
+        }
+      });
+    }
+
     function heard(state) {
       if (state.fixes && typeof state.fixes[folder] === "number" && state.fixes[folder] > fixesRev) loadFixes();
       const moved = state.moved && typeof state.moved[folder] === "number" ? state.moved[folder] : 0;
       const movedBefore = movedSeen;
       movedSeen = moved; // a restarted library counts from 0 again
       if (movedBefore !== null && moved > movedBefore && app.barsMoved) app.barsMoved(); // another device moved them
+      const updated = state.updated && typeof state.updated[folder] === "number" ? state.updated[folder] : 0;
+      const updatedBefore = updatedSeen;
+      updatedSeen = updated;
+      if (updatedBefore !== null && updated > updatedBefore) reloadWhenFree();
       const sample = state.now - Date.now() / 1000;
       if (offsets.length && Math.abs(sample - offset()) > 2) offsets.length = 0; // this device's clock jumped
       offsets.push(sample);

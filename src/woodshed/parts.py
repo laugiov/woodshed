@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,7 +13,7 @@ import numpy.typing as npt
 
 from woodshed.audio import SR
 from woodshed.grid import BeatGrid
-from woodshed.model import BassNote, Groove, VocalRange
+from woodshed.model import BassNote, Groove, RegionRange, VocalRange
 
 HOP = 256
 SILENT_RMS = 1e-3  # a stem below this level is treated as empty
@@ -22,6 +23,7 @@ BAND_FLOOR = 8.0
 MIN_VOICING = 0.3  # least mean pyin voicing probability of a sung note
 VOICE_FLOOR = 10 ** (-40 / 20)  # RMS of the quietest singing (bleed sits near -50 dBFS and below)
 QUIET_NOTE = 0.1  # a note 20 dB below the loud sung notes is bleed, not singing
+MIN_REGION_NOTES = 8  # fewer sung notes in a key region: too few for a range (spec 024)
 SNARE_BODY = 0.1  # least mid-band hit, against the high band, for a snare (synthetic snare 0.8, hi-hat 0.02)
 Audio = npt.NDArray[np.float32]
 Floats = npt.NDArray[np.float64]
@@ -248,13 +250,18 @@ def vocal_activity(vocals: Audio, beat_times: npt.NDArray[np.float64]) -> npt.ND
     return out
 
 
-def vocal_range(vocals: Audio, min_share: float = 0.15) -> VocalRange | None:
+def vocal_range(
+    vocals: Audio, min_share: float = 0.15, *, starts: Sequence[tuple[int, float]] = ()
+) -> VocalRange | None:
     """Range of the sung notes, or None when the track is mostly silent.
 
     Measured note by note (median pitch of each sustained note), so attacks and slides do not
     widen the range. Only confident, audible notes count: the vocal stem carries faint bleed from
     the other instruments (on a piano ballad, the piano intro reads as notes a fifth below the voice,
     at a voicing probability of 0.01 and 30 dB below the singing).
+
+    `starts`, (bar, seconds) of each key region (spec 024): the same notes, each given to the region holding the
+    middle of its sung run, measured with the same percentiles; a region under MIN_REGION_NOTES notes has none.
     """
     # Up to F6 (1400 Hz): with a lower ceiling, high soprano notes are read an octave down.
     f0, voiced, prob = librosa.pyin(vocals, fmin=80, fmax=1400, sr=SR, frame_length=2048, hop_length=HOP)
@@ -271,4 +278,20 @@ def vocal_range(vocals: Audio, min_share: float = 0.15) -> VocalRange | None:
     if share <= min_share:
         return None
     notes = [float(np.nanmedian(midi[a:b])) for a, b in sung]
-    return VocalRange(int(np.round(np.percentile(notes, 10))), int(np.round(np.percentile(notes, 90))), round(share, 2))
+    regions = []
+    if starts:
+        # A note goes where the middle of its run is: pyin's centred frames start a run up to half a window early,
+        # which would hand the first note of a lifted chorus, sung on the downbeat, to the key before.
+        middles = librosa.frames_to_time(np.array([(a + b) / 2 for a, b in sung]), sr=SR, hop_length=HOP)
+        edges = [t for _, t in starts[1:]]
+        which = np.searchsorted(edges, middles, side="right")
+        for k, (bar, _) in enumerate(starts):
+            mine = [n for n, r in zip(notes, which, strict=True) if r == k]
+            low, high = _percentiles(mine) if len(mine) >= MIN_REGION_NOTES else (None, None)
+            regions.append(RegionRange(bar, low, high, len(mine)))
+    return VocalRange(*_percentiles(notes), round(share, 2), tuple(regions))
+
+
+def _percentiles(notes: list[float]) -> tuple[int, int]:
+    """The usual range of sung notes: the 10th and 90th percentiles, not the extremes."""
+    return int(np.round(np.percentile(notes, 10))), int(np.round(np.percentile(notes, 90)))

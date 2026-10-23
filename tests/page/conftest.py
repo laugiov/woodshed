@@ -94,6 +94,9 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     assert match is not None
     data = json.loads(match.group(2))
     change(data["song"])
+    back = data["song"].pop("_view_regions_back", None)
+    if back is not None:  # a third key region, back to the first key: the view's tables follow
+        data["view"]["regions"].append({**data["view"]["regions"][0], "bar": back})
     named = data["song"].pop("_lyrics_sections", None)
     late = data["song"].pop("_lyrics_late", False)
     midline = data["song"].pop("_lyrics_midline", False)
@@ -319,7 +322,38 @@ def _two_checks(song: dict[str, Any]) -> None:
     ]
 
 
+def _voice(song: dict[str, Any], low: int, high: int, *ranges: tuple[int | None, int | None, int]) -> None:
+    """lift (C, D♭ from bar 17) sung from `low` to `high`, with the range of each key region (spec 024): bar 1, then
+    bar 17 (and bar 25 for a third region, back in C)."""
+    bars = [0, 16, 24]
+    if len(ranges) > 2:
+        song["key_regions"].append({**song["key_regions"][0], "bar": 24})
+        song["_view_regions_back"] = 24
+    song["parts"]["vocal"] = {
+        "low": low,
+        "high": high,
+        "voiced_share": 0.6,
+        **(
+            {"regions": [{"bar": bars[k], "low": a, "high": b, "notes": n} for k, (a, b, n) in enumerate(ranges)]}
+            if ranges
+            else {}
+        ),
+    }
+
+
 VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
+    # The voice range per key region (spec 024): the ending inside the song's range, above it, below it, a
+    # semitone above (the margin), too short to measure, a third of the song (its top is the whole song's), not
+    # measured yet (a page built before), and two changes (C, D♭, C).
+    "voice-lift-inside": lambda song: _voice(song, 53, 61, (53, 61, 68), (53, 58, 13)),
+    "voice-lift-higher": lambda song: _voice(song, 53, 61, (53, 61, 68), (55, 66, 13)),
+    "voice-lift-lower": lambda song: _voice(song, 53, 61, (53, 61, 68), (50, 58, 13)),
+    "voice-lift-semitone": lambda song: _voice(song, 53, 61, (53, 61, 68), (54, 62, 13)),
+    "voice-lift-short": lambda song: _voice(song, 53, 61, (53, 61, 68), (None, None, 5)),
+    "voice-lift-long": lambda song: _voice(song, 53, 64, (53, 61, 40), (55, 64, 30)),
+    "voice-lift-unmeasured": lambda song: _voice(song, 53, 61),
+    "voice-lift-twice": lambda song: _voice(song, 53, 61, (53, 61, 60), (55, 66, 13), (53, 60, 12)),
+
     "two-checks": _two_checks,
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
     "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,

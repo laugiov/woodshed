@@ -18,6 +18,12 @@ corrections and set list stay where they are.
 
 ### Fixed
 
+- After a key change, the voice panel shows the range of the ending under the song's, and says in
+  one sentence whether it goes higher ("From bar 82 it goes higher: up to D4.") or stays within the
+  rest of the song. The best key for your voice now fits the ending too, and the line "Up a semitone
+  at bar 82: B♭ major." is as easy to read as the best key under it. Songs added before this version
+  get it in the background, a few seconds after the library starts.
+
 - A song page's footer says which version runs the page and which one found its chords: "Page:
   woodshed 0.5.0 · chords and beats found by woodshed 0.4.0 (still current)". After an update it
   no longer says "Made with woodshed 0.4.0" on a page the library had already brought up to date.

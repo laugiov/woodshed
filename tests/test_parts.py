@@ -87,6 +87,56 @@ def test_no_singing_gives_no_vocal_range() -> None:
     assert parts.vocal_range(stems_at_rate("pop")["vocals"]) is None
 
 
+# Spec 024: the range per key region. A tune over C major's notes, the same tune 5 semitones up for an ending.
+TUNE = [72, 74, 76, 77, 79, 81]
+
+
+def sung_with_an_ending(verses: int, ending: int) -> tuple[np.ndarray, list[tuple[int, float]]]:
+    """`verses` times the tune, then `ending` notes of it 5 semitones up from bar 16 (one note a beat, 0.5 s)."""
+    first = TUNE * verses
+    notes = first + [m + 5 for m in (TUNE * ending)[:ending]]
+    # Bar 16 starts a quarter of a beat before the ending's first note: a note belongs where its sung run starts.
+    return synth.sung(notes), [(0, 0.0), (16, 1.0 + len(first) * 0.5 - 0.125)]
+
+
+def test_a_short_lifted_ending_gets_its_own_range_the_whole_song_hides() -> None:
+    stem, starts = sung_with_an_ending(18, 12)  # 108 notes, then 12 lifted (10 %)
+    rng = parts.vocal_range(stem, starts=starts)
+    assert rng is not None
+    first, ending = rng.regions
+    assert (first.bar, first.low, first.high, first.notes) == (0, 72, 81, 108)
+    assert (ending.bar, ending.low, ending.high, ending.notes) == (16, 77, 86, 12)
+    # The 90th percentile of the whole song cuts the ending off: the round 6 complaint.
+    assert ending.high is not None and rng.high < ending.high
+    assert (rng.low, rng.high) == (72, 81)  # the whole song's numbers as before
+
+
+def test_a_long_ending_lifts_the_whole_song_but_not_the_other_region() -> None:
+    stem, starts = sung_with_an_ending(12, 36)  # 72 notes, then 36 lifted (a third of the notes)
+    rng = parts.vocal_range(stem, starts=starts)
+    assert rng is not None
+    first, ending = rng.regions
+    assert (ending.low, ending.high) == (77, 86)
+    assert rng.high == 84  # the whole song's top is pulled up by the ending it holds
+    assert first.high == 81  # the other region's is not: what the page compares the ending with (addendum, R10)
+
+
+def test_a_region_with_too_few_notes_has_no_range() -> None:
+    stem, starts = sung_with_an_ending(12, 7)  # 7 notes after the change: under the 8-note floor
+    rng = parts.vocal_range(stem, starts=starts)
+    assert rng is not None
+    ending = rng.regions[1]
+    assert (ending.low, ending.high, ending.notes) == (None, None, 7)
+
+
+def test_without_region_starts_there_are_no_regions() -> None:
+    stem, _ = sung_with_an_ending(12, 12)
+    rng = parts.vocal_range(stem)
+    assert rng is not None and rng.regions == ()
+    with pytest.raises(TypeError):
+        parts.vocal_range(stem, 0.15, [(0, 0.0)])  # type: ignore[call-arg]  # starts is keyword only
+
+
 def test_groove_ignores_bars_where_the_drums_are_silent() -> None:
     drums = stems_at_rate("pop")["drums"].copy()
     drums[: drums.size // 2] = 0.0  # drums come in halfway, as on many ballads

@@ -233,3 +233,13 @@ def write(name: str, folder: Path) -> Written:
     sf.write(wav, song.mix, SR)
     lab.write_text("".join(f"{a:.4f} {b:.4f} {c}\n" for a, b, c in song.chords))
     return Written(wav, lab)
+
+
+def sung(notes: list[int], step: float = 0.5, lead_in: float = 1.0, tail: float = 1.0) -> np.ndarray:
+    """A vocal stem singing `notes` (MIDI), one every `step` seconds after `lead_in`: the voice alone, with a short
+    silence between notes, as a separated vocal track gives it (spec 024)."""
+    rng = np.random.default_rng(len(notes))
+    track = np.zeros(round((lead_in + len(notes) * step + tail) * SR))
+    for i, m in enumerate(notes):
+        _add(track, _tone(_hz(m), step * 0.6, 0.3, rng, 1.0), lead_in + i * step)
+    return track.astype(np.float32)

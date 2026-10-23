@@ -159,6 +159,65 @@ def upgraded(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+VOCAL_TRACK = "audio/solo-vocals.flac"
+
+
+def _wants_vocal_regions(data: dict[str, Any]) -> bool:
+    """A song with key changes and a sung range, but no range per key region yet: built before spec 024."""
+    song = data["song"]
+    vocal = (song.get("parts") or {}).get("vocal")
+    return len(song.get("key_regions") or []) > 1 and isinstance(vocal, dict) and "regions" not in vocal
+
+
+def needs_vocal_regions(page: Path) -> bool:
+    """The page would get the voice's range per key region from its own vocal track (spec 024)."""
+    try:
+        found = DATA_BLOCK.search((page / "index.html").read_text(encoding="utf-8"))
+        return found is not None and _wants_vocal_regions(json.loads(found.group(1))) and (page / VOCAL_TRACK).is_file()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
+def measure_vocal_regions(page: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The voice's range per key region, measured on the page's own vocal track (lossless) as the analysis
+    measures it: the same notes, filter and percentiles, the regions starting where the page's bars start."""
+    from woodshed import audio, parts
+
+    song = data["song"]
+    starts = [(int(r["bar"]), float(song["bars"][r["bar"]]["start"])) for r in song["key_regions"]]
+    found = parts.vocal_range(audio.load(page / VOCAL_TRACK), starts=starts)
+    if found is None:  # no singing heard now: too little in every region, and not measured again at every start
+        return [{"bar": bar, "low": None, "high": None, "notes": 0} for bar, _ in starts]
+    return [{"bar": r.bar, "low": r.low, "high": r.high, "notes": r.notes} for r in found.regions]
+
+
+def add_vocal_regions(page: Path) -> bool:
+    """The voice's range per key region written into a page built before it (spec 024), in place: only its data
+    changes (and its JSON export), its page code stays. False when the page needs none. Slow (seconds of pitch
+    tracking): the library runs it in the background, one heavy job at a time (Library.measure_voices)."""
+    index = page / "index.html"
+    text = index.read_text(encoding="utf-8")
+    found = DATA_BLOCK.search(text)
+    if found is None:
+        return False
+    data = json.loads(found.group(1))
+    if not isinstance(data, dict) or not _wants_vocal_regions(data) or not (page / VOCAL_TRACK).is_file():
+        return False
+    regions = measure_vocal_regions(page, data)
+    if index.read_text(encoding="utf-8") != text:  # rebuilt meanwhile: the new page is left as it is
+        return False
+    song = data["song"]
+    song["parts"]["vocal"] = {**song["parts"]["vocal"], "regions": regions}
+    fresh = page / ".index.html.voice"
+    fresh.write_text(text[: found.start(1)] + script_json(data) + text[found.end(1) :], encoding="utf-8")
+    shutil.copymode(index, fresh)
+    fresh.replace(index)  # in one step: the page is the old one or the new one, never half of each
+    export = page / "exports" / f"{exports.file_stem(song)}.json"
+    if export.is_file():  # as exports.write_all writes it
+        export.write_bytes((json.dumps(song, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+    return True
+
+
 def refresh_code(page: Path, analysis: int | None = None) -> bool:
     """This version's page code on a page's own data, in place: after an update of woodshed, a
     second instead of a new analysis. False when the data was written for another version of the

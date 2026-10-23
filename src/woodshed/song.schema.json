@@ -93,7 +93,12 @@
            "voicings": {"type": "array", "items": {"type": "array", "items": {"$ref": "#/$defs/pc"}, "maxItems": 4}},
            "vocal": {"oneOf": [{"type": "null"},
              {"type": "object", "additionalProperties": false, "required": ["low", "high", "voiced_share"],
-              "properties": {"low": {"type": "integer"}, "high": {"type": "integer"}, "voiced_share": {"type": "number"}}}]},
+              "properties": {"low": {"type": "integer"}, "high": {"type": "integer"}, "voiced_share": {"type": "number"},
+                             "regions": {"description": "The sung range from each key region's first bar, after a key change only (spec 024). Null under 8 sung notes.",
+                               "type": "array", "minItems": 2,
+                               "items": {"type": "object", "additionalProperties": false, "required": ["bar", "low", "high", "notes"],
+                                         "properties": {"bar": {"type": "integer", "minimum": 0}, "low": {"type": ["integer", "null"]},
+                                                        "high": {"type": ["integer", "null"]}, "notes": {"type": "integer", "minimum": 0}}}}}}]},
            "grid_shift": {"type": "number"}}}
       ]
     },

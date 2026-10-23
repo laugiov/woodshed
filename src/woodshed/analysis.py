@@ -22,6 +22,9 @@ Progress = Callable[[str, float], None]
 # revision are then rebuilt by the next run instead of being kept as up to date.
 # Any change to the engine, features or structure that changes labels needs a bump too.
 REVISION = 4  # 2: silence judged on absolute level (soft verses kept); 3: doubt kinds, sections; 4: key regions
+# Not bumped for the voice's range per key region (spec 024): an added field on key-change songs only, which the
+# library measures in the background on the pages built before (Library.measure_voices); a bump would analyse
+# every song of every library again for it.
 Floats = npt.NDArray[np.float64]
 # Below this share of tracked downbeats on one residue, the downbeats are too inconsistent to set
 # the bar phase and the chord changes decide instead.
@@ -166,7 +169,9 @@ def analyze(
     song_parts = None
     if separated is not None and built.bars:
         report("parts", 0.0)
-        song_parts = _parts(separated, times, built, beats_per_bar, vocals)
+        # The voice's range per key region (spec 024), only after a key change: a song in one key is as before.
+        starts = [(r.bar, built.bars[r.bar].start) for r in regions] if len(regions) > 1 else []
+        song_parts = _parts(separated, times, built, beats_per_bar, vocals, starts)
 
     report("done", 1.0)
     return Song(
@@ -223,7 +228,12 @@ def key_at(regions: list[KeyRegion], bar: int) -> theory.Key:
 
 
 def _parts(
-    separated: stems.Stems, times: Floats, built: Structure, beats_per_bar: int, vocals: parts.Audio | None = None
+    separated: stems.Stems,
+    times: Floats,
+    built: Structure,
+    beats_per_bar: int,
+    vocals: parts.Audio | None = None,
+    starts: list[tuple[int, float]] | None = None,
 ) -> Parts:
     track = {
         name: vocals if name == "vocals" and vocals is not None else audio.load(p)
@@ -243,6 +253,6 @@ def _parts(
         bass=parts.bass_line(track["bass"], grid),
         comp=parts.comp_rhythm(guitar, grid),
         voicings=parts.voicings(keys, grid),
-        vocal=parts.vocal_range(track["vocals"]),
+        vocal=parts.vocal_range(track["vocals"], starts=starts or ()),
         grid_shift=shift,
     )

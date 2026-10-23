@@ -38,7 +38,17 @@ the melody against your voice type, and the key that suits you. Pick your voice 
 shapes, the bass tab, the keyboard.
 
 When the song changes key (a last chorus lifted a semitone), the voice panel says "Up a semitone at
-bar 17" before you pick a key.
+bar 82: B♭ major." before you pick a key, then what the ending asks of your voice:
+
+- its own range, drawn as a dashed bar under the song's ("From bar 82: F3–B♭3"), with the notes
+  named in its key;
+- one sentence: "From bar 82 you sing F3 to B♭3: no higher than the rest of the song.", or, in the
+  warning colour, "From bar 82 it goes higher: up to D4." (or lower). Under 8 sung notes the ending
+  is too short to measure, and the page says so.
+
+The key it suggests fits the whole range, the ending included. Songs added before this version get
+the ending's range a few seconds after the library starts (it is measured on the song's own vocal
+track, in the background); a page open meanwhile loads it again once you stop playing.
 
 ## Keep the key for the band
 

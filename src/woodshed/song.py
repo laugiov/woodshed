@@ -34,6 +34,13 @@ def _regions(song: Song) -> list[model.KeyRegion]:
     return song.key_regions or [model.KeyRegion(0, song.key)]
 
 
+def _vocal(v: model.VocalRange) -> dict[str, Any]:
+    out: dict[str, Any] = {"low": v.low, "high": v.high, "voiced_share": v.voiced_share}
+    if len(v.regions) > 1:  # after a key change only: a song in one key keeps its data as before (spec 024)
+        out["regions"] = [{"bar": r.bar, "low": r.low, "high": r.high, "notes": r.notes} for r in v.regions]
+    return out
+
+
 def to_json(song: Song) -> dict[str, Any]:
     """Plain JSON data for the page (no numpy types)."""
     s = song.structure
@@ -104,9 +111,7 @@ def to_json(song: Song) -> dict[str, Any]:
             "bass": [[None if n is None else [n.midi, n.confidence] for n in bar] for bar in p.bass],
             "comp": p.comp,
             "voicings": p.voicings,
-            "vocal": None
-            if p.vocal is None
-            else {"low": p.vocal.low, "high": p.vocal.high, "voiced_share": p.vocal.voiced_share},
+            "vocal": None if p.vocal is None else _vocal(p.vocal),
             "grid_shift": _r(p.grid_shift),
         }
     return data

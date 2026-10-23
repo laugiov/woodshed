@@ -261,7 +261,7 @@ With stems, `analysis._parts` reads each stem on a **sixteenth-note grid** (`Gri
 | Drum groove | `drums` | Energy rise in bands: kick 30 to 110 Hz, snare body 180 to 600 Hz plus wires 7 to 11 kHz, hat in the highs. Gives the share of bars with a hit per slot, and how well each bar agrees with the main groove. |
 | Comping rhythm | `other` | Onset peaks per sixteenth, as a share of bars. |
 | Keys voicings | `other` | Chroma per bar, up to four pitch classes above a threshold, strongest first. |
-| Vocal range | `vocals` | `librosa.pyin` (80 to 1400 Hz), note by note. Reports the 10th and 90th percentile of sung notes: the usual range, not the extremes. |
+| Vocal range | `vocals` | `librosa.pyin` (80 to 1400 Hz), note by note. Reports the 10th and 90th percentile of sung notes: the usual range, not the extremes. After a key change, the same per key region (`regions`): each note goes to the region holding the middle of its run, under 8 notes a region has no range. |
 
 All thresholds carry their measurements in comments. The bass tab and the drum groove are marked experimental in the page ([the guide](guide/parts.md)).
 
@@ -364,7 +364,11 @@ Song Name.woodshed/
 
 ### Page revision
 
-`page_revision()` hashes every shipped file under `page/` (names and bytes) and keeps 16 hex characters. It goes into the manifest. If the page code changes, even without a version bump (an update from git), the page gets the new code without a new analysis: `refresh_code` writes `index.html` again from the data it carries and replaces `assets/`, and `woodshed app` does it for every page when it starts. Only data of another format (`SCHEMA_VERSION`, `VIEW_VERSION`, pinned by a test against the schemas) needs a rebuild. An optional field that no reader requires (such as `meta.analysis`) may be added without a version bump: the test's hash is updated with the reason, since the schema is not a frozen external contract.
+`page_revision()` hashes every shipped file under `page/` (names and bytes) and keeps 16 hex characters. It goes into the manifest. If the page code changes, even without a version bump (an update from git), the page gets the new code without a new analysis: `refresh_code` writes `index.html` again from the data it carries and replaces `assets/`, and `woodshed app` does it for every page when it starts. Only data of another format (`SCHEMA_VERSION`, `VIEW_VERSION`, pinned by a test against the schemas) needs a rebuild. An optional field that no reader requires (such as `meta.analysis`, or `parts.vocal.regions`) may be added without a version bump: the test's hash is updated with the reason, since the schema is not a frozen external contract.
+
+### Measured in the background: the voice range per key
+
+`parts.vocal.regions` (spec 024), `[{bar, low, high, notes}]` for every key region, is written by the analysis on a song with key changes only (a song in one key keeps its data byte for byte). A page analysed before it has none, and the analysis revision is not bumped for it (that would analyse every song of every library again). Instead `woodshed app`, once the start's page code updates and resumed songs are queued, calls `Library.measure_voices`: every page with key changes, a sung range, no `regions` and its own `audio/solo-vocals.flac` (lossless) gets a background job on the one-heavy-job queue (behind any analysis; the renders wait for it as for an analysis). The job (`build.add_vocal_regions`) runs the same `parts.vocal_range` on that track, the regions starting where the page's bars start, and rewrites only the data block of `index.html` (in one rename) and the JSON export; the page code is not touched. Then the live stream's `updated` counter tells the open pages to load again (`views/band.js`, after the music stops). What is measured is read from the page's own data, not from the manifest's page revision: a measure that fails leaves the page as it was and is tried again at the next start. Cost: one pitch tracking per key-change page, once (about 8 s for a 3:43 song on the dev machine); one-key pages are never measured. The command line does not measure: its pages get the regions at their next analysis.
 
 ### Strict CSP and no network
 

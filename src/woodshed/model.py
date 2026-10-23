@@ -136,10 +136,21 @@ class BassNote:
 
 
 @dataclass(frozen=True)
+class RegionRange:
+    """The sung range from a key region's first bar (spec 024): None under MIN_REGION_NOTES notes."""
+
+    bar: int
+    low: int | None
+    high: int | None
+    notes: int  # sung notes kept in the region
+
+
+@dataclass(frozen=True)
 class VocalRange:
     low: int  # MIDI, 10th percentile of sung notes: the usual range, not the extremes
     high: int  # MIDI, 90th percentile
     voiced_share: float
+    regions: tuple[RegionRange, ...] = ()  # one per key region, on a song with key changes (spec 024)
 
 
 @dataclass(frozen=True)

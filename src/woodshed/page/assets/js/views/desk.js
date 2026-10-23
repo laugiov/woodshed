@@ -414,8 +414,49 @@
       return said.join(" ");
     }
 
-    // Where the song moves key, said to the singer before a key is chosen (spec 013): one line per change.
+    // A sung note's name in a key region, prettified, with its octave: "B♭3" after a change to D♭, "A♯3" never.
+    // A C♭ or a B♯ keeps the octave of its letter.
+    function noteText(m, t, region) {
+      const name = W.prettyText(song.noteName(m, t, region));
+      const pc = (((m + t) % 12) + 12) % 12;
+      const octave = Math.floor((m + t) / 12) - 1 + (name[0] === "C" && pc === 11 ? 1 : name[0] === "B" && pc === 0 ? -1 : 0);
+      return name + octave;
+    }
+
+    // The sung range of each key region after the first (spec 024), measured by the analysis: what it adds to the
+    // rest of the song (the other regions, not the whole song, which holds it). None on a page not measured yet.
+    const ranged = (r) => typeof r.low === "number" && typeof r.high === "number";
+    function endings() {
+      const v = parts && parts.vocal;
+      const regions = v && Array.isArray(v.regions) && v.regions.length === song.regionCount ? v.regions : null;
+      if (!regions) return [];
+      return regions.slice(1).map((r, i) => {
+        const others = regions.filter((o, k) => k !== i + 1 && ranged(o));
+        const low = others.length ? Math.min(...others.map((o) => o.low)) : v.low;
+        const high = others.length ? Math.max(...others.map((o) => o.high)) : v.high;
+        return { ...r, region: i + 1, above: ranged(r) && r.high > high ? r.high - high : 0, below: ranged(r) && r.low < low ? low - r.low : 0 };
+      });
+    }
+
+    // One sentence per later region: higher, lower, inside, or too little singing. A semitone is within what the
+    // measure can tell: said, without the warning colour.
+    function endingLine(e, t) {
+      const n = e.bar + 1;
+      const name = (m) => noteText(m, t, e.region);
+      let text;
+      if (!ranged(e)) text = W.t("From bar {n}: too little singing to measure.", { n });
+      else if (e.above && e.below) text = W.t("From bar {n} it goes higher and lower: {low} to {high}.", { n, low: name(e.low), high: name(e.high) });
+      else if (e.above) text = W.t("From bar {n} it goes higher: up to {high}.", { n, high: name(e.high) });
+      else if (e.below) text = W.t("From bar {n} it goes lower: down to {low}.", { n, low: name(e.low) });
+      else text = W.t("From bar {n} you sing {low} to {high}: no higher than the rest of the song.", { n, low: name(e.low), high: name(e.high) });
+      const warn = e.above > 1 ? " higher" : e.below > 1 ? " lower" : "";
+      return h("p", { class: "voice-ending" + warn, "data-testid": "voice-ending" }, text);
+    }
+
+    // Where the song moves key, said to the singer before a key is chosen (spec 013) as plainly as the best key
+    // (spec 024): one line per change, the key bold, then what the voice does from there.
     function keyMoves(s) {
+      const ends = endings();
       return song.keyChanges.map((k) => {
         const from = song.regionKey(k.region - 1);
         const to = song.regionKey(k.region);
@@ -424,20 +465,30 @@
         const n = k.bar + 1;
         const size = (d) => (d === 1 ? W.t("a semitone") : d === 2 ? W.t("a whole tone") : W.t("{n} semitones", { n: d }));
         const text = step === 0
-          ? W.t("Moves to {key} at bar {n}.", { key, n })
+          ? W.t("Moves to {key} at bar {n}.", { n })
           : step === 6
-            ? W.t("{interval} away at bar {n}: {key}.", { interval: size(6), n, key })
+            ? W.t("{interval} away at bar {n}: {key}.", { interval: size(6), n })
             : step < 6
-              ? W.t("Up {interval} at bar {n}: {key}.", { interval: size(step), n, key })
-              : W.t("Down {interval} at bar {n}: {key}.", { interval: size(12 - step), n, key });
-        return h("p", { class: "desk-note voice-moves", "data-testid": "voice-key-change" }, text.charAt(0).toUpperCase() + text.slice(1));
+              ? W.t("Up {interval} at bar {n}: {key}.", { interval: size(step), n })
+              : W.t("Down {interval} at bar {n}: {key}.", { interval: size(12 - step), n });
+        const line = h("p", { class: "voice-moves", "data-testid": "voice-key-change" }, W.nodes(text.charAt(0).toUpperCase() + text.slice(1), { key: h("b", null, key) }));
+        const end = ends.find((e) => e.region === k.region);
+        return end ? [line, endingLine(end, s.transpose)] : line;
       });
     }
 
     function voice(s) {
       const moves = keyMoves(s);
       const body = voiceBody(s);
-      return moves.length ? [moves, body] : body;
+      return moves.length ? [h("div", { class: "voice-changes" }, moves), body] : body;
+    }
+
+    // Text widths in the drawing's own units, for labels placed beside their bar and never clipped.
+    let measurer = null;
+    function textWidth(text, size) {
+      measurer = measurer || document.createElement("canvas").getContext("2d");
+      measurer.font = size + "px " + getComputedStyle(document.body).fontFamily;
+      return measurer.measureText(text).width;
     }
 
     function voiceBody(s) {
@@ -445,29 +496,51 @@
       const vocal = parts.vocal;
       if (!vocal) return note(W.t("No singing was detected on the isolated vocal track, so there is no range to match."));
       const vt = I.VOICES.find((v) => v[0] === s.voiceType) || null;
-      const name = (m) => song.noteName(m, s.transpose) + (Math.floor((m + s.transpose) / 12) - 1);
+      const t = s.transpose;
+      const name = (m) => noteText(m, t, 0);
+      const ends = endings().filter(ranged);
       const lo = 40;
       const hi = 86;
       const width = 520;
+      // At least 10 CSS pixels for a label, on a phone too: the drawing is scaled to the panel's width.
+      const shown = $("desk").clientWidth || width;
+      const fs = Math.max(11, Math.ceil((10 * width) / Math.max(160, shown)));
+      const row = fs + 10;
+      const rows = 1 + ends.length + (vt ? 1 : 0);
+      const bottom = 8 + rows * row;
       const X = (m) => 10 + ((m - lo) / (hi - lo)) * (width - 20);
-      const range = svg("svg", { viewBox: "0 0 " + width + " 70", role: "img", "aria-label": W.t("Song vocal range against your voice") });
+      const range = svg("svg", { viewBox: "0 0 " + width + " " + (bottom + fs + 4), role: "img", "aria-label": W.t("Song vocal range against your voice") });
       for (let m = lo; m <= hi; m++) {
         if (m % 12 === 0) {
-          range.append(svg("line", { x1: X(m), y1: 8, x2: X(m), y2: 58, stroke: "var(--line)" }));
-          range.append(svg("text", { x: X(m), y: 68, "font-size": 11, "text-anchor": "middle", fill: "var(--muted)" }, "C" + (m / 12 - 1)));
+          range.append(svg("line", { x1: X(m), y1: 8, x2: X(m), y2: bottom, stroke: "var(--line)" }));
+          range.append(svg("text", { x: X(m), y: bottom + fs, "font-size": fs, "text-anchor": "middle", fill: "var(--muted)" }, "C" + (m / 12 - 1)));
         }
       }
+      // A range's bar, its label beside it: on its right, else on its left, else inside.
+      const bar = (a, b, y, label, attrs) => {
+        range.append(svg("rect", { x: X(a), y, width: X(b) - X(a), height: fs + 5, rx: 5, ...attrs }));
+        const w = textWidth(label, fs);
+        const right = X(b) + 6 + w <= width;
+        const left = X(a) - 6 - w >= 0;
+        const at = right ? { x: X(b) + 6 } : left ? { x: X(a) - 6, "text-anchor": "end" } : { x: X(a) + 6 };
+        range.append(svg("text", { ...at, y: y + fs, "font-size": fs, fill: "var(--ink)" }, label));
+      };
+      bar(vocal.low + t, vocal.high + t, 8, W.t("Song: {low}–{high}", { low: name(vocal.low), high: name(vocal.high) }), { fill: "var(--warn-soft)", stroke: "var(--warn)" });
+      ends.forEach((e, i) => {
+        const n = (m) => noteText(m, t, e.region);
+        const label = W.t("From bar {n}: {low}–{high}", { n: e.bar + 1, low: n(e.low), high: n(e.high) });
+        bar(e.low + t, e.high + t, 8 + (i + 1) * row, label, { fill: "none", stroke: "var(--warn)", "stroke-dasharray": "4 3", "data-testid": "voice-ending-bar" });
+      });
       if (vt) {
-        range.append(svg("rect", { x: X(vt[1]), y: 34, width: X(vt[2]) - X(vt[1]), height: 16, rx: 5, fill: "var(--accent-soft)", stroke: "var(--accent)" }));
-        range.append(svg("text", { x: X(vt[1]) + 6, y: 46, "font-size": 11, fill: "var(--ink)" }, W.t(vt[0])));
+        const y = 8 + (rows - 1) * row;
+        range.append(svg("rect", { x: X(vt[1]), y, width: X(vt[2]) - X(vt[1]), height: fs + 5, rx: 5, fill: "var(--accent-soft)", stroke: "var(--accent)" }));
+        range.append(svg("text", { x: X(vt[1]) + 6, y: y + fs, "font-size": fs, fill: "var(--ink)" }, W.t(vt[0])));
       }
-      const a = vocal.low + s.transpose;
-      const b = vocal.high + s.transpose;
-      range.append(svg("rect", { x: X(a), y: 12, width: X(b) - X(a), height: 16, rx: 5, fill: "var(--warn-soft)", stroke: "var(--warn)" }));
-      range.append(svg("text", { x: X(a) + 6, y: 24, "font-size": 11, fill: "var(--ink)" }, W.t("Song: {low}–{high}", { low: name(vocal.low), high: name(vocal.high) })));
+      // The best key fits the whole range: the song's and every region's (an ending above it included).
+      const whole = { low: Math.min(vocal.low, ...ends.map((e) => e.low)), high: Math.max(vocal.high, ...ends.map((e) => e.high)) };
       let fit;
       if (vt) {
-        const best = I.bestTranspose(vocal, vt[1], vt[2]);
+        const best = I.bestTranspose(whole, vt[1], vt[2]);
         const voiceName = W.t(vt[0]).toLowerCase(); // I.VOICES: Bass, Baritone, Tenor, Alto, Mezzo, Soprano
         fit =
           best === s.transpose

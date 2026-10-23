@@ -439,6 +439,13 @@
       "Aucun chant détecté sur la piste de voix séparée : pas de tessiture à comparer.",
     "Song vocal range against your voice": "Tessiture du morceau face à ta voix",
     "Song: {low}–{high}": "Morceau : {low} à {high}",
+    "From bar {n}: {low}–{high}": "Dès la mesure {n} : {low} à {high}",
+    "From bar {n}: too little singing to measure.": "À partir de la mesure {n} : trop peu de chant pour mesurer.",
+    "From bar {n} it goes higher and lower: {low} to {high}.": "À partir de la mesure {n}, ça monte plus haut et descend plus bas : de {low} à {high}.",
+    "From bar {n} it goes higher: up to {high}.": "À partir de la mesure {n}, ça monte plus haut : jusqu'à {high}.",
+    "From bar {n} it goes lower: down to {low}.": "À partir de la mesure {n}, ça descend plus bas : jusqu'à {low}.",
+    "From bar {n} you sing {low} to {high}: no higher than the rest of the song.":
+      "À partir de la mesure {n}, tu chantes de {low} à {high} : pas plus haut que le reste du morceau.",
     "This key fits a {voice} voice.": "Cette tonalité va à ta voix ({voice}).",
     "Best key for a {voice} voice: {key} ({n} semitones).": "Meilleure tonalité pour ta voix ({voice}) : {key} ({n} demi-tons).",
     "Transpose to {key} ({n})": "Transposer en {key} ({n})",
