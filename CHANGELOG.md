@@ -20,6 +20,25 @@ corrections and set list stay where they are.
   change on stage too.
 - Where the chords around a change are unsure, its mark says "check by ear".
 - The library page shows its version, with links to this list and to how to update.
+- Singers on stage: the line you are singing is always on screen, at the top, and stopped, the line
+  you sing next comes first, marked "Next:" (also after "Part ⏭").
+- The keys panel says what the record really holds in each bar: a bar with no chord says so, a
+  third that disagrees with the chart is named ("The record has D♯ here, the chart says Bm: check
+  this bar by ear"), and where the keys are often read as a single note it says to play the chart's
+  chord there.
+
+### Changed
+
+- ChordPro reads as a sheet for OnSong and the music stand: a sung line is never cut by a row of
+  chords, N.C. is never a chord to transpose, repeated rows are folded ("x2"), and a key change is
+  said where it happens ("Key change: D♭ major").
+- The keys panel's rhythm says it is the guitar's strumming when it is, and step 2 no longer
+  promises voicings when no keys are heard.
+
+### Fixed
+
+- A long chart with a key change printed a blank last page.
+- Switching key quickly could leave an unused audio track loading in the background.
 
 ## [0.4.0] - 2026-10-23
 
