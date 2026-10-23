@@ -395,12 +395,13 @@ time's).
 
 **iPad and tablets.** A tablet opens the library like a phone: on the same Wi-Fi as the computer running
 `woodshed app`, scan the code or type the address the library page shows (**Let the band's phones join**),
-in Safari. Everything works there: your part, the stage view, following the leader, the screen kept on.
-A page folder copied to an iPad does not play: Safari opens a file from the Files app without the files
-next to it. So there is no practice on the iPad alone: the computer has to be on, on the same network. On
-iOS a sound may only start from a tap: the first tap on the page lets every track play, and if a switch is
-still refused, the music goes on and the page asks for another tap. Checked in WebKit, Safari's engine; not
-yet on a real iPad.
+in Safari. Your part, the stage view and following the leader are meant to work there as on a phone; over
+the Wi-Fi's plain `http://` the screen may lock, as on a phone (turn Auto-Lock off, or use HTTPS above).
+There is no practice on the iPad alone: the computer has to be on, on the same network. iPad users report
+that Safari opens an HTML file from the Files app without the files next to it, so a page folder copied to
+an iPad is not expected to play. iOS starts a sound only from a tap: a tap on the page lets every track
+play later, and if a switch is still refused, the music goes on and the page asks for another tap. All
+this is checked in WebKit, Safari's engine, not yet on a real iPad.
 
 **The words.** In the library, a song with its parts offers **add the words**; on its page, **Add the
 words** next to the chart. Paste them (part names like `[Chorus]` help), press **Place the words**:

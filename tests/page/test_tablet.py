@@ -28,6 +28,7 @@ TOUCH_POINTS = "Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { c
 # call counted per element, to see which ones a tap unlocked.
 REFUSE = """
 window.__refuse = new Set();
+window.__odd = new Set();
 window.__started = {};
 const play = HTMLMediaElement.prototype.play;
 HTMLMediaElement.prototype.play = function () {
@@ -35,6 +36,35 @@ HTMLMediaElement.prototype.play = function () {
   __started[key] = (__started[key] || 0) + 1;
   if (__refuse.has(this.dataset.track) || __refuse.has(this.dataset.file))
     return Promise.reject(new DOMException('no gesture', 'NotAllowedError'));
+  if (__odd.has(this.dataset.track)) {
+    play.call(this);
+    return Promise.reject(new DOMException('odd', 'NotSupportedError'));
+  }
+  return play.call(this);
+};
+"""
+
+
+# As WebKit decides: an element may play once a play() of it ran during a tap. The tap is ours to say:
+# Playwright's own calls count as user activation in Chromium, so a tap here is a trusted touchend or click,
+# active for a second.
+WEBKIT_RULE = """
+window.__tap = false;
+for (const type of ['touchend', 'click']) window.addEventListener(type, (e) => {
+  if (!e.isTrusted) return;
+  __tap = true;
+  setTimeout(() => { __tap = false; }, 1000);
+}, true);
+Object.defineProperty(Navigator.prototype, 'userActivation', { configurable: true,
+  get: () => ({ isActive: __tap, hasBeenActive: __tap }) });
+window.__started = {};
+window.__blessed = new WeakSet();
+const play = HTMLMediaElement.prototype.play;
+HTMLMediaElement.prototype.play = function () {
+  const key = this.dataset.track + '|' + this.dataset.file;
+  __started[key] = (__started[key] || 0) + 1;
+  if (navigator.userActivation.isActive) __blessed.add(this);
+  if (!__blessed.has(this)) return Promise.reject(new DOMException('no gesture', 'NotAllowedError'));
   return play.call(this);
 };
 """
@@ -96,9 +126,10 @@ def test_a_key_the_browser_refuses_keeps_the_original_file_playing(browser: Brow
 
 def test_on_an_ipad_the_first_tap_unlocks_every_track(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
-    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE)
+    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, WEBKIT_RULE)
     count = page.evaluate("Woodshed.current.tracks.length")
-    assert page.evaluate("Object.keys(__started).length") == 0  # nothing started without a tap
+    page.evaluate("document.dispatchEvent(new Event('touchend'))")  # no tap (a scroll's end): nothing unlocked
+    assert page.evaluate("Object.keys(__started).length") == 0
     page.get_by_test_id("transpose").tap()  # any tap on the page
     until(page, f"Object.keys(Woodshed.app.transport.elements()).length === {count}")
     states = page.evaluate(
@@ -107,14 +138,25 @@ def test_on_an_ipad_the_first_tap_unlocks_every_track(browser: Browser, server: 
     )
     assert len(states) == count
     for track, is_paused, muted, started in states:
-        assert started == 1, track  # started once in the tap: iOS lets it play later
+        assert started == 1, track  # started once in the tap: WebKit lets it play later
         assert is_paused and not muted, track  # and left silent, as it was
     page.get_by_test_id("transpose").tap()
     assert page.evaluate("Object.values(__started).every((n) => n === 1)")  # once is enough
     playing(page)
-    page.evaluate("Woodshed.app.setTrack('solo-bass')")
+    page.wait_for_timeout(1200)  # the tap is over: a switch without one, as after a file loads
+    assert page.evaluate("Woodshed.app.setTrack('solo-bass')") is True
     until(page, "Woodshed.app.transport.track === 'solo-bass' && Woodshed.app.transport.playing")
     assert problems == []
+
+
+def test_a_failure_that_is_not_a_refusal_still_switches(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE, ipad=False)
+    playing(page)
+    page.evaluate("__odd.add('solo-bass')")
+    assert page.evaluate("Woodshed.app.setTrack('solo-bass')") is True  # not taken for a refused start
+    expect(page.get_by_test_id("toast")).not_to_contain_text("Tap the track again")
+    problems.clear()  # the error said by the page is the point here
 
 
 def test_a_computer_unlocks_nothing(browser: Browser, server: app.AppServer) -> None:

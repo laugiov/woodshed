@@ -134,14 +134,18 @@
     }
 
     // Starts `to` in place of `from` when `from` plays. A start the browser refuses (iOS starts a sound
-    // only from a tap) leaves `from` playing: false, and nothing changed.
+    // only from a tap) leaves `from` playing: false, and nothing changed. Any other failure is said, and
+    // the switch goes ahead as before.
     async function takeOver(from, to) {
       if (from.paused) return true;
       try {
         await to.play();
       } catch (err) {
-        to.pause();
-        return false;
+        if (err && err.name === "NotAllowedError") {
+          to.pause();
+          return false;
+        }
+        onError && onError(err);
       }
       return true;
     }
@@ -201,7 +205,13 @@
         if (!still()) return true; // asked for a key no longer wanted: the old file plays on
         to.currentTime = from.currentTime;
         const wasPlaying = !from.paused;
-        if (!(await takeOver(from, to))) return "refused"; // the old file plays on; asked again after a tap
+        if (!(await takeOver(from, to))) {
+          if (!still()) {
+            to.remove(); // a key no longer wanted: not kept
+            delete els[id + "|" + file];
+          }
+          return "refused"; // the old file plays on; asked again after a tap
+        }
         files[id] = file;
         if (wasPlaying) watch();
         from.pause();
@@ -221,17 +231,18 @@
     // iOS starts a media element only from a tap, and a track switch comes after its file loads: on the
     // first tap every element is started and stopped at once, silent, so it may play later. Elements made
     // since (a key rendered by the library) on the next tap. The one playing is left alone.
+    // A scroll's touchend or the Escape key is no tap: nothing is marked then, and an element the browser
+    // still refused is tried again at the next one.
     const unlocked = new WeakSet();
     function unlock() {
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
       for (const t of tracks) element(t.id);
       for (const el of Object.values(els)) {
         if (unlocked.has(el) || !el.paused) continue;
         unlocked.add(el);
-        el.muted = true;
-        const started = el.play();
+        const started = el.play(); // paused at once: no sound comes out
         el.pause();
-        el.muted = false;
-        if (started) started.catch(() => {}); // stopped before it began: nothing to report
+        if (started) started.catch((err) => err && err.name === "NotAllowedError" && unlocked.delete(el));
       }
     }
 

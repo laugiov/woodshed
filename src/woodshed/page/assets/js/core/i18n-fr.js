@@ -479,6 +479,7 @@
     "No keys heard in this song.": "Aucun clavier entendu dans ce morceau.",
     "Tap the track again to switch.": "Touche la piste à nouveau pour changer.",
     "Tap the page to hear the recording in the new key.": "Touche la page pour entendre l'enregistrement dans la nouvelle tonalité.",
+    "Ready: tap the page to hear it.": "Prêt : touche la page pour l'entendre.",
     "Vocals alone": "Voix seule",
 
     // The band (views/band.js)

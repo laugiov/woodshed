@@ -284,6 +284,7 @@ def test_a_rendered_file_the_browser_will_not_start_waits_for_a_tap(browser: Bro
         "Tap the page to hear the recording in the new key.", timeout=20_000
     )
     assert playing_file(page, "mix") == "audio/mix.flac"  # the original plays on, no silence
+    expect(page.get_by_test_id("pitch-line")).to_have_text("Ready: tap the page to hear it.")
     assert page.evaluate("Woodshed.debug().playing") is True
     page.evaluate("window.__tapped = true")
     page.get_by_test_id("key-mark").locator("xpath=..").click()  # a tap on the page

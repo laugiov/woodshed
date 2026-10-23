@@ -34,7 +34,7 @@ WOODSHED_REQUIRE_PAGE=1 uv run --frozen --group dev pytest -q -m page -n auto "$
 
 # What an iPad needs, in WebKit, when WebKit runs here (its system libraries may be missing: CI runs it).
 if uv run --frozen --group dev playwright install webkit >/dev/null 2>&1 \
-  && uv run --frozen --group dev python -c "from playwright.sync_api import sync_playwright as p; b = p().start().webkit.launch(); b.close()" >/dev/null 2>&1; then
+  && uv run --frozen --group dev python -c $'from playwright.sync_api import sync_playwright\nwith sync_playwright() as p:\n    p.webkit.launch().close()' >/dev/null 2>&1; then
   step "practice page for tablets in WebKit"
   WOODSHED_REQUIRE_PAGE=1 uv run --frozen --group dev pytest -q -m tablet -n auto --browser webkit
 else

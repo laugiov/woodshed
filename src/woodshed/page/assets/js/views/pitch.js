@@ -21,6 +21,7 @@
     const broken = new Set(); // "up2|mix": a rendered file this browser could not play
     let poll = 0;
     let settle = 0;
+    let tapAsked = false; // a rendered file waits for a tap to start (iOS)
 
     const keyOf = (n) => (n > 0 ? "up" + n : "down" + -n);
     const pitched = (id) => !!originals[id] && id !== "solo-drums"; // drums: nothing to transpose
@@ -50,6 +51,7 @@
       const key = keyOf(s.transpose);
       const st = stateOf(key, s.track);
       if (st === "ready" && transport.fileOf(s.track) === rendered(key, s.track)) return { state: "on" };
+      if (st === "ready" && tapAsked) return { state: "tap" }; // rendered, waiting for a tap to start (iOS)
       if (st === "failed") {
         const why = refused.get(key + "|" + s.track) || (lib && lib.failed[key] && lib.failed[key][s.track]) || "the browser could not play it";
         return { state: "failed", why };
@@ -131,13 +133,13 @@
     }
 
     // The browser would not start the rendered file without a tap (iOS): asked once, swapped on the next tap.
-    let tapAsked = false;
     function waitForTap() {
-      publish();
-      if (tapAsked) return;
+      if (tapAsked) return publish();
       tapAsked = true;
+      publish();
       app.toast(W.t("Tap the page to hear the recording in the new key."));
       const again = () => {
+        if (navigator.userActivation && !navigator.userActivation.isActive) return; // not a tap: the next one
         tapAsked = false;
         for (const type of ["touchend", "click", "keydown"]) document.removeEventListener(type, again, true);
         swap();
@@ -246,6 +248,7 @@
         drums: W.t("Drums have no pitch: played as recorded."),
         preparing: st.eta ? W.t("Preparing the recording {shift}… about {n} s", { shift: shift(s.transpose), n: Math.max(1, st.eta) }).replace(/ s$/, "\u00a0s") : W.t("Preparing the recording {shift}…", { shift: shift(s.transpose) }),
         on: W.t("{shift}.", { shift: shift(s.transpose) }).replace(/^./, (c) => c.toUpperCase()),
+        tap: W.t("Ready: tap the page to hear it."),
         failed: W.t("The recording could not be changed to this key."),
       }[st.state];
       clear(
