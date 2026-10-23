@@ -13,7 +13,7 @@ specialised tools, all running on your computer, on the CPU.
 
 | Step | Tool | Kind |
 |---|---|---|
-| Split the instruments | [Demucs](https://github.com/facebookresearch/demucs) (htdemucs, Meta) | neural network |
+| Split the instruments | [Demucs](https://github.com/facebookresearch/demucs) (htdemucs_6s or htdemucs, Meta) | neural network |
 | Beats and downbeats | [beat_this](https://github.com/CPJKU/beat_this) (JKU Linz); without the stems extra, librosa's beat tracker | neural network (beat_this), signal processing (librosa) |
 | Chords and key | woodshed's own engine | signal processing, no trained model |
 | Bass notes, vocal range | pYIN in [librosa](https://librosa.org/) | pitch tracking algorithm |
@@ -78,7 +78,7 @@ Limits, all in `audio.py`:
 
 `src/woodshed/cache.py` picks the folder: `WOODSHED_CACHE`, else the platform cache folder (`LOCALAPPDATA`, `~/Library/Caches`, or `XDG_CACHE_HOME`).
 
-Under it, `src/woodshed/stems.py` keeps one folder per recording and model: `stems/htdemucs-<hash>`. The hash is the first 20 hex characters of the SHA-256 of the file's bytes. Rename or move the file and the cache still hits. Edit the audio and it misses.
+Under it, `src/woodshed/stems.py` keeps one folder per recording and model: `stems/htdemucs_6s-<hash>` or `stems/htdemucs-<hash>`. The hash is the first 20 hex characters of the SHA-256 of the file's bytes. Rename or move the file and the cache still hits. Edit the audio and it misses.
 
 The lyrics step stores its speech-model output in the same folder (section 8).
 
@@ -86,13 +86,17 @@ The lyrics step stores its speech-model output in the same folder (section 8).
 
 ## 3. Separation
 
-`src/woodshed/stems.py` runs Demucs, model `htdemucs`, on the CPU. It needs the stems extra.
+`src/woodshed/stems.py` runs Demucs on the CPU. It needs the stems extra. Two models, `stems.MODELS`:
 
-- Four stems: `drums`, `bass`, `other` (guitars and keys), `vocals`.
+- `six` (`htdemucs_6s`, the default for a new page): `drums`, `bass`, `vocals`, `guitar`, `piano`, `other`.
+- `four` (`htdemucs`): `drums`, `bass`, `other` (guitars and keys), `vocals`.
+
+The model travels with the page: the manifest's `settings.separation` is `"six"`, or absent for four (every page made before six stems), so an older page stays up to date and is never separated again. `stems.model_of(settings)` reads it; `run._separation` picks the model of a new page: `--separation`, else the page's own, else six, or four with `--offline` when only the four-stem weights are on disk.
+
 - Stored as **24-bit FLAC**, lossless. The comment says why: the stems are what you hear, so quality is not traded for space.
-- Demucs output can exceed full scale. One common gain is applied to all four stems so nothing clips and they still add up. The gain goes in `gain.json` and is undone at playback.
+- Demucs output can exceed full scale. One common gain is applied to all the stems so nothing clips and they still add up. The gain goes in `gain.json` and is undone at playback.
 - The cache entry is written to a private temp folder and renamed in one step. An interrupted run never leaves a half-written entry.
-- A cache entry is only served when all four files and a readable `gain.json` exist.
+- A cache entry is only served when all its model's files and a readable `gain.json` exist.
 
 Time: `SEPARATION_SPEED = 1.5` in `run.py` is the measured CPU cost, seconds of work per second of audio (on one laptop, one song). It feeds the "about N min" message and the page banner.
 
@@ -101,10 +105,12 @@ Time: `SEPARATION_SPEED = 1.5` in `run.py` is the measured CPU cost, seconds of 
 `src/woodshed/tracks.py` then writes the page's audio, all 24-bit FLAC:
 
 - `mix`
-- `minus-drums`, `minus-bass`, `minus-other`, `minus-vocals`: the mix with one stem subtracted
-- `solo-drums`, `solo-bass`, `solo-other`, `solo-vocals`
+- four stems: `minus-drums`, `minus-bass`, `minus-other`, `minus-vocals` (the mix with one stem subtracted), and `solo-drums`, `solo-bass`, `solo-other`, `solo-vocals`: 9 tracks
+- six stems: the same with `guitar` and `keys` in place of `other`: 11 tracks. The keys are `piano` + `other`: Demucs leaves synths, organ and strings in `other`, and keyboard players play them.
 
-The tracks are written block by block (10 seconds at a time), because nine stereo tracks would not fit comfortably in memory. One gain is shared across all of them, so switching tracks never changes the level.
+An instrument the song does not have gets no track. `parts.heard` judges it by what it plays, not by its average: at least 3 % of its 1-second windows above -50 dBFS and within 30 dB of the loudest instrument, at the original level. A short intro counts; bleed from the other instruments does not. The page knows a six-stem page by its tracks (no `solo-other`) and says "No keys heard in this song" when `solo-keys` is missing. The comp rhythm reads the guitar and the voicing reads the keys; an instrument not heard gives them silence.
+
+The tracks are written block by block (10 seconds at a time), because eleven stereo tracks would not fit comfortably in memory. One gain is shared across all of them, so switching tracks never changes the level.
 
 ---
 

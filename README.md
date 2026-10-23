@@ -79,8 +79,15 @@ Change the key and everything follows: the chart, the shapes, the tab, the keybo
 separated track) or **Without your part** (the song to play over), switched while the music plays, the loop and
 the tempo kept. Two links take the files home, lossless as the page plays them (about 10 MB per minute of song):
 served by `woodshed app` they download as `<song> - bass alone.flac` and `<song> - without bass.flac`; a page
-opened from disk opens them, and says they are already in its `audio` folder. Guitars and keys share one
-separated track. The tracks carry the page's common gain, not the original file's level.
+opened from disk opens them, and says they are already in its `audio` folder. The guitar and the keys each
+have their own track; an instrument the song does not have says so, and the full mix plays. The tracks carry
+the page's common gain, not the original file's level.
+
+**Guitar and keys apart.** New songs are split into six instruments: drums, bass, vocals, guitar and keys
+(the piano, plus synths and organ, which land on no other track). A page holds 11 tracks instead of 9, about
+20 % more disk. To keep guitars and keys on one track, as pages made before 0.4.0 do, uncheck **Guitar and
+keys apart** under **Options for the next songs** (from the command line: `--separation four`). A page keeps
+the separation it was made with.
 
 **For singers.** Paste the words (**+ Add the words**) and pick **Voice**: the page opens on the
 words, with the next part named. Pick your voice type and **Transpose to** the key it suggests,
@@ -257,7 +264,7 @@ docker compose up -d --wait
 ```
 
 Open **http://localhost:8000**, drop a song on the page, and play. The first start pulls the image
-(about 2 GB). The first analysis downloads the models (about 160 MB, and 1.2 GB more for the lyrics)
+(about 2 GB). The first analysis downloads the models (about 210 MB, and 1.2 GB more for the lyrics)
 into a Docker volume, once; a song then takes about twice its length to analyse, on a CPU. The
 container needs no sound card: your browser plays the music.
 
@@ -392,7 +399,7 @@ opened from disk: `woodshed lyrics "Song.woodshed" words.txt`.
 
 Useful options: `--bpm 65` settles a half-time or double-time doubt, `--beats-per-bar 3` for a
 waltz, `--sevenths` adds 7th chords, `--bar-phase 1` puts the first bar line one beat later (a pickup),
-`--offline` never downloads models. `woodshed --help` lists
+`--separation four` keeps guitars and keys on one track, `--offline` never downloads models. `woodshed --help` lists
 them all.
 
 ---
@@ -414,8 +421,8 @@ flowchart LR
     G --> P
 ```
 
-- **Separation**: [Demucs](https://github.com/facebookresearch/demucs) (htdemucs) splits the mix
-  into vocals, drums, bass and the rest, losslessly cached.
+- **Separation**: [Demucs](https://github.com/facebookresearch/demucs) (htdemucs_6s) splits the mix
+  into vocals, drums, bass, guitar, piano and the rest, losslessly cached.
 - **Beats and bars**: [beat_this](https://github.com/CPJKU/beat_this) finds beats and downbeats.
 - **Chords**: woodshed's own engine (signal processing, no trained model) reads the harmony from the
   full mix, bar by bar, and says where it is unsure rather than guessing.
@@ -442,7 +449,7 @@ woodshed is MIT. The models it downloads come with their own licences:
 
 | Model | Used for | Licence |
 |---|---|---|
-| Demucs (htdemucs) | Instrument tracks | MIT |
+| Demucs (htdemucs_6s, htdemucs) | Instrument tracks | MIT |
 | beat_this | Beats and downbeats | MIT |
 | MMS forced aligner (weights, 1.2 GB) | Placing lyrics (optional) | **CC BY-NC 4.0**: non-commercial use |
 
