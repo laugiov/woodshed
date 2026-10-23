@@ -62,7 +62,7 @@ def test_chords_to_check_are_listed_not_marked(pop: dict[str, Any]) -> None:
 def test_chordpro_marks_repeats(pop: dict[str, Any]) -> None:
     text = exports.chordpro(pop)
     rows = [line for line in text.splitlines() if line.startswith("|")]
-    assert any(row.startswith("|: ") and row.endswith(":|") for row in rows)  # the same four bars again
+    assert any(row.startswith("|: ") and row.endswith(":| x2") for row in rows)  # the same four bars again, said x2
 
 
 def words_for(data: dict[str, Any]) -> dict[str, Any]:
