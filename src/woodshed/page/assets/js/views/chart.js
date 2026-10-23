@@ -27,16 +27,17 @@
       const main = chordNode(name);
       // A timing doubt (the chord is clear) stays readable as a plain chord, still open to a check.
       const timing = c.doubt && c.doubt.kind === "timing";
-      // A correction stays a button: it can be changed, or taken back to the analysis's chord.
+      // A mark, not a button: the bar is the one control (Enter or a click on the mark opens the check);
+      // a correction stays marked too, to be changed or taken back to the analysis's chord.
       const inner = c.doubt && !c.fixed
         ? h(
-            "button",
-            { type: "button", class: "doubt" + (timing ? " timing" : ""), "data-ref": ref, "data-testid": "doubt", "data-kind": c.doubt.kind, title: timing ? W.t("Placement to check by ear") : W.t("Check by ear") },
+            "span",
+            { class: "doubt" + (timing ? " timing" : ""), "data-ref": ref, "data-testid": "doubt", "data-kind": c.doubt.kind, title: timing ? W.t("Placement to check by ear") : W.t("Check by ear") },
             main,
             timing ? null : h("sup", null, "?"),
           )
         : c.fixed && c.doubt
-          ? h("button", { type: "button", class: "doubt fixed", "data-ref": ref, "data-testid": "fixed", title: W.t("Your correction: change it") }, main, h("span", { class: "fixed-dot", "aria-hidden": "true" }))
+          ? h("span", { class: "doubt fixed", "data-ref": ref, "data-testid": "fixed", title: W.t("Your correction: change it") }, main, h("span", { class: "fixed-dot", "aria-hidden": "true" }))
           : main;
       return h(
         "span",
@@ -219,7 +220,11 @@
             doubtfulNear(u) ? h("span", { class: "check" }, " · " + W.t("check by ear")) : null)
         : null;
     const barLabel = (b, u, s) => {
-      const said = W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
+      const chords = W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
+      // The mark in the bar is no control of its own: the bar says it.
+      const said = b.chords.some((c) => c.doubt && !c.fixed)
+        ? W.t("{bar}, chord to check", { bar: chords })
+        : b.chords.some((c) => c.doubt && c.fixed) ? W.t("{bar}, your correction", { bar: chords }) : chords;
       if (!changeAt.has(u)) return said;
       const changed = W.t("{bar}, key change: {key}", { bar: said, key: keyWords(song.keyName(s.transpose, changeAt.get(u))) });
       return doubtfulNear(u) ? W.t("{bar}, check by ear around the key change", { bar: changed }) : changed;
@@ -368,12 +373,80 @@
         if (head) lines.push(sectionHead(head[0], head[1]));
         lines.push(row(gr, g, s));
       });
+      const had = isGridBar(document.activeElement) ? place(document.activeElement) : null;
+      if (!s.editing) stop = null;
       clear($("sheet"), inBlocks(lines));
       renderPrintShapes(s);
       renderForm(s);
       renderViewControl(s);
       paintBars(s);
+      // The keyboard where it was: the same place in the grid, drawn again.
+      const back = had && gridBars().find((b) => place(b) === had);
+      if (back) {
+        rove(back);
+        back.focus({ preventScroll: true });
+      }
     }
+
+    // The bars of the grid: one tab stop (spec 021), the bar playing, or while editing the bar in hand;
+    // the arrows move between them (rows by the grid's lines, Home and End the part's first and last).
+    let stop = null; // editing: the place of the bar in hand
+    const gridBars = () => [...$("sheet").querySelectorAll(".bar[data-group]")];
+    const isGridBar = (el) => !!el && el instanceof Element && el.matches("#sheet .bar[data-group]");
+    const place = (el) => el.getAttribute("data-group") + ":" + el.getAttribute("data-col");
+    function rove(pick) {
+      for (const b of gridBars()) b.setAttribute("tabindex", b === pick ? "0" : "-1");
+    }
+    function roveDefault(s) {
+      const bars = gridBars();
+      if (!bars.length || bars.includes(document.activeElement)) return;
+      const kept = s.editing && stop ? bars.find((b) => place(b) === stop) : null;
+      rove(kept || barEl(curBar(s), s) || bars[0]);
+    }
+    $("sheet").addEventListener("focusin", (e) => {
+      if (!isGridBar(e.target)) return;
+      rove(e.target);
+      if (store.get().editing) stop = place(e.target);
+    });
+    function moveTo(el, key) {
+      const bars = gridBars();
+      const k = bars.indexOf(el);
+      if (key === "ArrowLeft") return bars[k - 1];
+      if (key === "ArrowRight") return bars[k + 1];
+      if (key === "Home" || key === "End") {
+        const part = [...el.closest(".sec-block").querySelectorAll(".bar[data-group]")];
+        return key === "Home" ? part[0] : part[part.length - 1];
+      }
+      const lines = [...$("sheet").querySelectorAll(".line")].filter((l) => l.querySelector(".bar[data-group]"));
+      const line = lines[lines.indexOf(el.closest(".line")) + (key === "ArrowDown" ? 1 : -1)];
+      if (!line) return null;
+      const cells = [...line.querySelectorAll(".bar[data-group]")];
+      return cells.find((b) => b.getAttribute("data-col") === el.getAttribute("data-col")) || cells[cells.length - 1];
+    }
+    $("sheet").addEventListener("keydown", (e) => {
+      if (!isGridBar(e.target) || e.target !== document.activeElement || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const s = store.get();
+      const key = e.key;
+      const seeks = { ArrowLeft: -1, PageUp: -1, ArrowRight: 1, PageDown: 1 };
+      if (s.editing) {
+        if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
+        e.preventDefault();
+        e.stopPropagation(); // editing: the arrows move the keyboard, not the song
+        const to = moveTo(e.target, key);
+        if (to) to.focus();
+        return;
+      }
+      if (!(key in seeks) && !["ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (key in seeks) app.seekBar(curBar(s) + seeks[key]); // as a pedal: the bar after the one playing
+      else {
+        const to = moveTo(e.target, key);
+        if (to) app.seekBar(barShown(+to.getAttribute("data-group"), +to.getAttribute("data-col"), s));
+      }
+      const now = barEl(curBar(store.get()), store.get()); // the keyboard follows the song
+      if (now) now.focus();
+    });
 
     function row(gr, g, s) {
       const n = gr.occurrences.length;
@@ -390,7 +463,7 @@
           h(
             "div",
             {
-              class: "bar" + (b.edited ? " edited" : "") + (changeAt.has(u) && col > 0 ? " key-change-bar" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
+              class: "bar" + (b.edited ? " edited" : "") + (changeAt.has(u) && col > 0 ? " key-change-bar" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: -1, "data-testid": "bar",
               "aria-label": b.edited ? W.t("{bar}, typed by the band", { bar: barLabel(b, u, s) }) : barLabel(b, u, s),
             },
             keyMark(u, s),
@@ -518,6 +591,7 @@
         const le = paintEl(i, s);
         if (le) le.classList.add("inloop");
       }
+      roveDefault(s);
     }
 
     function renderNow(s) {

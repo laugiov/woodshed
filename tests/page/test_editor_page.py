@@ -35,7 +35,7 @@ def test_a_bar_is_typed_as_on_a_chord_sheet_and_the_next_one_follows(open_page: 
     expect(field).to_be_focused()
     field.fill("D/F# . G .")
     expect(page.get_by_test_id("bar-reading")).to_have_text("D/F♯ for 2 beats, F♯ in the bass, then G for 2")
-    field.press("Enter")  # save, then the next bar
+    field.press("Control+Enter")  # save, then the next bar (Enter alone saves and closes)
     assert o.js(f"({BAR})(1)") == "2||6x2,7||x2"
     expect(editor).to_contain_text("Bar 3")
     page.get_by_test_id("bar-field").fill("%")  # the bar before

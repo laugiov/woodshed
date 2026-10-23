@@ -84,7 +84,7 @@ def test_enter_on_an_untouched_bar_types_nothing(open_page: Any) -> None:
     o = open_page("pop")
     page = editing(o)
     page.locator('.bar[data-bar="1"]').first.click()
-    page.get_by_test_id("bar-field").press("Enter")  # walks on to the next bar
+    page.get_by_test_id("bar-field").press("Control+Enter")  # walks on to the next bar
     expect(page.get_by_test_id("bar-editor")).to_contain_text("Bar 3")
     assert o.js("Woodshed.app.typedBar(1)") is None and o.js("Woodshed.current.bars[1].edited") is False
 

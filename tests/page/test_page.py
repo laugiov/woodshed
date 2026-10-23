@@ -369,12 +369,12 @@ def test_corrupted_saved_corrections_never_break_the_page(open_page: Any, stored
 
 def test_a_doubt_opens_from_the_keyboard(open_page: Any) -> None:
     o = open_page("pickup")
-    o.page.get_by_test_id("doubt").first.focus()
+    o.page.locator(".bar", has=o.page.get_by_test_id("doubt")).first.focus()  # the bar is the control (spec 021)
     o.page.keyboard.press("Enter")
     expect(o.page.get_by_test_id("doubt-pop")).to_be_visible()
     o.page.keyboard.press("Escape")
     expect(o.page.get_by_test_id("doubt-pop")).to_be_hidden()
-    assert o.js("document.activeElement.dataset.testid") == "doubt"  # focus back where it was
+    assert o.js("document.activeElement.dataset.testid") == "bar"  # focus back where it was
 
 
 def test_pressing_play_during_the_count_in_cancels_it(open_page: Any) -> None:
@@ -1072,7 +1072,7 @@ def test_on_a_tablet_the_guitar_shapes_stay_in_sight_above_the_player(open_page:
 
 def test_the_doubt_pop_is_a_named_dialog_that_keeps_the_keyboard(open_page: Any) -> None:
     o = open_page("pickup", close_calls=True)
-    o.page.get_by_test_id("doubt").first.focus()
+    o.page.locator(".bar", has=o.page.get_by_test_id("doubt")).first.focus()
     o.page.keyboard.press("Enter")
     pop = o.page.get_by_role("dialog", name=re.compile(r"^Bar \d+: which one do you hear\?"))
     expect(pop).to_be_visible()
@@ -1097,7 +1097,8 @@ def test_a_doubt_opened_from_the_keyboard_off_screen_sits_by_its_bar(open_page: 
     # The chord just under the bottom edge, as after the page followed the song.
     o.js("(() => { const r = document.querySelector('[data-testid=doubt]').getBoundingClientRect();"
          " window.scrollBy(0, r.top - innerHeight + 4); })()")  # fmt: skip
-    doubt.evaluate("(b) => b.focus({ preventScroll: true })")  # focus alone does not bring it into sight
+    # The bar holding it, focused: focus alone does not bring it into sight.
+    doubt.evaluate("(d) => d.closest('.bar').focus({ preventScroll: true })")
     o.page.keyboard.press("Enter")
     expect(o.page.get_by_test_id("doubt-pop")).to_be_visible()
     d, p = doubt.bounding_box(), o.page.get_by_test_id("doubt-pop").bounding_box()

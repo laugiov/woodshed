@@ -42,7 +42,8 @@
         <div class="chart-bar"><div class="label">Chart</div><div id="viewCtl"></div></div>
         <div class="edit-strip" id="editStrip" hidden data-testid="edit-strip"></div>
         <div class="print-shapes" id="printShapes" hidden data-testid="print-shapes"></div>
-        <div class="sheet" id="sheet" data-testid="sheet"></div>
+        <div class="sheet" id="sheet" role="group" aria-label="Chart" aria-describedby="sheetKeys" data-testid="sheet"></div>
+        <span id="sheetKeys" hidden>In the chart, the arrows move between bars and Enter opens one.</span>
         <p class="hint chart-hint" style="margin: 10px 2px 0">Click a bar to jump, a part's name to go there. Drag across bars to loop them. Orange chords are the ones to check by ear.</p>
       </section>
 
@@ -111,15 +112,15 @@
 <div class="menu" id="helpMenu" hidden role="dialog" aria-label="Shortcuts" data-testid="help-menu">
   <h3>Hands on the instrument</h3>
   <dl class="help-list">
-    <dt><span class="kbd">Space</span></dt><dd style="margin: 0">Play or pause, even with a button selected (Enter presses it)</dd>
-    <dt><span class="kbd">←</span> <span class="kbd">→</span></dt><dd style="margin: 0">Previous or next bar</dd>
+    <dt><span class="kbd">Space</span></dt><dd style="margin: 0">Play or pause (on a button reached with Tab: presses it)</dd>
+    <dt><span class="kbd">←</span> <span class="kbd">→</span></dt><dd style="margin: 0">Previous or next bar (editing the chart: move between bars)</dd>
     <dt><span class="kbd">[</span> <span class="kbd">]</span></dt><dd style="margin: 0">Tempo down or up by 5 BPM</dd>
     <dt><span class="kbd">1</span>–<span class="kbd">4</span></dt><dd style="margin: 0">Practice steps</dd>
     <dt><span class="kbd">S</span></dt><dd style="margin: 0">Stage mode</dd>
     <dt><span class="kbd">L</span></dt><dd style="margin: 0">Loops the part being played (Verse 1, Chorus 2...)</dd>
     <dt><span class="kbd">N</span></dt><dd style="margin: 0">Next song of the set (served by woodshed app)</dd>
   </dl>
-  <p class="desk-note" style="margin: 4px 0 0">Bluetooth page-turner pedals work too: they send Space, arrows or Page Up and Page Down.</p>
+  <p class="desk-note" style="margin: 4px 0 0">Bluetooth page-turner pedals work too: they send Space, arrows or Page Up and Page Down. After Tab to a button, a pedal's Space presses it too: a click anywhere gives Space back to the music.</p>
 </div>
 
 <div class="pop" id="pop" hidden role="dialog" aria-modal="true" aria-labelledby="popTitle" data-testid="doubt-pop"></div>

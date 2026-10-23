@@ -427,6 +427,23 @@ On stage, the words (`renderLyrics` in `views/header.js`) start at the top of th
 
 Your chord picks are saved in the browser's `localStorage` (`app.js`). When the page is served by the library app, they are also sent to a shared store (section 11).
 
+### The keyboard
+
+Space plays or pauses wherever the focus is (a page-turner pedal sends it), except on a button reached with Tab
+(`app.js`): a Tab keydown followed by a focusin marks the focus as the keyboard's, any pointerdown clears it, and
+Space then presses a `button`, `[role=button]` or `[role=switch]` (not a bar). `:focus-visible` is not used: it may
+start matching after a key press on a clicked button, and Safari does not focus a clicked button at all. The tests
+run in Chromium, Firefox and WebKit (`tests/page/test_keyboard.py`, marked `tablet`).
+
+The grid's bars are one tab stop (`views/chart.js`, a roving `tabindex`): the bar playing, or while editing the
+bar in hand; `#sheet` is a `group` named "Chart" whose description says the arrows move. Editing, the arrows move
+the focus (Up and Down by the grid's lines, Home and End the part's first and last bar) and Enter opens the editor;
+playing, they seek as a pedal does and the focus follows the bar playing. A redraw puts the focus back on the same
+place in the grid, and the edit strip (`views/editor.js` `renderStrip`) back on the same control. A chord to check
+in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check", a click on the mark
+opens the check, Enter on the bar seeks and opens it. In the bar editor Enter saves and closes, Ctrl or ⌘ + Enter
+saves and opens the next bar (`aria-keyshortcuts` on Save, next bar).
+
 ### Editing the chart
 
 The band can type any bar's chords and name, join or start parts (`views/editor.js`, Edit mode). What it types never enters the page's data block, so the page code refreshes as before:

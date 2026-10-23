@@ -300,7 +300,8 @@
     // The chord the chart shows comes from the whole song (what comes before and after, the key, the
     // same part played again); the shares come from this bar heard alone. When they disagree, say so,
     // and keep the analysis's chord in the list: a correction can always go back to it.
-    function openDoubt(button) {
+    // `from`: the control the keyboard goes back to (the bar holding a mark that is no button itself).
+    function openDoubt(button, from) {
       const [u, k] = button.getAttribute("data-ref").split("_").map(Number);
       const chord = song.bars[u].chords[k];
       const s = app.store.get();
@@ -359,7 +360,7 @@
         h("p", null, W.t("▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.")),
       );
       pop.hidden = false;
-      opener = button;
+      opener = from || (button.matches("button") ? button : button.closest(".bar")) || button;
       button.scrollIntoView({ block: "nearest" }); // a chord half off screen: the pop sits by it, not at the top
       place(pop, button, true);
       const f = pop.querySelector(".pick:not([disabled])") || pop.querySelector("button");

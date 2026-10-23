@@ -121,6 +121,12 @@ bars to loop them, use a pedal or the arrow keys to move bar by bar. While the s
 scrolls with it: your hands stay on the instrument. Scroll ahead by hand to read on, and **Back to
 the song** brings the page back to where the band is.
 
+The keyboard does what it says. Space plays or pauses (a page-turner pedal sends it), except on a
+button you reached with Tab, which it presses as anywhere on the web; a click anywhere gives Space
+back to the music. The chart's bars are one Tab stop: the arrows move bar by bar and line by line,
+Home and End go to the part's first and last bar, Enter goes to a bar (or opens its check by ear).
+In the bar editor, Enter saves and Ctrl+Enter (⌘+Enter on a Mac) saves and opens the next bar.
+
 ### English or French, dark or light
 
 <img src="docs/images/french-light.png" alt="The song page in French, in the light theme" width="100%">

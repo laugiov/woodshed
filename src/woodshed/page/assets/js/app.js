@@ -1032,6 +1032,24 @@
         if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
       }
     });
+    // How the focus came (spec 021): a button reached with Tab takes Space as a button does; one clicked
+    // or tapped leaves Space to the music (a pedal sends Space). Tracked here: :focus-visible may start
+    // matching after a key press on a clicked button, and Safari does not focus a clicked button at all.
+    let tabbed = false;
+    let keyFocus = false;
+    let spaceToButton = false; // this Space presses the button: its release too (keyup below)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Tab") tabbed = true;
+    }, true);
+    document.addEventListener("focusin", () => {
+      if (tabbed) keyFocus = true;
+      tabbed = false;
+    }, true);
+    document.addEventListener("pointerdown", () => {
+      tabbed = false;
+      keyFocus = false;
+    }, true);
+    const pressable = (el) => !!el.matches && el.matches("button, [role=button], [role=switch]") && !el.classList.contains("bar");
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
       if (e.target.closest && e.target.closest("dialog[open]")) return; // a dialog's keys are its own (Escape closes it)
@@ -1044,8 +1062,13 @@
       const bar = e.target.closest && e.target.closest(".bar");
       if (bar && e.target === bar && e.key === "Enter") {
         e.preventDefault();
-        if (store.get().editing) editor.openBar(chart.barFromEl(bar), bar);
-        else app.seekBar(chart.barFromEl(bar));
+        if (store.get().editing) return editor.openBar(chart.barFromEl(bar), bar);
+        const u = chart.barFromEl(bar);
+        app.seekBar(u);
+        // A bar with a chord to check: Enter opens the check, as a click on its mark does.
+        const now = chart.barEl(u) || bar;
+        const mark = now.querySelector(".doubt");
+        if (mark) popups.openDoubt(mark, now);
         return;
       }
       if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1055,9 +1078,17 @@
         if (k === " ") e.preventDefault();
         return;
       }
-      // Space plays or pauses, whatever button has the focus (a page-turner pedal sends Space, and a
-      // click on Trainer must not make Space toggle it); in a menu, the doubt pop or on the language
-      // and theme buttons it presses the button, as a keyboard user expects there.
+      // Space presses a button reached with Tab, as everywhere on the web; anywhere else it plays or
+      // pauses (a page-turner pedal sends Space, and a click on Trainer must not make Space toggle it).
+      // In a menu, the doubt pop or on the language and theme buttons it always presses the button.
+      if (k === " " && keyFocus && pressable(e.target)) {
+        spaceToButton = true;
+        if (e.target.tagName !== "BUTTON") {
+          e.preventDefault();
+          e.target.click(); // a role=button the browser does not press itself
+        }
+        return;
+      }
       if (k === " " && !e.target.closest(".menu, #pop, .prefs")) {
         e.preventDefault();
         app.togglePlay();
@@ -1202,6 +1233,7 @@
     $("stNextPart").addEventListener("click", tapped(() => app.nextPart()));
     // Firefox presses a focused button when Space is released: Space played or paused already.
     document.addEventListener("keyup", (e) => {
+      if (e.key === " " && spaceToButton) return void (spaceToButton = false); // a button reached with Tab
       const button = e.key === " " && e.target.closest && e.target.closest("button");
       if (button && !button.closest(".menu, #pop, #barEd, dialog, .prefs")) e.preventDefault();
     });

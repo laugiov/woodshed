@@ -8,12 +8,14 @@
   const INSERTS = ["#", "b", "/", ".", "N.C.", "%"];
   const SAID = { "#": "Sharp", b: "Flat", "/": "Hold the chord (slash)", ".": "Hold the chord (dot)", "N.C.": "No chord", "%": "The bar before" };
   const SHOWN = { "#": "♯", b: "♭" };
+  const MOD = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘" : "Ctrl"; // Save, next bar: Ctrl or ⌘ + Enter
 
   W.views.editor = function editor(app, chart) {
     const { song, store } = app;
     const meta = song.song;
     let open = null; // the bar being edited
     let opener = null;
+    let saveNext = null; // Ctrl or ⌘ + Enter anywhere in the dialog
 
     // A refusal, said in words; chords.json's codes, the root as typed.
     function why(error, token) {
@@ -239,9 +241,9 @@
       field.addEventListener("input", update);
       field.addEventListener("keydown", (e) => {
         if (e.isComposing) return;
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          save(true);
+          save(false); // Enter saves, as the Save button (Ctrl or ⌘ + Enter: the next bar, in the dialog's keys)
         } else if (e.key === "Escape") {
           e.preventDefault();
           close(true);
@@ -252,7 +254,7 @@
           field.focus();
           return;
         }
-        // Walking through bars with Enter types nothing that was not changed (a bar with a chord to check
+        // Walking through bars with Ctrl+Enter types nothing that was not changed (a bar with a chord to check
         // is the exception: Enter there confirms it).
         const onScreen = JSON.stringify(song.bars[u].chords.map((c) => [c.beats, moved(W.edits.label(c), T())]));
         const unchanged = !typed && !doubt && JSON.stringify(parsed.chords) === onScreen;
@@ -301,6 +303,7 @@
         also ? h("label", { class: "also" }, also, W.t("Also {parts}, the same bar", { parts: listOf([...new Set(others.map((v) => (partOf(v) === partOf(u) ? W.t("{part}, played again", { part: partOf(v) }) : partOf(v))))]) })) : null,
         startPart(u),
         h("p", { class: "tip" }, W.t("As on a chord sheet: Asus4, Cmaj7, Bdim, D/F#. A dot holds the chord, % repeats the bar before.")),
+        h("p", { class: "tip", "data-testid": "bar-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next bar.", { mod: MOD })),
         h(
           "div",
           { class: "acts" },
@@ -311,10 +314,14 @@
           } }, W.t("Back to the analysis")) : h("span"),
           h("span", { class: "right" },
             h("button", { type: "button", class: "btn", "data-testid": "bar-cancel", onclick: () => close(true) }, W.t("Cancel")),
-            h("button", { type: "button", class: "btn", "data-testid": "bar-save", onclick: () => save(false) }, W.t("Save")),
-            h("button", { type: "button", class: "btn primary", "data-testid": "bar-save-next", onclick: () => save(true) }, W.t("Save, next bar"))),
+            h("button", { type: "button", class: "btn", "data-testid": "bar-save", title: W.t("Enter"), onclick: () => save(false) }, W.t("Save")),
+            h("button", {
+              type: "button", class: "btn primary", "data-testid": "bar-save-next", title: W.t("{mod}+Enter", { mod: MOD }),
+              "aria-keyshortcuts": "Control+Enter Meta+Enter", onclick: () => save(true),
+            }, W.t("Save, next bar"))),
         ),
       );
+      saveNext = () => save(true);
       update();
       box.hidden = false;
       document.body.classList.add("bar-open");
@@ -389,6 +396,12 @@
         close(true);
         return;
       }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing && saveNext) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveNext();
+        return;
+      }
       if (e.key !== "Tab") return;
       const list = [...$("barEd").querySelectorAll("button:not([disabled]), input")];
       const first = list[0];
@@ -412,7 +425,13 @@
       const ok = window.confirm(W.t("Take back {what}, for the whole band?", { what: typed.join(W.t(" and ")) }));
       if (!ok) return;
       const undo = app.untypeAll();
-      app.toast(W.t("The chart is the analysis's again."), { label: W.t("Undo"), run: undo });
+      app.toast(W.t("The chart is the analysis's again."), { label: W.t("Undo"), run: () => backTo(undo, "untype-all") });
+    }
+    // Undo from the toast: the keyboard back on the strip's control that took the chart back.
+    function backTo(undo, testid) {
+      undo();
+      const el = $("editStrip").querySelector('[data-testid="' + testid + '"]') || $("editStrip").querySelector("button");
+      if (el && !$("editStrip").hidden) el.focus();
     }
 
     function renderStrip(s) {
@@ -422,6 +441,9 @@
       document.body.classList.toggle("editing", !!shows);
       if (!shows || strip.dataset.shows === shows) return;
       strip.dataset.shows = shows;
+      // Drawn again on every change of the chart: the keyboard stays on its control (the reset's own,
+      // gone with what it took back: the strip's first), never on the page.
+      const had = strip.contains(document.activeElement) ? document.activeElement.getAttribute("data-testid") || "" : null;
       clear(
         strip,
         h("span", { class: "what" }, W.t("Editing the chart")),
@@ -432,13 +454,14 @@
                 const n = Object.keys(app.typedParts.values()).length;
                 if (!window.confirm(W.t("Take back {what}, for the whole band?", { what: n === 1 ? W.t("1 part name") : W.t("{n} part names", { n }) }))) return;
                 const undo = app.untypeParts();
-                app.toast(W.t("The parts are the analysis's again."), { label: W.t("Undo"), run: undo });
+                app.toast(W.t("The parts are the analysis's again."), { label: W.t("Undo"), run: () => backTo(undo, "untype-parts") });
               } }, W.t("Parts back to the analysis"))
             : null,
           h("button", { type: "button", class: "btn", "data-testid": "bar-lines", "aria-haspopup": "dialog", onclick: () => app.openBarLines() }, W.t("Bar lines…")),
           h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-all", onclick: untypeAll }, W.t("Back to the analysis…")),
           h("button", { type: "button", class: "btn primary", "data-testid": "edit-done", onclick: () => store.set({ editing: false }) }, W.t("Done"))),
       );
+      if (had !== null) (strip.querySelector('[data-testid="' + had + '"]') || strip.querySelector("button")).focus();
     }
 
     store.on((s, changed) => {
