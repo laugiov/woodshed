@@ -54,6 +54,20 @@ def built(name: str, stems: bool, root: str, title: str | None = None) -> Path:
 
 
 @cache
+def built_six(name: str, keys: bool, root: str) -> Path:
+    """The page of `name` separated with six stems: its chords on the guitar, and on the keys or not heard."""
+    from tests.test_guitar_keys import six_stems
+
+    folder = Path(root) / f"six-{int(keys)}"
+    wav = synth.write(name, folder / "src").wav
+    separated = six_stems(folder / "src", keys=keys)
+    result = analysis.analyze(
+        wav, use_stems=True, stems_result=separated, beats_per_bar=synth.SONGS[name].beats_per_bar
+    )
+    return build.build(result, wav, folder / "pages" / f"{name}-six", separated)
+
+
+@cache
 def with_close_calls(name: str, stems: bool, root: str) -> Path:
     """The page of `name` with every doubt turned into a close call (the synthetic songs only have
     timing doubts: their chords are clear)."""
@@ -272,9 +286,16 @@ def open_page(page: Page, pages_root: str) -> Iterator[object]:
     opened: list[Opened] = []
 
     def open_(
-        name: str = "pop", stems: bool = True, title: str | None = None, close_calls: bool = False, variant: str = ""
+        name: str = "pop",
+        stems: bool = True,
+        title: str | None = None,
+        close_calls: bool = False,
+        variant: str = "",
+        six: bool | None = None,  # six stems, with the keys heard (True) or not (False)
     ) -> Opened:
-        if variant:
+        if six is not None:
+            folder = built_six(name, six, pages_root)
+        elif variant:
             folder = rewritten(name, pages_root, variant, VARIANTS[variant])
         elif close_calls:
             folder = with_close_calls(name, stems, pages_root)

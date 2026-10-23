@@ -462,6 +462,16 @@
     "Drums alone": "Batterie seule",
     "Bass alone": "Basse seule",
     "Guitars and keys alone": "Guitares et claviers seuls",
+    "Without guitar": "Sans la guitare",
+    "Without keys": "Sans les claviers",
+    "Guitar alone": "Guitare seule",
+    "Keys alone": "Claviers seuls",
+    "No guitar heard in this song: the full mix plays.": "Aucune guitare entendue dans ce morceau : le mix complet joue.",
+    "No keys heard in this song: the full mix plays.": "Aucun clavier entendu dans ce morceau : le mix complet joue.",
+    "From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.":
+      "D'après la piste séparée de la guitare : accords sur {hits}. Plus gros point : frappé dans plus de mesures.",
+    "Upper notes heard on the isolated keys track. The keyboard often leaves the root to the bass.":
+      "Notes du haut entendues sur la piste séparée des claviers. Le clavier laisse souvent la fondamentale à la basse.",
     "Vocals alone": "Voix seule",
 
     // The band (views/band.js)

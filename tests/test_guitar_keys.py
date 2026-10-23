@@ -69,16 +69,17 @@ def test_a_cache_entry_counts_only_with_its_model_s_stems(tmp_path: Path, monkey
     assert stems.cached(song, stems.SIX) is None  # no guitar.flac: separated again
 
 
-def six_stems(folder: Path, keys: bool, guitar: bool = True) -> stems.Stems:
-    """The pop song's synthetic stems as a six-stem separation: its chord stem is the guitar, or the keys."""
+def six_stems(folder: Path, keys: bool, guitar: bool = True, synth_keys: bool = False) -> stems.Stems:
+    """The pop song's synthetic stems as a six-stem separation: its chord stem is the guitar, or the keys (on
+    Demucs's piano, or left in "other" as a synth would be)."""
     four = fake_stems("pop", folder)
     chords, _ = sf.read(four.paths["other"], dtype="float32")
     silence = np.zeros_like(chords)
     paths = dict(four.paths)
     for name, signal in (
         ("guitar", chords if guitar else silence),
-        ("piano", chords if keys else silence),
-        ("other", silence),
+        ("piano", chords if keys and not synth_keys else silence),
+        ("other", chords if keys and synth_keys else silence),
     ):
         sf.write(folder / f"pop-stems/{name}.flac", signal, RATE, subtype="PCM_24")
         paths[name] = folder / f"pop-stems/{name}.flac"
@@ -120,6 +121,15 @@ def test_the_strumming_comes_from_the_guitar_and_the_voicing_from_the_keys(tmp_p
     voicing_found = any(song.parts.voicings)
     assert comp_found is on_guitar  # the chords only on the guitar: a strumming grid, no keys voicing
     assert voicing_found is not on_guitar
+
+
+def test_a_synth_left_in_other_is_the_keys(tmp_path: Path) -> None:
+    wav = synth.write("pop", tmp_path).wav
+    separated = six_stems(tmp_path, keys=True, guitar=False, synth_keys=True)
+    song = analysis.analyze(wav, use_stems=True, stems_result=separated)
+    assert song.parts is not None and any(song.parts.voicings)
+    found = tracks.write_tracks(wav, separated, tmp_path / "page")
+    assert "solo-keys" in ids(found) and "solo-guitar" not in ids(found)
 
 
 def test_four_stem_parts_are_unchanged(tmp_path: Path) -> None:
@@ -198,3 +208,10 @@ def test_the_library_keeps_a_page_s_separation(tmp_path: Path) -> None:
     assert lib.options(separation="four").separation == "four"
     with pytest.raises(ValueError):
         lib.options(separation="five")
+
+
+def test_the_tracks_that_hold_the_voice_keep_its_formants_in_another_key() -> None:
+    from woodshed import pitch
+
+    assert {"minus-guitar", "minus-keys"} <= pitch.FORMANTS_KEPT
+    assert not {"solo-guitar", "solo-keys"} & pitch.FORMANTS_KEPT

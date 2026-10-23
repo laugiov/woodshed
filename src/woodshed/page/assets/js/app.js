@@ -6,8 +6,10 @@
   const { h, $, chordNode } = W;
   const I = W.instruments;
 
-  // The isolated track each instrument learns from (step 2) and plays over (step 4).
-  const STEM_OF = { guitar: "other", piano: "other", bass: "bass", drums: "drums", voice: "vocals" };
+  // The isolated track each instrument learns from (step 2) and plays over (step 4). Four stems:
+  // guitars and keys share one track ("other"); six stems: each has its own, or none when not heard.
+  const STEM_OF = { guitar: "guitar", piano: "keys", bass: "bass", drums: "drums", voice: "vocals" };
+  const SHARED_OF = { ...STEM_OF, guitar: "other", piano: "other" };
 
   // 32-bit FNV-1a, enough to tell two analyses apart in a storage key.
   function fnv1a(text) {
@@ -251,14 +253,18 @@
       // Another track than the marked step card plays (Your part, the Tracks menu): that card is no
       // longer the one in use; step 3 plays no track of its own and stays.
       const s = store.get();
-      const stem = STEM_OF[s.inst];
+      const stem = app.stemOf(s.inst);
       const has = (t) => song.tracks.some((x) => x.id === t);
       const own = { 1: "mix", 2: "solo-" + stem, 4: "minus-" + stem }[s.step];
       const plays = own && (has(own) ? own : "mix"); // without the instruments' tracks, steps 2 and 4 play the mix
       if (plays && plays !== id && store.get().track === id) store.set({ step: null });
       return ok;
     };
-    app.stemOf = (inst) => STEM_OF[inst];
+    const hasTrack = (id) => song.tracks.some((t) => t.id === id);
+    app.sharedStem = hasTrack("solo-other"); // a four-stem page: guitars and keys on one track
+    app.stemOf = (inst) => (app.sharedStem ? SHARED_OF : STEM_OF)[inst];
+    // A six-stem page with no track for this instrument: the separation did not hear it in the song.
+    app.notHeard = (inst) => !app.sharedStem && hasTrack("solo-vocals") && !hasTrack("solo-" + app.stemOf(inst));
     app.setInstrument = function setInstrument(inst) {
       store.set({ inst });
       const s = store.get();
@@ -294,7 +300,7 @@
     };
     app.setStep = function setStep(n, quiet) {
       const s = store.get();
-      const stem = STEM_OF[s.inst];
+      const stem = app.stemOf(s.inst);
       const has = (id) => song.tracks.some((t) => t.id === id);
       let message = "";
       if (n === 1) {

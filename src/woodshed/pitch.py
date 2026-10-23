@@ -33,7 +33,9 @@ KEY_DIR = "key"  # <page>/audio/key/up2/mix.flac
 UNPITCHED = frozenset({"solo-drums"})  # nothing to transpose: plays as recorded
 # Tracks that hold the voice keep its formants (a voice shifted keeps its timbre); the others are shifted with
 # their pitch. One table, to change after a listening test.
-FORMANTS_KEPT = frozenset({"mix", "solo-vocals", "minus-bass", "minus-drums", "minus-other"})
+FORMANTS_KEPT = frozenset(
+    {"mix", "solo-vocals", "minus-bass", "minus-drums", "minus-other", "minus-guitar", "minus-keys"}
+)
 BLOCK = 1 << 18
 SLOWEST = 10.0  # a render longer than 10x the track's duration is stuck: killed
 LEAST = 60.0  # seconds a render may always take

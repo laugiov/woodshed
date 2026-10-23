@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import io
 import re
@@ -16,7 +17,7 @@ import pytest
 from playwright.sync_api import Browser, expect
 
 from tests import synth
-from tests.page.conftest import built
+from tests.page.conftest import built, built_six
 from tests.page.test_band import device, until
 from woodshed import app
 from woodshed.run import Options, Reporter, first_pass
@@ -112,15 +113,39 @@ def test_from_disk_the_files_open_and_the_page_says_where_they_are(open_page: An
     )
 
 
-@pytest.fixture
-def served(pages_root: str) -> Iterator[str]:
-    folder = built("pop", True, pages_root)
+@contextlib.contextmanager
+def serving(folder: Path) -> Iterator[str]:
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(folder.parent))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}/{folder.name}/index.html"
-    srv.shutdown()
-    srv.server_close()
+    try:
+        yield f"http://127.0.0.1:{srv.server_address[1]}/{folder.name}/index.html"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@pytest.fixture
+def served(pages_root: str) -> Iterator[str]:
+    with serving(built("pop", True, pages_root)) as url:
+        yield url
+
+
+def file_names(browser: Browser, url: str, instruments: tuple[str, ...]) -> dict[str, list[str]]:
+    page = browser.new_context(accept_downloads=True, locale="en-US").new_page()
+    page.goto(url)
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    out: dict[str, list[str]] = {}
+    for inst in instruments:
+        page.evaluate("(i) => Woodshed.app.setInstrument(i)", inst)
+        out[inst] = []
+        for which in ("alone", "without"):
+            with page.expect_download() as info:
+                page.get_by_test_id(f"part-download-{which}").click()
+            out[inst].append(info.value.suggested_filename.split(" - ", 1)[1])
+    assert len(page.context.pages) == 1  # downloaded, no tab opened
+    page.context.close()
+    return out
 
 
 def test_the_files_are_taken_home_from_the_library(browser: Browser, served: str) -> None:
@@ -244,3 +269,55 @@ def test_on_a_phone_the_part_fits_and_is_easy_to_touch(browser: Browser, pages_r
     )
     assert page.evaluate("document.documentElement.scrollWidth") <= 390, wide
     context.close()
+
+
+# Six stems (spec 010): the guitar and the keys each have their part, or none when the song has none.
+
+SIX = {"guitar": "guitar", "piano": "keys", "bass": "bass", "drums": "drums", "voice": "vocals"}
+
+
+def test_on_a_six_stem_page_the_guitar_and_the_keys_each_play_their_own_part(open_page: Any) -> None:
+    o = open_page("pop", six=True)
+    page = o.page
+    part = page.get_by_test_id("your-part")
+    for inst, stem in SIX.items():
+        o.js("(i) => Woodshed.app.setInstrument(i)", inst)
+        part.get_by_test_id("part-alone").click()
+        until(page, f"Woodshed.app.store.get().track === 'solo-{stem}'")
+        part.get_by_test_id("part-without").click()
+        until(page, f"Woodshed.app.store.get().track === 'minus-{stem}'")
+        expect(part).not_to_contain_text("Guitars and keys are one track")
+        o.js("(n) => Woodshed.app.setStep(n, true)", 2)
+        until(page, f"Woodshed.app.store.get().track === 'solo-{stem}'")
+    o.js("Woodshed.app.setStep(1, true); Woodshed.app.setInstrument('guitar')")
+    expect(page.get_by_test_id("desk")).to_contain_text("From the isolated guitar track")
+    o.js("Woodshed.app.setInstrument('piano')")
+    expect(page.get_by_test_id("desk")).to_contain_text("Upper notes heard on the isolated keys track")
+    expect(page.get_by_test_id("desk")).not_to_contain_text("keys and guitar")
+
+
+def test_keys_not_heard_say_so_and_the_full_mix_plays(open_page: Any) -> None:
+    o = open_page("pop", six=False)
+    page = o.page
+    part = page.get_by_test_id("your-part")
+    o.js("Woodshed.app.setInstrument('piano')")
+    expect(part.get_by_test_id("part-not-heard")).to_have_text("No keys heard in this song: the full mix plays.")
+    expect(part.get_by_role("button")).to_have_count(0)
+    expect(part.get_by_role("link")).to_have_count(0)
+    for step in (2, 4):  # the mix is what these steps play: the card stays marked
+        o.js("(n) => Woodshed.app.setStep(n, true)", step)
+        until(page, "Woodshed.app.store.get().track === 'mix'")
+        page.wait_for_timeout(300)
+        expect(page.get_by_test_id(f"step-{step}")).to_have_class("step on")
+    o.js("Woodshed.app.setInstrument('guitar')")
+    expect(part.get_by_test_id("part-alone")).to_be_visible()  # the guitar was heard: its part is there
+    expect(part.get_by_test_id("part-not-heard")).to_have_count(0)
+
+
+def test_six_stem_files_are_named_for_the_instrument(browser: Browser, pages_root: str) -> None:
+    with serving(built_six("pop", True, pages_root)) as url:
+        names = file_names(browser, url, ("guitar", "piano"))
+    assert names == {
+        "guitar": ["guitar alone.flac", "without guitar.flac"],
+        "piano": ["keys alone.flac", "without keys.flac"],
+    }

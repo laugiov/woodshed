@@ -187,7 +187,9 @@
       return [
         h("div", { class: "label subhead" }, W.t("Rhythm: when the chords hit")),
         rhythmGrid(W.t("Chords"), parts.comp, song.per, "compGrid"),
-        h("p", { class: "src-note" }, W.t("From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits: I.hitsText(parts.comp, song.per) })),
+        h("p", { class: "src-note" }, app.sharedStem
+          ? W.t("From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits: I.hitsText(parts.comp, song.per) })
+          : W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits: I.hitsText(parts.comp, song.per) })),
       ];
     }
 
@@ -305,7 +307,9 @@
             cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose)))] : null,
             pcs.length ? h("button", { type: "button", class: "btn", "data-testid": "hear-voicing", style: { marginLeft: "4px" }, onclick: () => app.hearVoicing(curBar(s)) }, W.t("▶ Hear it")) : null,
           ),
-          h("p", { class: "src-note" }, W.t("Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.")),
+          h("p", { class: "src-note" }, app.sharedStem
+            ? W.t("Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.")
+            : W.t("Upper notes heard on the isolated keys track. The keyboard often leaves the root to the bass.")),
           comping(),
         );
       }
@@ -423,11 +427,14 @@
       const shown = s.inst + "|" + W.lang();
       if (shown !== partShown) {
         partShown = shown;
-        if (!fileOf("solo-" + stem) || !fileOf("minus-" + stem)) {
+        if (app.notHeard(s.inst)) {
+          const none = s.inst === "guitar" ? W.t("No guitar heard in this song: the full mix plays.") : W.t("No keys heard in this song: the full mix plays.");
+          clear(box, h("p", { class: "part-note", "data-testid": "part-not-heard" }, none), h("div", { class: "pitch-row", "data-part": "pitch" }));
+        } else if (!fileOf("solo-" + stem) || !fileOf("minus-" + stem)) {
           clear(box, h("p", { class: "part-note" }, W.t("Your part's track comes with the separated instruments: analyse the song with them.")), h("div", { class: "pitch-row", "data-part": "pitch" }));
         } else {
-          const shared = stem === "other"; // guitars and keys: one separated track until they are split
-          const who = shared ? "guitars and keys" : s.inst; // file names stay in English
+          const shared = stem === "other"; // a four-stem page: guitars and keys on one separated track
+          const who = shared ? "guitars and keys" : { piano: "keys" }[s.inst] || s.inst; // file names stay in English
           const title = String(song.song.title || "song").replace(/[\\/:*?"<>|]+/g, " ").trim();
           const choice = (id, testid, label) => h("button", { type: "button", "data-track": id, "data-testid": testid, "aria-pressed": "false", onclick: () => app.setTrack(id) }, label);
           // Served, the files download under names that say what they are; from disk a browser does
