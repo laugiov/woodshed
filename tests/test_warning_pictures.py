@@ -72,7 +72,7 @@ def test_each_picture_outlines_the_button_to_click_with_its_step() -> None:
     for name in LABELS:
         root = ET.parse(WARNINGS / f"{name}.svg").getroot()
         step = name.split("-")[1]
-        badges = [t for t in texts(root) if t.startswith(step) and len(t) <= 2]
+        badges = [t for t in texts(root) if t in (step, step + "a", step + "b")]
         assert badges, name
 
 

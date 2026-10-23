@@ -2,15 +2,15 @@
 <title id="t">Mac, step 2: Privacy &amp; Security in System Settings, Open Anyway (drawn)</title>
 <desc id="d">A drawn settings panel: System Settings, Privacy &amp; Security, scrolled down to Security, where a line says “Install woodshed” was blocked to protect your Mac, with an Open Anyway (Ouvrir quand même) button, outlined: click it.</desc>
 <rect width="640" height="314" rx="14" fill="#0d1210"/>
-<rect x="1" y="1" width="638" height="312" rx="13" fill="#151b18" stroke="#3d5049"/>
+<rect x="1" y="1" width="638" height="312" rx="13" fill="#151b18" stroke="#6b7f77"/>
 <text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Mac, step 2 of 3</text>
 <text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">macOS 15 Sequoia, drawn 2026-10</text>
 <text x="20" y="70" font-size="13" fill="#94a19a">System Settings, then Privacy &amp; Security, scrolled down to Security</text>
-<rect x="20" y="84" width="600" height="158" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="84" width="600" height="158" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="118" font-size="18" fill="#e5ebe7" font-weight="700">Security</text>
 <line x1="42" y1="130" x2="598" y2="130" stroke="#2a342f"/>
 <text x="42" y="160" font-size="14" fill="#e5ebe7">“Install woodshed” was blocked to protect your Mac.</text>
-<rect x="463" y="186" width="135" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="463" y="186" width="135" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="530.5" y="208" font-size="15" fill="#e5ebe7" font-weight="700" text-anchor="middle">Open Anyway</text>
 <rect x="458" y="181" width="145" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
 <circle cx="601" cy="183" r="13" fill="#3cc4a9"/>

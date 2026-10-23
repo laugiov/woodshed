@@ -2,10 +2,10 @@
 <title id="t">Windows, step 2: Make sure you trust the file; Show more, then Keep anyway (drawn)</title>
 <desc id="d">A drawn box: Make sure you trust woodshed-installer-windows.cmd before you open it. Below, Show more (Afficher plus) is outlined as 2a; it reveals Keep anyway (Conserver quand même), outlined as 2b, and Report this app as safe. Delete and Cancel are left alone.</desc>
 <rect width="640" height="472" rx="14" fill="#0d1210"/>
-<rect x="1" y="1" width="638" height="470" rx="13" fill="#151b18" stroke="#3d5049"/>
-<text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Windows, step 2 of 4</text>
+<rect x="1" y="1" width="638" height="470" rx="13" fill="#151b18" stroke="#6b7f77"/>
+<text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Windows, step 2 of 4 (if it appears)</text>
 <text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">Windows 11 with Edge, drawn 2026-10</text>
-<rect x="20" y="58" width="600" height="342" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="58" width="600" height="342" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="92" font-size="18" fill="#e5ebe7" font-weight="700">Make sure you trust woodshed-installer-windows.cmd</text>
 <text x="42" y="116" font-size="18" fill="#e5ebe7" font-weight="700">before you open it</text>
 <text x="42" y="148" font-size="14" fill="#94a19a">Microsoft Defender SmartScreen couldn't verify if this file is safe because it</text>
@@ -20,9 +20,9 @@
 <text x="56" y="261" font-size="15" fill="#e5ebe7" font-weight="700">Keep anyway</text>
 <text x="56" y="297" font-size="15" fill="#e5ebe7">Report this app as safe</text>
 <line x1="42" y1="320" x2="598" y2="320" stroke="#2a342f"/>
-<rect x="404" y="344" width="90" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="404" y="344" width="90" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="449" y="366" font-size="15" fill="#e5ebe7" text-anchor="middle">Delete</text>
-<rect x="508" y="344" width="90" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="508" y="344" width="90" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="553" y="366" font-size="15" fill="#e5ebe7" text-anchor="middle">Cancel</text>
 <text x="20" y="430" font-size="15" fill="#e5ebe7" font-weight="700">Click Show more (Afficher plus) (2a), then Keep anyway (Conserver</text>
 <text x="20" y="452" font-size="15" fill="#e5ebe7" font-weight="700">quand même) (2b)</text>

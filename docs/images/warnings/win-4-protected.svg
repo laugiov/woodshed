@@ -2,10 +2,10 @@
 <title id="t">Windows, step 4: Windows protected your PC; More info, then Run anyway (drawn)</title>
 <desc id="d">A drawn box titled Windows protected your PC, saying an unrecognized app was prevented from starting. More info (Informations complémentaires) is outlined as 4a; the box then shows the app and its publisher, with Run anyway (Exécuter quand même), outlined as 4b, and Don't run.</desc>
 <rect width="640" height="528" rx="14" fill="#0d1210"/>
-<rect x="1" y="1" width="638" height="526" rx="13" fill="#151b18" stroke="#3d5049"/>
+<rect x="1" y="1" width="638" height="526" rx="13" fill="#151b18" stroke="#6b7f77"/>
 <text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Windows, step 4 of 4 (if it appears)</text>
 <text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">Windows 11 with Edge, drawn 2026-10</text>
-<rect x="20" y="58" width="600" height="228" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="58" width="600" height="228" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="92" font-size="18" fill="#e5ebe7" font-weight="700">Windows protected your PC</text>
 <text x="42" y="124" font-size="14" fill="#e5ebe7">Microsoft Defender SmartScreen prevented an unrecognized app from starting.</text>
 <text x="42" y="144" font-size="14" fill="#e5ebe7">Running this app might put your PC at risk.</text>
@@ -13,20 +13,20 @@
 <rect x="37" y="165" width="99" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
 <circle cx="134" cy="167" r="13" fill="#3cc4a9"/>
 <text x="134" y="172" font-size="14" fill="#0a1210" font-weight="700" text-anchor="middle">4a</text>
-<rect x="481" y="230" width="117" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="481" y="230" width="117" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="539.5" y="252" font-size="15" fill="#e5ebe7" text-anchor="middle">Don't run</text>
 <text x="20" y="308" font-size="13" fill="#94a19a">After More info:</text>
-<rect x="20" y="322" width="600" height="134" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="322" width="600" height="134" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="353" font-size="14" fill="#94a19a">App:</text>
 <text x="134" y="353" font-size="14" fill="#e5ebe7">woodshed-installer-windows.cmd</text>
 <text x="42" y="374" font-size="14" fill="#94a19a">Publisher:</text>
 <text x="134" y="374" font-size="14" fill="#e5ebe7">Unknown publisher</text>
-<rect x="341" y="400" width="126" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="341" y="400" width="126" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="404" y="422" font-size="15" fill="#e5ebe7" font-weight="700" text-anchor="middle">Run anyway</text>
 <rect x="336" y="395" width="136" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
 <circle cx="470" cy="397" r="13" fill="#3cc4a9"/>
 <text x="470" y="402" font-size="14" fill="#0a1210" font-weight="700" text-anchor="middle">4b</text>
-<rect x="481" y="400" width="117" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="481" y="400" width="117" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="539.5" y="422" font-size="15" fill="#e5ebe7" text-anchor="middle">Don't run</text>
 <text x="20" y="486" font-size="15" fill="#e5ebe7" font-weight="700">If it appears: click More info (4a), then Run anyway (Exécuter quand</text>
 <text x="20" y="508" font-size="15" fill="#e5ebe7" font-weight="700">même) (4b)</text>

@@ -22,7 +22,7 @@ WIN = "Windows 11 with Edge, drawn 2026-10"
 # The page's dark theme (src/woodshed/page/assets/app.css): the picture carries its own background, so it
 # reads the same on a light or a dark page.
 BG, PANEL, SHEET, INK, MUTED, LINE = "#0d1210", "#151b18", "#19201d", "#e5ebe7", "#94a19a", "#2a342f"
-ACCENT, ACCENT_INK, FRAME, BUTTON = "#3cc4a9", "#0a1210", "#3d5049", "#222b27"
+ACCENT, ACCENT_INK, FRAME, BUTTON = "#3cc4a9", "#0a1210", "#6b7f77", "#222b27"  # FRAME: 3:1 on the panels
 FONT = "Atkinson Hyperlegible, sans-serif"
 
 WIDTH, PAD, BOX_PAD = 640, 20, 22
@@ -300,7 +300,7 @@ PICTURES = [
     Picture(
         "win-2-keep-anyway",
         WIN,
-        "Windows, step 2 of 4",
+        "Windows, step 2 of 4 (if it appears)",
         "Windows, step 2: Make sure you trust the file; Show more, then Keep anyway (drawn)",
         f"A drawn box: Make sure you trust {FILE} before you open it. Below, Show more (Afficher plus) is "
         "outlined as 2a; it reveals Keep anyway (Conserver quand même), outlined as 2b, and Report this app as "

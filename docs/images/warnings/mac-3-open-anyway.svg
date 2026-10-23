@@ -2,22 +2,22 @@
 <title id="t">Mac, step 3: confirm with Open Anyway, then your password (drawn)</title>
 <desc id="d">A drawn box asking whether to open “Install woodshed”, saying Apple is not able to verify that it is free from malware, with the buttons Done and Open Anyway (Ouvrir quand même); Open Anyway is outlined. Then the Mac asks for your password or Touch ID.</desc>
 <rect width="640" height="386" rx="14" fill="#0d1210"/>
-<rect x="1" y="1" width="638" height="384" rx="13" fill="#151b18" stroke="#3d5049"/>
+<rect x="1" y="1" width="638" height="384" rx="13" fill="#151b18" stroke="#6b7f77"/>
 <text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Mac, step 3 of 3</text>
 <text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">macOS 15 Sequoia, drawn 2026-10</text>
-<rect x="20" y="58" width="600" height="168" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="58" width="600" height="168" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="92" font-size="18" fill="#e5ebe7" font-weight="700">Open “Install woodshed”?</text>
 <text x="42" y="124" font-size="14" fill="#e5ebe7">Apple is not able to verify that it is free from malware that could harm your</text>
 <text x="42" y="144" font-size="14" fill="#e5ebe7">Mac or compromise your privacy.</text>
-<rect x="377" y="170" width="72" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="377" y="170" width="72" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="413" y="192" font-size="15" fill="#e5ebe7" text-anchor="middle">Done</text>
-<rect x="463" y="170" width="135" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<rect x="463" y="170" width="135" height="34" rx="7" fill="#222b27" stroke="#6b7f77" stroke-width="1"/>
 <text x="530.5" y="192" font-size="15" fill="#e5ebe7" font-weight="700" text-anchor="middle">Open Anyway</text>
 <rect x="458" y="165" width="145" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
 <circle cx="601" cy="167" r="13" fill="#3cc4a9"/>
 <text x="601" y="172" font-size="14" fill="#0a1210" font-weight="700" text-anchor="middle">3</text>
 <text x="20" y="248" font-size="13" fill="#94a19a">Then:</text>
-<rect x="20" y="262" width="600" height="52" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<rect x="20" y="262" width="600" height="52" rx="12" fill="#19201d" stroke="#6b7f77" stroke-width="1.5"/>
 <text x="42" y="292" font-size="14" fill="#94a19a">Your Mac asks for your password, or for your finger on Touch ID.</text>
 <text x="20" y="344" font-size="15" fill="#e5ebe7" font-weight="700">Click Open Anyway (Ouvrir quand même), then type your Mac password</text>
 <text x="20" y="366" font-size="15" fill="#e5ebe7" font-weight="700">or use Touch ID</text>
