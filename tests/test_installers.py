@@ -359,8 +359,8 @@ def test_the_windows_installer_registers_the_uninstall_woodshed_knows() -> None:
         "reg delete",
     ):
         assert value in text, value
-    # The tools folder as woodshed computes it on Windows.
-    assert 'Join-Path $env:LOCALAPPDATA "woodshed\\tools"' in text and "$env:WOODSHED_TOOLS" in text
+    # The tools folder as woodshed computes it on Windows (Get-WoodshedTools, shared with Get-Rubberband).
+    assert '[IO.Path]::Combine($Local, "woodshed", "tools")' in text and "$env:WOODSHED_TOOLS" in text
 
 
 @posix_only

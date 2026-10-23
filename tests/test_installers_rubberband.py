@@ -66,7 +66,7 @@ def mac_archive(folder: Path, program: bytes = b"#!/bin/sh\necho 4.0.0 >&2\n") -
 
 def get_rubberband(tmp_path: Path, *args: str) -> tuple[int, str]:
     """install.sh's get_rubberband, run alone, into tmp_path/tools."""
-    script = shell_function("get_rubberband") + 'get_rubberband "$@"\n'
+    script = shell_function("woodshed_tools_dir") + shell_function("get_rubberband") + 'get_rubberband "$@"\n'
     env = {**os.environ, "HOME": str(tmp_path / "home"), "WOODSHED_TOOLS": str(tmp_path / "tools")}
     proc = subprocess.run(["sh", "-c", script, "sh", *args], env=env, capture_output=True, text=True, check=False)
     return proc.returncode, proc.stdout + proc.stderr
@@ -271,7 +271,7 @@ def test_the_windows_install_never_stops_on_rubber_band() -> None:
     assert "[CmdletBinding()]" in body[:100]  # -ErrorAction at the call needs it
     calls = [line.strip() for line in text.splitlines() if "Get-Rubberband" in line and "function" not in line]
     call = [line for line in calls if not line.startswith("#")]
-    assert call == ["try { $null = Get-Rubberband -ErrorAction Stop }"], calls
+    assert call == ["try { $null = Get-Rubberband -Tools $Tools -ErrorAction Stop }"], calls
     after = text[text.index(call[0]) :].splitlines()[1].strip()
     assert after.startswith("catch { Write-Host") and OFF in after
 
@@ -281,3 +281,71 @@ def test_the_windows_script_can_be_loaded_for_its_functions_alone() -> None:
     text = INSTALL_PS1.read_text(encoding="utf-8")
     guard = text.index("$MyInvocation.InvocationName -eq '.'")
     assert text.index("function Get-Rubberband") < guard < text.index("uv tool install")
+
+
+# One tools folder (spec 018): the installers compute it as woodshed does.
+
+CI = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+
+
+def test_get_rubberband_asks_the_shared_tools_folder() -> None:
+    body = shell_function("get_rubberband")
+    assert 'rb_tools="$(woodshed_tools_dir)"' in body and "Application Support" not in body
+
+
+@posix_only
+@pytest.mark.parametrize("system", ["Darwin", "Linux"])
+def test_the_shell_tools_folder_is_woodshed_s(tmp_path: Path, system: str) -> None:
+    from woodshed import paths
+
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    (stubs / "uname").write_text(f"#!/bin/sh\necho {system}\n", encoding="utf-8")
+    (stubs / "uname").chmod(0o755)
+    home = tmp_path / "home"
+    env = {"PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}", "HOME": str(home)}
+    script = shell_function("woodshed_tools_dir") + "woodshed_tools_dir\n"
+    cases: list[dict[str, str]] = [
+        {},
+        {"XDG_DATA_HOME": str(tmp_path / "data")},
+        {"XDG_DATA_HOME": "relative"},
+        {"WOODSHED_TOOLS": "~/my tools"},
+    ]
+    for extra in cases:
+        out = subprocess.run(["sh", "-c", script], env={**env, **extra}, capture_output=True, text=True, check=True)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("HOME", str(home))
+            mp.setenv("USERPROFILE", str(home))
+            mp.delenv("WOODSHED_TOOLS", raising=False)
+            mp.delenv("XDG_DATA_HOME", raising=False)
+            for k, v in extra.items():
+                mp.setenv(k, v)
+            assert out.stdout.strip() == str(paths.tools_dir("darwin" if system == "Darwin" else "linux"))
+
+
+@posix_only
+def test_the_ci_step_cuts_out_a_get_rubberband_that_runs(tmp_path: Path) -> None:
+    # ci.yml runs install.sh's get_rubberband alone on macOS: the sed it uses must bring what it calls.
+    lines = CI.read_text(encoding="utf-8").splitlines()
+    [line] = [ln.strip() for ln in lines if "sed -n" in ln and "get_rubberband" in ln]
+    expression = re.search(r"sed -n '([^']*)'", line)
+    assert expression
+    cut = subprocess.run(["sed", "-n", expression[1], str(INSTALL_SH)], capture_output=True, text=True, check=True)
+    assert "get_rubberband() {" in cut.stdout and "woodshed_tools_dir() {" in cut.stdout
+    env = {**os.environ, "WOODSHED_TOOLS": str(tmp_path / "t")}
+    out = subprocess.run(["sh", "-c", cut.stdout + "woodshed_tools_dir"], env=env, capture_output=True, text=True)
+    assert out.stdout.strip() == str(tmp_path / "t")
+
+
+PS1 = Path(__file__).resolve().parents[1] / "scripts" / "install.ps1"
+
+
+def test_install_ps1_computes_the_tools_folder_once() -> None:
+    text = PS1.read_text(encoding="utf-8")
+    guard = text.index("if ($MyInvocation.InvocationName -eq '.'")
+    functions = [m.start() for m in re.finditer(r"(?m)^function ", text)]
+    assert functions and max(functions) < guard  # dot-sourced (CI), every function is there
+    assert "function Get-WoodshedTools" in text
+    assert text.count("$env:WOODSHED_TOOLS") == 1  # in Get-WoodshedTools only
+    assert re.search(r"(?m)^\$Tools = Get-WoodshedTools$", text[guard:])
+    assert "Get-Rubberband -Tools $Tools" in text and "Add-WoodshedUninstall $Exe $Tools" in text

@@ -270,7 +270,8 @@ Encoder**, then select the song and **File** > **Convert** > **Create MP3 Versio
 [latest release](https://github.com/laugiov/woodshed/releases/latest) and run it. **To uninstall**,
 close woodshed, then open **Uninstall woodshed** (in Applications on a Mac, in the Start menu or
 **Settings** > **Apps** on Windows, in the applications menu on Linux). A window lists what goes
-and asks once: the downloaded models and separated tracks, the shortcuts, then woodshed itself.
+and asks once: the downloaded models and separated tracks, Rubber Band (for the recording in your
+key) and its licence, the shortcuts, then woodshed itself and its big downloads in uv's cache.
 Your songs and their practice pages stay where they are, and so do uv and ffmpeg, which other
 programs may use.
 

@@ -596,3 +596,13 @@ def test_a_menu_entry_with_windows_line_endings_is_still_ours(fake: Home, monkey
     entry.write_bytes(b'[Desktop Entry]\r\nName=woodshed\r\nExec="/opt/uv/bin/woodshed" app\r\n')
     assert run(monkeypatch, "linux", "--yes") == 0
     assert not entry.exists()
+
+
+def test_rubber_band_and_its_licence_are_said_to_go(
+    fake: Home, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fill_tools(fake, "rubberband", "COPYING", "uninstall-woodshed.sh")
+    assert run(monkeypatch, "linux", "--yes") == 0
+    out = capsys.readouterr().out
+    assert "Rubber Band (the recording in your key) and its licence" in out
+    assert not fake.tools.exists()

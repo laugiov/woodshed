@@ -14,12 +14,26 @@
 #   WOODSHED_REF        a branch or a version tag on GitHub (default: main)
 #   WOODSHED_NO_FFMPEG  set to 1 to leave ffmpeg alone
 #   WOODSHED_NO_MENU    set to 1 to skip the Start menu shortcuts
-#   WOODSHED_TOOLS      woodshed's tools folder (the uninstall script goes there)
+#   WOODSHED_TOOLS      woodshed's tools folder (Rubber Band and the uninstall script go there)
 # Uninstall: "Uninstall woodshed" in the Start menu, or woodshed in Settings > Apps.
 
 $ErrorActionPreference = "Stop"
 # TLS 1.2 for the downloads: older Windows PowerShell setups do not offer it by default.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+# woodshed's tools folder, where its own programs go (Rubber Band, the uninstall script), as woodshed computes it
+# (paths.tools_dir): WOODSHED_TOOLS (a leading ~ is the home folder), else %LOCALAPPDATA%\woodshed\tools.
+# -Default: the folder without WOODSHED_TOOLS.
+function Get-WoodshedTools([switch]$Default) {
+    $Chosen = if ($Default) { "" } else { $env:WOODSHED_TOOLS }
+    if ($Chosen) {
+        if ($Chosen -eq "~" -or $Chosen.StartsWith("~\") -or $Chosen.StartsWith("~/")) { return $env:USERPROFILE + $Chosen.Substring(1) }
+        return $Chosen
+    }
+    $Local = $env:LOCALAPPDATA
+    if (-not $Local -or -not [IO.Path]::IsPathRooted($Local)) { $Local = [IO.Path]::Combine($env:USERPROFILE, "AppData", "Local") }
+    return [IO.Path]::Combine($Local, "woodshed", "tools")
+}
 
 # The singer's key (spec 017): the Rubber Band program in woodshed's tools folder, the official GPL build from
 # breakfastquay.com (with libsndfile's sndfile.dll and the licence), checked against its pinned sha256. A
@@ -41,7 +55,7 @@ function Get-Rubberband {
     $tmp = $null
     try {
         if (-not $Tools) {
-            $Tools = if ($env:WOODSHED_TOOLS) { $env:WOODSHED_TOOLS } else { [IO.Path]::Combine($env:LOCALAPPDATA, "woodshed", "tools") }
+            $Tools = Get-WoodshedTools
         }
         $same = {
             param($file, $sum)
@@ -105,84 +119,18 @@ function Get-Rubberband {
         if ($tmp) { try { [IO.Directory]::Delete($tmp, $true) } catch { } }
     }
 }
-# Loaded with ". install.ps1" (CI), only the functions above: nothing is installed. ("irm | iex" has no
-# script path: it always installs.)
-if ($MyInvocation.InvocationName -eq '.' -and $PSCommandPath) { return }
-
-$Ref = if ($env:WOODSHED_REF) { $env:WOODSHED_REF } else { "main" }
-# A plain archive: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
-$Source = if ($env:WOODSHED_SOURCE) { $env:WOODSHED_SOURCE } else { "https://github.com/laugiov/woodshed/archive/$Ref.zip" }
-# Windows on ARM: the x64 Python (Windows 11 emulates it), since not every part has an ARM build.
-$Arm = $env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64"
-$Python = if ($Arm) { "cpython-3.13-windows-x86_64-none" } else { "3.13" }
-
-# Programs print their progress on stderr, which Windows PowerShell takes for errors when the output
-# is redirected (as in CI): those must not stop the script, the exit code says.
-if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing uv (https://docs.astral.sh/uv/) for your user..."
-    & {
-        $ErrorActionPreference = "Continue"
-        powershell -ExecutionPolicy ByPass -c "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
-    }
-    if ($LASTEXITCODE -ne 0) { throw "uv could not be installed: see https://docs.astral.sh/uv/" }
-    $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-}
-
-# Replacing woodshed while it runs would fail (Windows keeps running programs' files locked).
-if (Get-Process woodshed -ErrorAction SilentlyContinue) {
-    throw "woodshed is running: close woodshed first (its window), then run the installer again."
-}
-
-Write-Host "Installing woodshed (about 1.5 GB with PyTorch: a few minutes)..."
-& {
-    $ErrorActionPreference = "Continue"
-    uv tool install --force --refresh-package woodshed --python $Python "woodshed[stems] @ $Source"
-}
-if ($LASTEXITCODE -ne 0) { throw "woodshed could not be installed (see the messages above)" }
-& { $ErrorActionPreference = "Continue"; uv tool update-shell *> $null }
-$Bin = (uv tool dir --bin).Trim()
-$Exe = Join-Path $Bin "woodshed.exe"
-
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -and $env:WOODSHED_NO_FFMPEG -ne "1") {
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "Installing ffmpeg with winget (only needed for AAC (M4A) and video files; MP3 works without it)..."
-        & {
-            $ErrorActionPreference = "Continue"
-            winget install --id Gyan.FFmpeg --exact --silent --accept-source-agreements --accept-package-agreements
-        }
-        if ($LASTEXITCODE -ne 0) { Write-Host "ffmpeg could not be installed with winget (woodshed works without it, MP3 included): get it from https://ffmpeg.org/download.html" }
-        else { Write-Host "ffmpeg is installed: it is found in new terminals and after signing in again." }
-    } else {
-        Write-Host "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, add ffmpeg: https://ffmpeg.org/download.html"
-    }
-}
-
-# Never a failed install: whatever Get-Rubberband meets, one line, and the install goes on.
-try { $null = Get-Rubberband -ErrorAction Stop }
-catch { Write-Host "The recording in your key is off: Rubber Band could not be added. Run the installer again later to add it." }
-
-if ($env:WOODSHED_NO_MENU -ne "1") {
-    $Programs = [Environment]::GetFolderPath("Programs")
-    $Shell = New-Object -ComObject WScript.Shell
-    $Link = $Shell.CreateShortcut((Join-Path $Programs "woodshed.lnk"))
-    $Link.TargetPath = $Exe
-    $Link.Arguments = "app"
-    $Link.Description = "Your songs as practice rooms for the band"
-    $Link.Save()
-    Write-Host "Start menu shortcut added: woodshed."
-}
-
 # Uninstall woodshed (spec 018), self-contained: a small .cmd in woodshed's tools folder (as woodshed computes
-# it, uninstall.tools_dir) runs "woodshed uninstall --keep-self" (it asks first, then removes the cache, the
+# it, paths.tools_dir) runs "woodshed uninstall --keep-self" (it asks first, then removes the cache, the
 # tools and the shortcuts), then uv removes woodshed once it has exited, then the Settings entry goes and the
 # .cmd deletes itself. The Start menu's "Uninstall woodshed" and Settings > Apps run it. No administrator rights.
-function Add-WoodshedUninstall([string]$Exe, [bool]$Menu) {
+# .NET calls for files and the registry, as in Get-Rubberband: Windows PowerShell 5.1 started from PowerShell 7
+# may not load the cmdlets' modules.
+function Add-WoodshedUninstall([string]$Exe, [string]$Tools, [bool]$Menu) {
     $Key = "Software\Microsoft\Windows\CurrentVersion\Uninstall\woodshed"
     $Uv = (Get-Command uv).Source
-    $Own = -not $env:WOODSHED_TOOLS
-    $Tools = if ($Own) { Join-Path $env:LOCALAPPDATA "woodshed\tools" } else { $env:WOODSHED_TOOLS }
-    New-Item -ItemType Directory -Force -Path $Tools | Out-Null
-    $Script = Join-Path $Tools "uninstall-woodshed.cmd"
+    $Own = $Tools -eq (Get-WoodshedTools -Default)
+    [void][IO.Directory]::CreateDirectory($Tools)
+    $Script = [IO.Path]::Combine($Tools, "uninstall-woodshed.cmd")
     # In the .cmd, the user's folders by name (%LOCALAPPDATA%...): its text stays ASCII whatever the user's name.
     $InCmd = {
         param([string]$Path)
@@ -238,7 +186,7 @@ function Add-WoodshedUninstall([string]$Exe, [bool]$Menu) {
 
     if ($Menu) {
         $Programs = [Environment]::GetFolderPath("Programs")
-        $Link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $Programs "Uninstall woodshed.lnk"))
+        $Link = (New-Object -ComObject WScript.Shell).CreateShortcut([IO.Path]::Combine($Programs, "Uninstall woodshed.lnk"))
         $Link.TargetPath = $Script
         $Link.WorkingDirectory = $env:USERPROFILE  # not the tools folder, which the .cmd removes
         $Link.Description = "Remove woodshed from this computer (your songs stay)"
@@ -247,21 +195,96 @@ function Add-WoodshedUninstall([string]$Exe, [bool]$Menu) {
 
     # Settings > Apps: the key goes last, in the .cmd, once woodshed is removed.
     $Version = ((& $Exe --version) -replace "^woodshed\s+", "").Trim()
-    $ToolEnv = Join-Path (uv tool dir).Trim() "woodshed"
-    $Size = 0
-    if (Test-Path $ToolEnv) { $Size = [int](((Get-ChildItem -Recurse -File -Force $ToolEnv | Measure-Object Length -Sum).Sum) / 1KB) }
-    $Path = "HKCU:\$Key"
-    New-Item -Path $Path -Force | Out-Null
-    $Strings = @{
-        DisplayName = "woodshed"; DisplayVersion = $Version; Publisher = "woodshed project"
-        UninstallString = ('"' + $Script + '"'); DisplayIcon = $Exe
-        URLInfoAbout = "https://github.com/laugiov/woodshed"
+    $ToolEnv = [IO.Path]::Combine((uv tool dir).Trim(), "woodshed")
+    $Bytes = 0
+    if ([IO.Directory]::Exists($ToolEnv)) {
+        foreach ($File in [IO.Directory]::EnumerateFiles($ToolEnv, "*", [IO.SearchOption]::AllDirectories)) {
+            $Bytes += ([IO.FileInfo]$File).Length
+        }
     }
-    foreach ($Name in $Strings.Keys) { New-ItemProperty -Path $Path -Name $Name -Value $Strings[$Name] -PropertyType String -Force | Out-Null }
-    $Numbers = @{ NoModify = 1; NoRepair = 1; EstimatedSize = $Size }
-    foreach ($Name in $Numbers.Keys) { New-ItemProperty -Path $Path -Name $Name -Value $Numbers[$Name] -PropertyType DWord -Force | Out-Null }
+    $Entry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($Key)
+    try {
+        $Strings = @{
+            DisplayName = "woodshed"; DisplayVersion = $Version; Publisher = "woodshed project"
+            UninstallString = ('"' + $Script + '"'); DisplayIcon = $Exe
+            URLInfoAbout = "https://github.com/laugiov/woodshed"
+        }
+        foreach ($Name in $Strings.Keys) { $Entry.SetValue($Name, [string]$Strings[$Name], [Microsoft.Win32.RegistryValueKind]::String) }
+        $Numbers = @{ NoModify = 1; NoRepair = 1; EstimatedSize = [int]($Bytes / 1KB) }
+        foreach ($Name in $Numbers.Keys) { $Entry.SetValue($Name, [int]$Numbers[$Name], [Microsoft.Win32.RegistryValueKind]::DWord) }
+    } finally {
+        $Entry.Close()
+    }
 }
-Add-WoodshedUninstall $Exe ($env:WOODSHED_NO_MENU -ne "1")
+# Loaded with ". install.ps1" (CI), only the functions above: nothing is installed. ("irm | iex" has no
+# script path: it always installs.)
+if ($MyInvocation.InvocationName -eq '.' -and $PSCommandPath) { return }
+
+$Ref = if ($env:WOODSHED_REF) { $env:WOODSHED_REF } else { "main" }
+# A plain archive: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
+$Source = if ($env:WOODSHED_SOURCE) { $env:WOODSHED_SOURCE } else { "https://github.com/laugiov/woodshed/archive/$Ref.zip" }
+# Windows on ARM: the x64 Python (Windows 11 emulates it), since not every part has an ARM build.
+$Arm = $env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64"
+$Python = if ($Arm) { "cpython-3.13-windows-x86_64-none" } else { "3.13" }
+
+# Programs print their progress on stderr, which Windows PowerShell takes for errors when the output
+# is redirected (as in CI): those must not stop the script, the exit code says.
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing uv (https://docs.astral.sh/uv/) for your user..."
+    & {
+        $ErrorActionPreference = "Continue"
+        powershell -ExecutionPolicy ByPass -c "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
+    }
+    if ($LASTEXITCODE -ne 0) { throw "uv could not be installed: see https://docs.astral.sh/uv/" }
+    $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+}
+
+# Replacing woodshed while it runs would fail (Windows keeps running programs' files locked).
+if (Get-Process woodshed -ErrorAction SilentlyContinue) {
+    throw "woodshed is running: close woodshed first (its window), then run the installer again."
+}
+
+Write-Host "Installing woodshed (about 1.5 GB with PyTorch: a few minutes)..."
+& {
+    $ErrorActionPreference = "Continue"
+    uv tool install --force --refresh-package woodshed --python $Python "woodshed[stems] @ $Source"
+}
+if ($LASTEXITCODE -ne 0) { throw "woodshed could not be installed (see the messages above)" }
+& { $ErrorActionPreference = "Continue"; uv tool update-shell *> $null }
+$Bin = (uv tool dir --bin).Trim()
+$Exe = Join-Path $Bin "woodshed.exe"
+
+if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -and $env:WOODSHED_NO_FFMPEG -ne "1") {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Installing ffmpeg with winget (only needed for AAC (M4A) and video files; MP3 works without it)..."
+        & {
+            $ErrorActionPreference = "Continue"
+            winget install --id Gyan.FFmpeg --exact --silent --accept-source-agreements --accept-package-agreements
+        }
+        if ($LASTEXITCODE -ne 0) { Write-Host "ffmpeg could not be installed with winget (woodshed works without it, MP3 included): get it from https://ffmpeg.org/download.html" }
+        else { Write-Host "ffmpeg is installed: it is found in new terminals and after signing in again." }
+    } else {
+        Write-Host "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, add ffmpeg: https://ffmpeg.org/download.html"
+    }
+}
+
+# Never a failed install: whatever Get-Rubberband meets, one line, and the install goes on.
+$Tools = Get-WoodshedTools
+try { $null = Get-Rubberband -Tools $Tools -ErrorAction Stop }
+catch { Write-Host "The recording in your key is off: Rubber Band could not be added. Run the installer again later to add it." }
+
+if ($env:WOODSHED_NO_MENU -ne "1") {
+    $Programs = [Environment]::GetFolderPath("Programs")
+    $Shell = New-Object -ComObject WScript.Shell
+    $Link = $Shell.CreateShortcut((Join-Path $Programs "woodshed.lnk"))
+    $Link.TargetPath = $Exe
+    $Link.Arguments = "app"
+    $Link.Description = "Your songs as practice rooms for the band"
+    $Link.Save()
+    Write-Host "Start menu shortcut added: woodshed."
+}
+
+Add-WoodshedUninstall $Exe $Tools ($env:WOODSHED_NO_MENU -ne "1")
 Write-Host "Uninstall woodshed added: in the Start menu and in Settings > Apps (to remove it one day; your songs stay)."
 
 Write-Host ""

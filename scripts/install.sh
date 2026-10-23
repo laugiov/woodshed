@@ -69,6 +69,24 @@ EOF
     chmod 755 "$app/Contents/MacOS/woodshed" "$app/Contents/Resources/woodshed.command"
 }
 
+# woodshed's tools folder, where its own programs go (Rubber Band, the Linux uninstall script): as woodshed
+# computes it (paths.tools_dir in woodshed).
+woodshed_tools_dir() {
+    if [ -n "${WOODSHED_TOOLS:-}" ]; then
+        case "$WOODSHED_TOOLS" in
+            "~" | "~/"*) printf '%s\n' "$HOME${WOODSHED_TOOLS#"~"}" ;;
+            *) printf '%s\n' "$WOODSHED_TOOLS" ;;
+        esac
+    elif [ "$(uname -s)" = "Darwin" ]; then
+        printf '%s\n' "$HOME/Library/Application Support/woodshed/tools"
+    else
+        case "${XDG_DATA_HOME:-}" in
+            /*) printf '%s\n' "$XDG_DATA_HOME/woodshed/tools" ;;
+            *) printf '%s\n' "$HOME/.local/share/woodshed/tools" ;;
+        esac
+    fi
+}
+
 # The singer's key on a Mac (spec 017): Homebrew's ffmpeg has no Rubber Band filter, so the Rubber Band
 # program goes in woodshed's tools folder: the official GPL build from breakfastquay.com, checked against its
 # pinned sha256, kept next to its licence. A separate program woodshed runs, never linked. Skipped when the
@@ -78,7 +96,7 @@ get_rubberband() {
     rb_url="${1:-https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-macos.tar.bz2}"
     rb_sum="${2:-0dc91509a31a94c1144436cc20e6f1d165bdab39fe125f9be7d46139921b733f}"
     rb_bin_sum="${3:-bffe8a37f204958352e768fc4a751d3dbce18e3b42c2a3427a80498e7d8cee79}"
-    rb_tools="${WOODSHED_TOOLS:-$HOME/Library/Application Support/woodshed/tools}"
+    rb_tools="$(woodshed_tools_dir)"
     if command -v shasum >/dev/null 2>&1; then rb_hash="shasum -a 256"; else rb_hash="sha256sum"; fi
     # Skipped only when it is this program and it runs: one the system blocks is fetched (and said) again.
     if [ -f "$rb_tools/rubberband" ] && [ "$($rb_hash "$rb_tools/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ] \
@@ -189,20 +207,6 @@ exec open -a Terminal "$(dirname "$0")/../Resources/uninstall.command"
 EOF
     uninstall_script "$1" "$2" > "$app/Contents/Resources/uninstall.command"
     chmod 755 "$app/Contents/MacOS/uninstall" "$app/Contents/Resources/uninstall.command"
-}
-
-# Where woodshed keeps the programs it adds, as woodshed computes it (uninstall.tools_dir).
-woodshed_tools_dir() {
-    if [ -n "${WOODSHED_TOOLS:-}" ]; then
-        printf '%s\n' "$WOODSHED_TOOLS"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-        printf '%s\n' "$HOME/Library/Application Support/woodshed/tools"
-    else
-        case "${XDG_DATA_HOME:-}" in
-            /*) printf '%s\n' "$XDG_DATA_HOME/woodshed/tools" ;;
-            *) printf '%s\n' "$HOME/.local/share/woodshed/tools" ;;
-        esac
-    fi
 }
 
 # The Linux menu entry "Uninstall woodshed": a terminal window runs the script above, kept in woodshed's

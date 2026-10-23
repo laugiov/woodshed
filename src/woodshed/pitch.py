@@ -29,6 +29,7 @@ import numpy as np
 import soundfile as sf
 
 from woodshed.errors import WoodshedError
+from woodshed.paths import tools_dir as tools_dir  # one folder for the app, the installers and the uninstall
 from woodshed.stems import CEILING
 
 KEY_DIR = "key"  # <page>/audio/key/up2/mix.flac
@@ -63,19 +64,6 @@ def available() -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return any(line.split()[1:2] == ["rubberband"] for line in out.stdout.splitlines())
-
-
-def tools_dir() -> Path:
-    """woodshed's own programs, put there by the installers: the Rubber Band program on Mac and Windows."""
-    if os.environ.get("WOODSHED_TOOLS"):
-        return Path(os.environ["WOODSHED_TOOLS"])
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "woodshed" / "tools"
-    if sys.platform == "win32":
-        local = os.environ.get("LOCALAPPDATA")
-        return (Path(local) if local else Path.home() / "AppData" / "Local") / "woodshed" / "tools"
-    data = os.environ.get("XDG_DATA_HOME")
-    return (Path(data) if data else Path.home() / ".local" / "share") / "woodshed" / "tools"
 
 
 def _version(path: str) -> tuple[int, int] | None:

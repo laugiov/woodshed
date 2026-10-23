@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from woodshed.cache import cache_dir
+from woodshed.paths import absolute_env, data_home
+from woodshed.paths import tools_dir as tools_dir  # shared with pitch and the installers
 
 PORT = 8000  # the app's default port, the one its shortcuts open
 LIBRARY = Path("~/woodshed")  # the library the shortcuts open
@@ -65,31 +67,6 @@ def _prefix() -> Path:
 def _script() -> str:
     """The path this woodshed was started by (the `woodshed` command in uv's bin folder)."""
     return str(Path(sys.argv[0]).absolute())
-
-
-def _absolute_env(name: str) -> Path | None:
-    value = os.environ.get(name, "")
-    return Path(value) if value and Path(value).is_absolute() else None  # the XDG spec ignores a relative value
-
-
-def _data_home() -> Path:
-    return _absolute_env("XDG_DATA_HOME") or Path.home() / ".local" / "share"
-
-
-def _local_appdata() -> Path:
-    return _absolute_env("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
-
-
-def tools_dir(system: str | None = None) -> Path:
-    """Where woodshed keeps the programs it adds: WOODSHED_TOOLS, else a per-system data folder."""
-    if override := os.environ.get("WOODSHED_TOOLS"):
-        return Path(override).expanduser()
-    system = system or _system()
-    if system == "win32":
-        return _local_appdata() / "woodshed" / "tools"
-    if system == "darwin":
-        return Path.home() / "Library" / "Application Support" / "woodshed" / "tools"
-    return _data_home() / "woodshed" / "tools"
 
 
 def _is_junction(path: Path) -> bool:
@@ -182,7 +159,7 @@ def _shortcuts(system: str) -> list[Item]:
             ),
         ]  # fmt: skip
     if system == "win32":
-        roaming = _absolute_env("APPDATA") or Path.home() / "AppData" / "Roaming"
+        roaming = absolute_env("APPDATA") or Path.home() / "AppData" / "Roaming"
         programs = roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"
         return [
             Item(programs / "woodshed.lnk", "the Start menu shortcut", ("", _holds("woodshed.exe"))),
@@ -191,7 +168,7 @@ def _shortcuts(system: str) -> list[Item]:
                 ("", _holds(WINDOWS_SCRIPT)),
             ),
         ]  # fmt: skip
-    apps = _data_home() / "applications"
+    apps = data_home() / "applications"
     return [
         Item(apps / "woodshed.desktop", "the menu entry", ("", _has(rb'(?m)^Exec=.*woodshed"? app[ \t\r]*$'))),
         Item(
@@ -222,8 +199,14 @@ def plan(system: str, keep_self: bool = False) -> Plan:
         Item(cache / "models", "the downloaded models"),
     ]
     keep = (WINDOWS_SCRIPT,) if keep_self and system == "win32" else ()  # the .cmd running this one
-    if [f for f in _tool_files(tools) if f.name not in keep]:
-        candidates.append(Item(tools, "woodshed's files in its tools folder", tools=True, keep=keep))
+    if going := [f.name for f in _tool_files(tools) if f.name not in keep]:
+        what = []
+        if any(n.startswith("rubberband") for n in going):
+            what.append("Rubber Band (the recording in your key) and its licence")
+        if any(n.startswith("uninstall-woodshed") for n in going):
+            what.append("the uninstall script")
+        label = " and ".join(what) + ", in woodshed's tools folder" if what else "woodshed's tools"
+        candidates.append(Item(tools, label, tools=True, keep=keep))
     for item in candidates:
         if not os.path.lexists(item.path):
             continue

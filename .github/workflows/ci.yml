@@ -64,7 +64,7 @@ jobs:
         uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
       - if: runner.os == 'macOS'
         run: |
-          sed -n '/^get_rubberband() {/,/^}/p' scripts/install.sh > "$RUNNER_TEMP/get_rubberband.sh"
+          sed -n '/^woodshed_tools_dir() {/,/^}/p;/^get_rubberband() {/,/^}/p' scripts/install.sh > "$RUNNER_TEMP/get_rubberband.sh"
           WOODSHED_TOOLS="$RUNNER_TEMP/tools" sh -c '. "$1" && get_rubberband' sh "$RUNNER_TEMP/get_rubberband.sh"
           test -x "$RUNNER_TEMP/tools/rubberband"
           echo "WOODSHED_TOOLS=$RUNNER_TEMP/tools" >> "$GITHUB_ENV"
