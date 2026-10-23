@@ -46,11 +46,7 @@
         const answer = await r.json();
         if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
         else if (!r.ok) toast(W.t("The set list was not saved: {why}", { why: answer.error }));
-        else {
-          // A song out of the set loses the set's note on it (the library cleared it): not shown again if it comes back.
-          for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
-          setlist = answer.songs;
-        }
+        else setlist = answer.songs;
       } catch (err) {
         toast(W.t("The set list was not saved."));
       }
@@ -174,7 +170,7 @@
           : h("button", { type: "button", class: "set-note" + (band.note ? "" : " empty"), "data-testid": "set-note", onclick: () => {
               editing = folder;
               renderSet({ again: true, editor: true });
-            } }, band.note ? h("span", { translate: "no" }, band.note) : W.t("+ Note"));
+            } }, band.note ? [h("span", { class: "note-label" }, W.t("Note:")), " ", h("span", { translate: "no" }, band.note)] : W.t("+ Note"));
         return h(
           "li",
           { "data-testid": "set-item", "data-set-song": folder },
@@ -190,7 +186,7 @@
               setlist.map((x, j) => h("option", { value: String(j), selected: j === k ? "" : null }, String(j + 1)))),
             h("button", { type: "button", class: "btn", "aria-label": W.t("Earlier in the set"), disabled: k === 0 ? "" : null, onclick: () => moveTo(folder, k - 1), "data-testid": "set-up" }, "↑"),
             h("button", { type: "button", class: "btn", "aria-label": W.t("Later in the set"), disabled: k === setlist.length - 1 ? "" : null, onclick: () => moveTo(folder, k + 1), "data-testid": "set-down" }, "↓"),
-            h("button", { type: "button", class: "btn", "aria-label": W.t("Out of the set"), onclick: () => saveSet((next) => next.filter((x) => x !== folder)), "data-testid": "set-remove" }, "✕"),
+            h("button", { type: "button", class: "btn", "aria-label": W.t("Out of the set"), title: band.note ? W.t("Out of the set, and its note with it") : null, onclick: () => saveSet((next) => next.filter((x) => x !== folder)), "data-testid": "set-remove" }, "✕"),
           ),
         );
       }),

@@ -14,7 +14,7 @@
   .cursor { display: none; }
 }
 .band-note { color: var(--ink); }
-.band-note .note-label { color: var(--muted); }
+.band-note .note-label, .set-note .note-label { color: var(--muted); }
 .set-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
 .set-head .label { margin: 0; }
 .set-head #printSet { margin-left: auto; }

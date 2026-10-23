@@ -183,9 +183,9 @@ chords stay in the song's key.
   stop, loop and seek once, for the whole band. In the library, **Let the band's phones join**
   shows the address to open and a code to scan with the phone's camera.
 - **Set list**: line up the evening's songs, with each one's key, tempo and length, the set's total
-  time and a note per song ("capo 2, starts on the chorus"; it belongs to the set and goes when the song
-  leaves it), and print it. At the end of a song,
-  the pedal (or `N`) takes the whole band to the next one.
+  time and a note per song ("capo 2, starts on the chorus"; it belongs to the set and goes when the
+  song leaves it), and print it. At the end of a song, the pedal (or `N`) takes the whole band to the
+  next one.
 - **The singer's key**: pick the key that suits the voice, then **Keep it for the band** (the button names the key): every
   device opens the song in that key. Served by `woodshed app`, the recording follows too (rendered by the
   library, see "For singers"); opened from disk it keeps its own key, and the page says so.
@@ -389,8 +389,9 @@ its screen on: with the browser's Screen Wake Lock on a secure page, otherwise w
 video playing in the page (it starts at the first touch after a song change). It is best effort:
 the phone's system decides, Low Power Mode or Battery Saver can refuse it, and the video costs
 battery, so plug the phones in for a long rehearsal. A follower whose screen may still lock sees one
-line, until a touch keeps the screen on or you close it, saying where to turn its sleep off (Settings → Display & Brightness → Auto-Lock → Never on an
-iPhone, where Low Power Mode greys "Never" out; Screen timeout on Android).
+line saying where to turn its sleep off (Settings → Display & Brightness → Auto-Lock → Never on an
+iPhone, where Low Power Mode greys "Never" out; Screen timeout on Android), until a touch keeps the
+screen on or you close it.
 
 **HTTPS for the phones (optional).** Over the Wi-Fi's plain `http://` address, phones have no Screen
 Wake Lock. Served over HTTPS they do. With [mkcert](https://github.com/FiloSottile/mkcert) on the

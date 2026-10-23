@@ -288,19 +288,22 @@ class Library:
         except (ValueError, KeyError, TypeError, AttributeError):
             return None
 
-    def _set_names(self) -> list[str]:
-        """The set as saved, pages removed since included."""
+    def _set_names(self) -> list[str] | None:
+        """The set as saved, pages removed since included: [] without a set list, None if it cannot be read
+        (then nothing is cleared on its account)."""
         try:
             data = json.loads((self.root / SETLIST).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
             return []
+        except (OSError, ValueError):
+            return None
         names = data.get("songs") if isinstance(data, dict) else None
-        return [n for n in names if isinstance(n, str)] if isinstance(names, list) else []
+        return [n for n in names if isinstance(n, str)] if isinstance(names, list) else None
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
         pages = {p["folder"] for p in self.pages()}
-        return list(dict.fromkeys(n for n in self._set_names() if n in pages))
+        return list(dict.fromkeys(n for n in self._set_names() or [] if n in pages))
 
     def set_setlist(self, data: Any) -> list[str]:
         names = data.get("songs") if isinstance(data, dict) else None
@@ -311,7 +314,7 @@ class Library:
         if unknown or len(set(names)) != len(names):
             raise ValueError("songs: each page of the library once at most")
         with self.lock:
-            left = [n for n in self._set_names() if n not in names]
+            left = [n for n in self._set_names() or [] if n not in names]
             tmp = self.root / f".{SETLIST}.{secrets.token_hex(4)}"
             try:
                 tmp.write_text(json.dumps({"songs": names}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -334,11 +337,18 @@ class Library:
         return self._write(folder, stored)
 
     def _clear_notes_out_of_the_set(self) -> None:
-        kept = set(self._set_names())
+        names = self._set_names()
+        if names is None:  # a set list damaged by hand or unreadable: no note is lost on its account
+            return
         with self.lock:
             for file in sorted((self.root / CORRECTIONS_DIR).glob("*.woodshed.json")):
-                if file.stem not in kept:
+                if file.stem in names:
+                    continue
+                try:
                     self._clear_note(file.stem)
+                except OSError as exc:  # a library on a read-only disk still starts
+                    print(f"woodshed app: the notes of songs out of the set were not cleared: {exc}", file=sys.stderr)
+                    return
 
     # Corrections: the chords picked by ear, kept by the library so every device of the band reads
     # the same chart. Out of the page folders (a rebuild replaces them), per analysis of the song: a
@@ -492,7 +502,9 @@ class Library:
             if band.get("transpose") == 0:  # the recorded key again: nothing to say
                 band.pop("transpose", None)
                 band.pop("key", None)
-            if not band.get("note"):
+            names = self._set_names()
+            # A note is the set's: none for a song out of it (removed from the set while the note was written).
+            if not band.get("note") or (names is not None and folder not in names):
                 band.pop("note", None)
             stored["band"] = band
             rev = self._write(folder, stored)

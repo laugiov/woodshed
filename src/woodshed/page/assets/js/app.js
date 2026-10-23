@@ -300,7 +300,7 @@
       if (transpose && app.pitchFollows && app.pitchFollows()) {
         app.toast(app.pitchReady()
           ? W.t("Transposed to {key}: the chart, the shapes and the recording follow.", { key: name })
-          : W.t("Transposed to {key}: the chart and the shapes. The recording follows when it is ready.", { key: name }));
+          : W.t("Transposed to {key}: the chart and the shapes follow; the recording follows when it is ready.", { key: name }));
       } else app.toast(W.t("Transposed to {key}: the chart and the shapes follow. The recording keeps its key.", { key: name }));
     };
     // The band's key for this song (served by woodshed app): every device opens in it, and a change

@@ -419,12 +419,12 @@ def test_the_leader_runs_the_set_from_the_library_page(browser: Browser, server:
         items.nth(1).get_by_test_id("set-note").click()
         page.get_by_test_id("set-note-input").fill("capo 2, starts on the chorus")
         page.get_by_test_id("set-note-input").press("Enter")
-        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2, starts on the chorus")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("Note: capo 2, starts on the chorus")
         assert server.library.corrections("pop.woodshed", "x1")["band"]["note"] == "capo 2, starts on the chorus"
         items.nth(1).get_by_test_id("set-note").click()
         page.get_by_test_id("set-note-input").fill("something else")
         page.get_by_test_id("set-note-input").press("Escape")
-        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2, starts on the chorus")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("Note: capo 2, starts on the chorus")
         # Finding a song in a long library.
         page.get_by_test_id("find").fill("WAL")
         expect(page.get_by_test_id("song-row")).to_have_count(1)
@@ -476,8 +476,8 @@ def test_a_note_open_while_another_is_saved_stays_open(browser: Browser, server:
         expect(items.nth(1).get_by_test_id("set-note-input")).to_be_focused()
         editor.fill("capo 2")
         editor.press("Enter")
-        expect(items.first.get_by_test_id("set-note")).to_have_text("count of 4")
-        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("capo 2")
+        expect(items.first.get_by_test_id("set-note")).to_have_text("Note: count of 4")
+        expect(items.nth(1).get_by_test_id("set-note")).to_have_text("Note: capo 2")
         assert problems == []
     finally:
         for name in ("pop", "waltz"):
@@ -588,7 +588,7 @@ def test_a_note_saved_while_another_is_pressed_still_opens_that_one(browser: Bro
         page.wait_for_timeout(100)  # its answer is back and handled while the button is held
         page.mouse.up()
         expect(items.nth(1).get_by_test_id("set-note-input")).to_be_focused()
-        expect(items.first.get_by_test_id("set-note")).to_have_text("count of 4")
+        expect(items.first.get_by_test_id("set-note")).to_have_text("Note: count of 4")
     finally:
         for name in ("pop", "waltz"):
             (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)

@@ -21,6 +21,15 @@ pitch_server = singers.server  # one song, its recording rendered in another key
 fake_ffmpeg = singers.fake_ffmpeg
 
 KEYS = [f"{way}{n}" for way in ("up", "down") for n in range(1, 7)]
+# As iOS: a rendered file is refused until a tap, so it waits for one (the "tap" state).
+TAP_FIRST = """
+const play = HTMLMediaElement.prototype.play;
+HTMLMediaElement.prototype.play = function () {
+  if ((this.dataset.file || '').startsWith('audio/key/'))
+    return Promise.reject(new DOMException('no gesture', 'NotAllowedError'));
+  return play.call(this);
+};
+"""
 
 
 def opened(browser: Browser, url: str, problems: list[str], **context: Any) -> Page:
@@ -66,7 +75,9 @@ def test_while_the_recording_renders_the_chart_says_it_catches_up(
     expect(note).to_have_text("Chords in D: the recording " + said)
     assert "plays in" not in note.inner_text()  # never the recorded key next to a switch that says On
     toast = page.get_by_test_id("toast")
-    expect(toast).to_have_text("Transposed to D: the chart and the shapes. The recording follows when it is ready.")
+    expect(toast).to_have_text(
+        "Transposed to D: the chart and the shapes follow; the recording follows when it is ready."
+    )
     page.evaluate("Woodshed.app.useBand({ transpose: 3, key: 'Eb' })")  # the band's key, from another device
     expect(toast).to_contain_text("the chords follow. The recording follows when it is ready.")
     page.get_by_test_id("lang-fr").click()
@@ -86,6 +97,28 @@ def test_a_key_already_rendered_follows_at_once_and_says_so(browser: Browser, pi
     toast = page.get_by_test_id("toast")
     expect(toast).to_have_text("Transposed to D: the chart, the shapes and the recording follow.")
     expect(page.get_by_test_id("key-note")).to_have_text("Chords in D, the recording too.")
+    assert problems == []
+
+
+def test_a_render_waiting_for_a_tap_is_said_alike_in_the_chart_and_the_panel(
+    browser: Browser, pitch_server: app.AppServer
+) -> None:
+    problems: list[str] = []
+    page = browser.new_context(locale="en-US").new_page()
+    page.add_init_script(TAP_FIRST)
+    page.on("pageerror", lambda e: problems.append(str(e)))
+    page.goto(pitch_server.url + "pop.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    page.evaluate("Woodshed.app.setInstrument('voice')")
+    page.get_by_test_id("play").click()
+    until(page, "Woodshed.debug().playing === true")
+    page.evaluate("Woodshed.app.transposeTo(2)")
+    expect(page.get_by_test_id("pitch-line")).to_have_text("Ready: tap the page to hear it.", timeout=20_000)
+    expect(page.get_by_test_id("key-note")).to_have_text("Chords in D: tap the page to hear the recording in it.")
+    page.get_by_test_id("lang-fr").click()
+    expect(page.get_by_test_id("key-note")).to_have_text(
+        "Accords en D\u00a0: touche la page pour y entendre l'enregistrement."
+    )
     assert problems == []
 
 
@@ -234,12 +267,13 @@ def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, se
         expect(song.get_by_test_id("band-note")).to_contain_text("starts on the chorus")
         home = opened(browser, server.url, problems)
         row = home.locator('[data-set-song="pop.woodshed"]')
-        expect(row.get_by_test_id("set-note")).to_have_text("starts on the chorus")
+        expect(row.get_by_test_id("set-note")).to_have_text("Note: starts on the chorus")  # labelled as in the page
+        expect(row.get_by_test_id("set-remove")).to_have_attribute("title", "Out of the set, and its note with it")
         ink, warn, said = home.evaluate(
             """() => ['--ink', '--warn'].map((v) => {
                 const s = document.createElement('span'); s.style.color = `var(${v})`;
                 document.body.appendChild(s); const c = getComputedStyle(s).color; s.remove(); return c; })
-              .concat([getComputedStyle(document.querySelector('[data-testid=set-note]')).color])"""
+              .concat([getComputedStyle(document.querySelector('[data-testid=set-note] [translate=no]')).color])"""
         )
         assert said == ink != warn  # a note, not a warning, in the set as in the page
         row.get_by_test_id("set-remove").click()

@@ -247,18 +247,69 @@ def test_a_song_leaving_the_set_takes_its_note_with_it(server: app.AppServer) ->
     assert "note" not in server.library.corrections("One.woodshed", "a1")["band"]  # back in the set: no old note
 
 
+def left_by_0_4_0(server: app.AppServer, folder: str, band: dict[str, Any]) -> None:
+    """A song's band choices as 0.4.0 could leave them: a note whatever the set list."""
+    store = server.library.root / app.CORRECTIONS_DIR / f"{folder}.json"
+    store.parent.mkdir(exist_ok=True)
+    store.write_text(json.dumps({"rev": 1, "by_key": {}, "band": band}), encoding="utf-8")
+
+
+def restarted(server: app.AppServer) -> app.Library:
+    return app.Library(server.library.root, Options(use_stems=False, open_page=False))
+
+
 def test_notes_left_on_songs_out_of_the_set_are_cleared_at_start(server: app.AppServer) -> None:
     post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
-    for name in ("One.woodshed", "Two.woodshed", "Three.woodshed"):
-        server.library.set_band({"page": name, "note": "from an older version"})  # as 0.4.0 left them
-    server.library.set_band({"page": "Three.woodshed", "transpose": -1, "key": "B"})
-    later = app.Library(server.library.root, Options(use_stems=False, open_page=False))  # the app started again
+    for name in ("One.woodshed", "Two.woodshed"):
+        left_by_0_4_0(server, name, {"note": "from an older version"})
+    left_by_0_4_0(server, "Three.woodshed", {"transpose": -1, "key": "B", "note": "from an older version"})
+    later = restarted(server)
     assert later.corrections("One.woodshed", "a1")["band"] == {}
     assert later.corrections("Two.woodshed", "a1")["band"] == {"note": "from an older version"}
     assert later.corrections("Three.woodshed", "a1")["band"] == {"transpose": -1, "key": "B"}
     rev = later.corrections("One.woodshed", "a1")["rev"]
-    again = app.Library(server.library.root, Options(use_stems=False, open_page=False))
+    again = restarted(server)
     assert again.corrections("One.woodshed", "a1")["rev"] == rev  # cleared once: nothing written again
+    (server.library.root / app.SETLIST).unlink()  # no set list at all: an empty set
+    assert restarted(server).corrections("Two.woodshed", "a1")["band"] == {}
+
+
+@pytest.mark.parametrize("saved", ["{not json", '{"songs": "Two.woodshed"}', "[]", None])
+def test_a_set_list_that_cannot_be_read_clears_no_note(server: app.AppServer, saved: str | None) -> None:
+    setlist = server.library.root / app.SETLIST
+    if saved is None:
+        setlist.mkdir()  # unreadable as a file
+    else:
+        setlist.write_text(saved, encoding="utf-8")
+    left_by_0_4_0(server, "One.woodshed", {"note": "starts on the chorus"})
+    later = restarted(server)
+    assert later.corrections("One.woodshed", "a1")["band"] == {"note": "starts on the chorus"}
+    later.set_band({"page": "One.woodshed", "note": "capo 2"})  # the set unknown: the note is kept
+    assert later.corrections("One.woodshed", "a1")["band"] == {"note": "capo 2"}
+
+
+def test_a_library_that_cannot_be_written_still_starts(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name in ("One.woodshed", "Two.woodshed"):
+        left_by_0_4_0(server, name, {"note": "from an older version"})
+
+    def read_only(self: app.Library, folder: str, stored: dict[str, Any]) -> int:
+        raise PermissionError(13, "Read-only file system")
+
+    monkeypatch.setattr(app.Library, "_write", read_only)
+    later = restarted(server)  # no set list: both notes are out of the set
+    assert later.corrections("One.woodshed", "a1")["band"] == {"note": "from an older version"}
+    said = capsys.readouterr().err
+    assert said.count("woodshed app:") == 1 and "note" in said  # said once, not once per song
+
+
+def test_a_note_is_kept_only_for_a_song_in_the_set(server: app.AppServer) -> None:
+    post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
+    status, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": 2, "key": "D", "note": "x"})
+    assert status == 200 and saved["band"] == {"transpose": 2, "key": "D"}  # left the set meanwhile: no note
+    _, saved = post(server, "/api/band", {"page": "Two.woodshed", "note": "capo 2"})
+    assert saved["band"] == {"note": "capo 2"}
 
 
 @pytest.mark.parametrize(
@@ -460,6 +511,7 @@ def test_corrections_need_the_token(server: app.AppServer) -> None:
 
 
 def test_the_band_key_and_note_are_kept_with_the_corrections_for_every_device(server: app.AppServer) -> None:
+    post(server, "/api/setlist", {"songs": ["One.woodshed", "Two.woodshed"]})  # a note is the set's
     post(server, "/api/corrections", fixes())
     status, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": 3, "key": "Eb"})
     assert status == 200 and saved["band"] == {"transpose": 3, "key": "Eb"}
