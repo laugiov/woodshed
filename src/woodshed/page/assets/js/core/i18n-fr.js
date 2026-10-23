@@ -230,8 +230,15 @@
     "Your part is muted. The band is yours.": "Ta partie est coupée. Le groupe est à toi.",
     "The full mix, with a count-in.": "Le mix complet, avec un décompte.",
     "Step {n}": "Étape {n}",
-    "Made with woodshed {version} from {file}, on this computer: nothing was uploaded.":
-      "Fait avec woodshed {version} à partir de {file}, sur cet ordinateur : rien n'a été envoyé.",
+    "Page and analysis: woodshed {version}": "Page et analyse : woodshed {version}",
+    "Page: woodshed {page}": "Page : woodshed {page}",
+    "Page: woodshed {page} · chords and beats found by woodshed {analysis} (still current)":
+      "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis} (toujours à jour)",
+    "Page: woodshed {page} · chords and beats found by woodshed {analysis} (older: adding the song again uses this version's analysis; chords you corrected may need checking again)":
+      "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis} (plus ancienne : ajouter à nouveau le morceau utilise l'analyse de cette version ; les accords que tu as corrigés seront peut-être à revérifier)",
+    "Chords and beats found by woodshed {analysis}": "Accords et temps trouvés par woodshed {analysis}",
+    "Made from {file} on this computer: nothing was uploaded.":
+      "Fait à partir de {file} sur cet ordinateur : rien n'a été envoyé.",
     "Instrument tracks separated with Demucs (MIT), beats and downbeats found with beat_this (MIT).":
       "Pistes des instruments séparées avec Demucs (MIT), temps et premiers temps trouvés avec beat_this (MIT).",
     "Instrument tracks separated with Demucs (MIT).": "Pistes des instruments séparées avec Demucs (MIT).",

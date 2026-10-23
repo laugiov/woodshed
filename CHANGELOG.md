@@ -10,6 +10,12 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+### Fixed
+
+- A song page's footer says which version runs the page and which one found its chords: "Page:
+  woodshed 0.5.0 · chords and beats found by woodshed 0.4.0 (still current)". After an update it
+  no longer says "Made with woodshed 0.4.0" on a page the library had already brought up to date.
+
 ## [0.5.0] - 2026-10-23
 
 ### Added

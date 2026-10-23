@@ -105,6 +105,8 @@
                                 "bpm_hint": {"type": ["number", "null"], "exclusiveMinimum": 0}}},
     "meta": {"description": "How this file was made. Not part of the analysis result: it differs between two runs on the same input.",
              "type": "object", "additionalProperties": false, "required": ["version", "seconds"],
-             "properties": {"version": {"type": "string"}, "seconds": {"type": "number", "minimum": 0}}}
+             "properties": {"version": {"type": "string"}, "seconds": {"type": "number", "minimum": 0},
+                            "analysis": {"description": "The analysis revision that found the chords and beats; absent on pages analysed by an older woodshed.",
+                                         "type": "integer", "minimum": 1}}}
   }
 }

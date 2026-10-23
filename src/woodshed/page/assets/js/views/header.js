@@ -88,11 +88,27 @@
       );
     }
 
+    // Which woodshed wrote the page's code and which found its chords (spec 026): `woodshed app` gives an
+    // older page this version's code and keeps its analysis. Both come with the page: the same served or from disk.
+    function versionLine() {
+      const made = song.data.page || {};
+      const page = made.version;
+      const found = meta.meta.version;
+      const revision = meta.meta.analysis;
+      if (typeof page !== "string") return W.t("Chords and beats found by woodshed {analysis}", { analysis: found });
+      if (page === found) return W.t("Page and analysis: woodshed {version}", { version: page });
+      if (typeof revision !== "number" || typeof made.analysis !== "number") return W.t("Page: woodshed {page}", { page });
+      return revision < made.analysis
+        ? W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (older: adding the song again uses this version's analysis; chords you corrected may need checking again)", { page, analysis: found })
+        : W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (still current)", { page, analysis: found });
+    }
+
     function renderCredits() {
       const a = meta.analysis;
       const file = h("span", { translate: "no" }, meta.file);
       const lines = [
-        W.nodes(W.t("Made with woodshed {version} from {file}, on this computer: nothing was uploaded.", { version: meta.meta.version }), { file }),
+        versionLine(),
+        W.nodes(W.t("Made from {file} on this computer: nothing was uploaded."), { file }),
         a.stems
           ? a.beats === "beat_this"
             ? W.t("Instrument tracks separated with Demucs (MIT), beats and downbeats found with beat_this (MIT).")

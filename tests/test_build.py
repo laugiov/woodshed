@@ -360,3 +360,49 @@ def test_damaged_lyrics_never_break_a_rebuild(tmp_path: Path, pop_song: tuple[Pa
     (first / lyrics.LYRICS).write_text(content)
     again = build.build(result, wav, tmp_path / "out")
     assert (again / lyrics.LYRICS_JS).read_text() == "window.WOODSHED_LYRICS = null;\n"
+
+
+def test_the_page_says_which_woodshed_wrote_its_code_and_found_its_chords(page: Path) -> None:
+    from woodshed import __version__
+
+    data = embedded(page)
+    assert data["page"] == {"version": __version__, "analysis": analysis.REVISION}
+    assert data["song"]["meta"]["version"] == __version__  # type: ignore[index]
+    assert data["song"]["meta"]["analysis"] == analysis.REVISION  # type: ignore[index]
+
+
+def as_analysed_by(page: Path, version: str, revision: int | None) -> None:
+    """The page's data as an older woodshed wrote it: its analysis version, its revision or none, no page stamp."""
+    index = page / "index.html"
+    text = index.read_text(encoding="utf-8")
+    found = build.DATA_BLOCK.search(text)
+    assert found is not None
+    data = json.loads(found.group(1))
+    data.pop("page", None)
+    data["song"]["meta"]["version"] = version
+    data["song"]["meta"].pop("analysis", None)
+    if revision is not None:
+        data["song"]["meta"]["analysis"] = revision
+    block = f'<script type="application/json" id="woodshed-data">{build.script_json(data)}</script>'
+    index.write_text(text[: found.start()] + block + text[found.end() :], encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("kept", "manifest", "expected"),
+    [(2, None, 2), (2, 3, 2), (None, 3, 3), (None, None, None)],
+)  # fmt: skip
+def test_a_refresh_stamps_this_version_and_keeps_the_analysis_version(
+    tmp_path: Path, pop_song: tuple[Path, Song], kept: int | None, manifest: int | None, expected: int | None
+) -> None:
+    from woodshed import __version__
+
+    wav, result = pop_song
+    page = build.build(result, wav, tmp_path / "out")
+    as_analysed_by(page, "0.4.0", kept)
+    assert build.refresh_code(page, analysis=manifest)
+    data = embedded(page)
+    assert data["page"] == {"version": __version__, "analysis": analysis.REVISION}  # the code now running
+    meta = data["song"]["meta"]  # type: ignore[index]
+    assert meta["version"] == "0.4.0"  # the analysis is the same: still said as found by 0.4.0
+    assert meta.get("analysis") == expected  # the page's own revision first, else the manifest's, else unknown
+    jsonschema.validate(data["song"], song.schema())

@@ -43,7 +43,9 @@ def test_the_page_forbids_remote_content() -> None:
 # must come with a new version number, here, in song.py or view.py, and in core/song.js.
 DATA_FORMATS = {
     (2, 1): ("9ab2b7d621a5157b", "6c8a1aef3cb83902"),
-    (3, 2): ("4c0b3f3970cb02f4", "3001f6cba1d9ac6b"),  # key regions (spec 012)
+    # Key regions (spec 012). Then meta.analysis (spec 026): optional, the page code reads data without it,
+    # so a page of the format before still gets the new code, no new version.
+    (3, 2): ("ef4e36f6adb5b538", "3001f6cba1d9ac6b"),
 }
 
 

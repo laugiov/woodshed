@@ -83,7 +83,11 @@ def to_json(song: Song) -> dict[str, Any]:
             "stems_gain": None if song.analysis.stems_gain is None else _r(song.analysis.stems_gain, 6),
             "bpm_hint": song.analysis.bpm_hint,
         },
-        "meta": {"version": song.meta.version, "seconds": _r(song.meta.seconds, 1)},
+        "meta": {
+            "version": song.meta.version,
+            **({"analysis": song.meta.analysis} if song.meta.analysis is not None else {}),
+            "seconds": _r(song.meta.seconds, 1),
+        },
     }
     if song.parts:
         p = song.parts

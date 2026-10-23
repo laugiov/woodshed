@@ -292,7 +292,7 @@ def update_page_code(page: Path, settings: dict[str, Any] | None = None) -> dict
 
     if settings is not None and others(before) != others(settings):
         return None
-    if not (page / "audio" / "mix.flac").is_file() or not refresh_code(page):
+    if not (page / "audio" / "mix.flac").is_file() or not refresh_code(page, before.get("analysis")):
         return None
     _record(page, {**before, "page": page_revision()}, info, complete=True)
     return info

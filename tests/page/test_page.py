@@ -1304,3 +1304,104 @@ def test_on_paper_the_caveat_on_the_chords_is_printed(open_page: Any) -> None:
     o.js("Woodshed.app.store.set({corrections: Woodshed.app.store.get().corrections + 1})")
     o.page.emulate_media(media="print")
     expect(o.page.get_by_test_id("unreliable")).to_be_visible()  # about the chart: kept on paper
+
+
+# The footer says which woodshed wrote the page's code and which found its chords (spec 026): a page
+# updated in place by `woodshed app` runs this version's code on an older analysis.
+VERSION_LINES = {
+    "same": (
+        "Page and analysis: woodshed {v}",
+        "Page et analyse\u00a0: woodshed {v}",
+    ),
+    "current": (
+        "Page: woodshed {v} · chords and beats found by woodshed 0.4.0 (still current)",
+        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 0.4.0 (toujours à jour)",
+    ),
+    "older": (
+        "Page: woodshed {v} · chords and beats found by woodshed 0.3.0 (older: adding the song again uses this"
+        " version's analysis; chords you corrected may need checking again)",
+        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 0.3.0 (plus ancienne\u00a0: ajouter à"
+        " nouveau le morceau utilise l'analyse de cette version\u00a0; les accords que tu as corrigés seront"
+        " peut-être à revérifier)",
+    ),
+    "unknown": ("Page: woodshed {v}", "Page\u00a0: woodshed {v}"),
+    # Data no woodshed stamped (made by hand): only what the data says, the analysis.
+    "unstamped": ("Chords and beats found by woodshed 0.4.0", "Accords et temps trouvés par woodshed 0.4.0"),
+}
+
+
+def refreshed(pages_root: str, case: str) -> Path:
+    """The pop page as `woodshed app` leaves it after an update: this version's code on the data of its analysis."""
+    from tests.page.conftest import built
+    from tests.test_build import as_analysed_by
+    from woodshed import analysis, build
+
+    source = built("pop", True, pages_root)
+    folder = source.parent / f"versions-{case}" / "pop.woodshed"
+    if folder.exists():
+        return folder
+    shutil.copytree(source, folder)
+    if case != "same":
+        version, revision = {
+            "current": ("0.4.0", analysis.REVISION),
+            "older": ("0.3.0", analysis.REVISION - 1),
+            "unknown": ("0.3.0", None),
+            "unstamped": ("0.4.0", analysis.REVISION),
+        }[case]
+        as_analysed_by(folder, version, revision)
+        if case != "unstamped":
+            assert build.refresh_code(folder)
+    return folder
+
+
+@pytest.mark.parametrize("served", [False, True], ids=["file", "served"])
+@pytest.mark.parametrize("case", list(VERSION_LINES))
+def test_the_footer_says_which_version_made_the_page_and_which_found_the_chords(
+    page: Any, pages_root: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str, served: bool
+) -> None:
+    import threading
+
+    from woodshed import __version__, app
+    from woodshed.run import Options
+
+    folder = refreshed(pages_root, case)
+    asked: list[str] = []
+    problems: list[str] = []
+    page.on("request", lambda r: asked.append(r.url))
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    page.on("response", lambda r: problems.append(f"{r.status} {r.url}") if r.status >= 400 else None)
+    srv = None
+    if served:
+        monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
+        library = tmp_path / "library"
+        shutil.copytree(folder, library / folder.name)
+        summary = {"title": "pop", "stems": True, "key": "C", "bpm": 120, "meter": "4/4", "duration": 16, "doubts": 0}
+        manifest = {"settings": {}, "summary": summary, "complete": True}  # a page of the library, as added
+        (library / folder.name / "woodshed.json").write_text(json.dumps(manifest), encoding="utf-8")
+        srv = app.AppServer(app.Library(library, Options(use_stems=False, open_page=False)))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        page.goto(srv.url + "pop.woodshed/index.html")
+    else:
+        page.goto((folder / "index.html").as_uri())
+    try:
+        expect(page.get_by_test_id("lang-fr")).to_be_visible()
+        line = page.locator("#foot > span").first
+        privacy = page.locator("#foot > span").nth(1)
+        english, french = (t.format(v=__version__) for t in VERSION_LINES[case])
+        expect(line).to_have_text(english)
+        expect(privacy).to_have_text(re.compile(r"^Made from .+ on this computer: nothing was uploaded\.$"))
+        expect(page.get_by_test_id("credits")).not_to_contain_text("Made with")
+        page.get_by_test_id("lang-fr").click()
+        expect(line).to_have_text(french)
+        expect(privacy).to_have_text(
+            re.compile(r"^Fait à partir de .+ sur cet ordinateur\u00a0: rien n'a été envoyé\.$")
+        )
+        page.get_by_test_id("lang-en").click()
+        expect(line).to_have_text(english)
+    finally:
+        if srv is not None:
+            srv.shutdown()
+            srv.server_close()
+    origin = srv.url if srv is not None else "file://"
+    assert [u for u in asked if not u.startswith((origin, "data:", "blob:"))] == []  # the page carries both
+    assert problems == []

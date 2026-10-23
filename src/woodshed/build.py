@@ -17,9 +17,10 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from woodshed import exports, theory
+from woodshed import __version__, exports, theory
 from woodshed import song as song_json
 from woodshed import tracks as track_files
+from woodshed.analysis import REVISION as ANALYSIS_REVISION
 from woodshed.errors import WoodshedError
 from woodshed.model import KeyRegion, Song
 from woodshed.stems import Stems
@@ -85,6 +86,9 @@ def page_html(song: Song, data: dict[str, Any]) -> str:
 
 
 def _page_html(title: str, data: dict[str, Any]) -> str:
+    # The page code is written here, at a build and at a refresh: the data says which woodshed wrote it,
+    # beside the song's own meta.version, the woodshed that found its chords (spec 026).
+    data = {**data, "page": {"version": __version__, "analysis": ANALYSIS_REVISION}}
     page = resources.files("woodshed").joinpath("page")
     template = page.joinpath("template.html").read_text(encoding="utf-8")
     body = page.joinpath("body.html").read_text(encoding="utf-8")
@@ -155,11 +159,14 @@ def upgraded(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def refresh_code(page: Path) -> bool:
+def refresh_code(page: Path, analysis: int | None = None) -> bool:
     """This version's page code on a page's own data, in place: after an update of woodshed, a
     second instead of a new analysis. False when the data was written for another version of the
     page (its song or view format changed): then the page needs a rebuild. The words keep the chords
-    placed when they were placed: a rebuild places them again, a refresh does not."""
+    placed when they were placed: a rebuild places them again, a refresh does not.
+
+    `analysis`: the revision the page was analysed with, from its manifest, for data written before
+    the data said it."""
     try:
         found = DATA_BLOCK.search((page / "index.html").read_text(encoding="utf-8"))
         data = json.loads(found.group(1)) if found else None
@@ -167,6 +174,9 @@ def refresh_code(page: Path) -> bool:
             return False
         title = str(data["song"]["title"])
         data = upgraded(data)
+        meta = data["song"]["meta"]
+        if "analysis" not in meta and isinstance(analysis, int) and not isinstance(analysis, bool) and analysis > 0:
+            data["song"] = {**data["song"], "meta": {**meta, "analysis": analysis}}
         if data["song"]["schema_version"] != song_json.SCHEMA_VERSION or data["view"]["view_version"] != VIEW_VERSION:
             return False
     except (OSError, ValueError, KeyError, TypeError):

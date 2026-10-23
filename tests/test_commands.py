@@ -639,6 +639,29 @@ def test_page_data_of_another_format_is_rebuilt_not_given_new_code(tmp_path: Pat
     assert json.loads((page / "woodshed.json").read_text(encoding="utf-8"))["settings"]["page"] != build.page_revision()
 
 
+def test_a_page_analysed_before_its_data_said_the_revision_takes_it_from_its_manifest(
+    tmp_path: Path, cache: Path
+) -> None:
+    from tests.test_build import as_analysed_by
+    from woodshed import __version__, build, run
+    from woodshed.analysis import REVISION
+
+    wav = synth.write("pop", tmp_path).wav
+    assert cli.main([str(wav), "--no-stems", "--no-open"]) == 0
+    page = tmp_path / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    as_analysed_by(page, "0.3.0", None)  # the data of an older page has no revision, its manifest has
+    manifest = json.loads((page / "woodshed.json").read_text(encoding="utf-8"))
+    manifest["settings"]["analysis"] = REVISION - 1
+    (page / "woodshed.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert run.update_page_code(page) is not None
+    found = build.DATA_BLOCK.search((page / "index.html").read_text(encoding="utf-8"))
+    assert found is not None
+    data = json.loads(found.group(1))
+    assert data["page"] == {"version": __version__, "analysis": REVISION}
+    assert data["song"]["meta"] == {**data["song"]["meta"], "version": "0.3.0", "analysis": REVISION - 1}
+
+
 def test_the_library_updates_its_pages_when_it_starts(tmp_path: Path, cache: Path) -> None:
     from woodshed import app
     from woodshed.run import Options

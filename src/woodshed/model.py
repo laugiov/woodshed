@@ -162,6 +162,7 @@ class Meta:
 
     version: str
     seconds: float
+    analysis: int | None = None  # the analysis revision (analysis.REVISION) that found the chords and beats
 
 
 @dataclass(frozen=True)

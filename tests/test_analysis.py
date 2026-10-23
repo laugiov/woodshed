@@ -123,7 +123,7 @@ def test_same_input_gives_the_same_result(pop: Path) -> None:
     first = song_model.to_json(analysis.analyze(pop, use_stems=False))
     second = song_model.to_json(analysis.analyze(pop, use_stems=False))
     assert stable(first) == stable(second)
-    assert set(first["meta"]) == {"version", "seconds"}
+    assert set(first["meta"]) == {"version", "analysis", "seconds"}
 
 
 def test_stems_result_needs_use_stems(pop: Path, folder: Path) -> None:

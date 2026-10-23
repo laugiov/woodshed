@@ -193,7 +193,7 @@ def analyze(
             stems_gain=None if separated is None else separated.gain,
             bpm_hint=bpm,
         ),
-        meta=Meta(__version__, time.monotonic() - started),
+        meta=Meta(__version__, time.monotonic() - started, REVISION),
         key_regions=regions,
     )
 

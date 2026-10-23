@@ -276,7 +276,9 @@ the version you have, with a link to [what's new](../../CHANGELOG.md).
 - **With Docker**: `docker compose pull`, then `docker compose up -d --wait`.
 
 After an update, the library gives every page the new interface when it starts, without analysing
-anything again. A page made before 0.4.0 reads in one key; to have its key changes found, add the
+anything again. A song page's footer then names both versions: "Page: woodshed 0.5.0 · chords and
+beats found by woodshed 0.4.0 (still current)". When it says "older" instead, adding the song again
+uses the new version's analysis; chords you corrected may need checking again. A page made before 0.4.0 reads in one key; to have its key changes found, add the
 song again (a minute or two, from its separated tracks; the band's typed bars stay).
 
 ## Uninstalling
