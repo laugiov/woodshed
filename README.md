@@ -148,6 +148,15 @@ their beats (from disk: `woodshed "song.mp3" --bar-phase 1`). Shapes, keys, the 
 every export follow, and each typed bar or part can go back to the analysis, or the whole chart at
 once (with an undo). Through the library the band's phones get it live.
 
+**Key changes.** A last chorus lifted a semitone, a bridge in another key: woodshed finds where the key
+changes and marks the bar ("→ D♭ major", with a double bar line). From there the numerals read in the new
+key (I V vi IV again, not bII), the chords are spelled in it (G♭, not F♯), and a chord it hesitates on is
+weighted toward it. The header says "C major → D♭ major", the stage view says the next part's key, the words
+show the change above their line, the library and the set list say the key a song ends in, and the ChordPro
+and MusicXML exports change key where the song does. A change counts when the new key holds at least
+8 bars and its own tonic takes over: a bridge on the relative minor, a rock vamp on bVII or a few borrowed
+chords stay in the song's key.
+
 ### Built for the rehearsal room
 
 <img src="docs/images/band.png" alt="Band mode: one computer leads, a phone follows the same bar" width="100%">
@@ -482,7 +491,7 @@ you don't have the rights to.
 ## Status and limits
 
 - Alpha: the core (chart, sections, lyrics, parts, band mode) works, and the page is tested in
-  Chromium and Firefox on every push and pull request. Installation will get simpler.
+  Chromium and Firefox on every push and pull request, and what tablets need in WebKit. Installation will get simpler.
 - How accurate it is, as measured on the prototype woodshed grew from (October 2026; no larger
   benchmark yet): on "Let It Be" (the album version, its first 2:55) against the Isophonics
   reference, chords 84.5 % right (major/minor), beats and downbeats found at 0.97 (F-measure); on a
@@ -492,6 +501,8 @@ you don't have the rights to.
   page, as the drum groove, and both say when the read is unsure ("no clear groove", "no bass heard
   in this bar"). Check them by ear.
 - Chords are triads by default; `--sevenths` adds 7 and m7 chords, less reliably.
+- Key changes: found when the new key holds 8 bars or more; shorter ones (a tonicisation) are not, and the
+  band cannot type one yet. One meter for the whole song.
 - Lyrics: Latin letters only (most accented letters are fine); write numbers out as words ("twenty", not "20").
 
 ## Development
