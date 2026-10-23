@@ -11,6 +11,9 @@
   const STEM_OF = { guitar: "guitar", piano: "keys", bass: "bass", drums: "drums", voice: "vocals" };
   const SHARED_OF = { ...STEM_OF, guitar: "other", piano: "other" };
 
+  // An iPhone or an iPad: iPadOS Safari says "Macintosh", only its touch points tell it apart.
+  W.iOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
   // 32-bit FNV-1a, enough to tell two analyses apart in a storage key.
   function fnv1a(text) {
     let hash = 0x811c9dc5;
@@ -243,6 +246,11 @@
       if (!song.tracks.some((t) => t.id === id)) return false;
       store.set({ track: id }); // the menu shows the choice at once; the audio follows when loaded
       const ok = await transport.setTrack(id);
+      if (ok === "refused") {
+        store.set({ track: transport.track });
+        app.toast(W.t("Tap the track again to switch."));
+        return false;
+      }
       if (!ok) {
         const kept = song.tracks.find((t) => t.id === transport.track);
         const failed = song.tracks.find((t) => t.id === id);
@@ -886,7 +894,7 @@
     const bandMode = () => (W.band ? W.band.mode() : "alone");
     function screenAdvice() {
       const ua = navigator.userAgent;
-      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return W.t("Screen locking? Settings → Display & Brightness → Auto-Lock → Never.");
+      if (W.iOS()) return W.t("Screen locking? Settings → Display & Brightness → Auto-Lock → Never.");
       if (/Android/.test(ua)) return W.t("Screen going dark? Settings → Screen timeout → the longest.");
       return W.t("Screen locking? Turn off its sleep while you play.");
     }
@@ -1207,6 +1215,9 @@
 
     // A read-only view of the state, for tests and for curious users.
     W.debug = () => ({ ...store.get(), track: transport.track, audioTime: transport.time });
+    // iOS and iPadOS (which says it is a Mac) start a sound only from a tap: each tap lets the tracks
+    // play later (transport.unlock). touchstart does not count there as a tap; touchend and click do.
+    if (W.iOS()) for (const type of ["touchend", "click", "keydown"]) document.addEventListener(type, () => transport.unlock(), true);
     W.ready = true;
   }
 

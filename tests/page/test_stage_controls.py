@@ -43,6 +43,7 @@ def on_top(page: Page, testid: str) -> bool:
     return result
 
 
+@pytest.mark.tablet
 def test_stage_mode_plays_and_pauses_by_touch(browser: Browser, pages_root: str) -> None:
     page = tablet(browser, pages_root)
     page.get_by_test_id("stage-open").tap()

@@ -122,11 +122,27 @@
         if (transport.fileOf(id) === file) continue;
         const wantedNow = () => store.get().transpose === s.transpose; // a key changed meanwhile: drop it
         transport.setFile(id, file, wantedNow).then((ok) => {
+          if (ok === "refused") return waitForTap(); // iOS: the rendered file starts after the next tap
           if (!ok && file !== originals[id]) failed(id, file);
           publish();
         });
       }
       publish();
+    }
+
+    // The browser would not start the rendered file without a tap (iOS): asked once, swapped on the next tap.
+    let tapAsked = false;
+    function waitForTap() {
+      publish();
+      if (tapAsked) return;
+      tapAsked = true;
+      app.toast(W.t("Tap the page to hear the recording in the new key."));
+      const again = () => {
+        tapAsked = false;
+        for (const type of ["touchend", "click", "keydown"]) document.removeEventListener(type, again, true);
+        swap();
+      };
+      for (const type of ["touchend", "click", "keydown"]) document.addEventListener(type, again, true);
     }
 
     // The track playing first, then the role's tracks; asked again while they are on their way.

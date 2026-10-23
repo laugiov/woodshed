@@ -56,6 +56,7 @@ def test_each_instrument_plays_its_part_alone_without_it_or_the_full_mix(open_pa
     assert o.console == []
 
 
+@pytest.mark.tablet
 def test_switching_keeps_the_loop_the_tempo_the_trainer_and_the_focus(open_page: Any) -> None:
     o = open_page("pop")
     page = o.page

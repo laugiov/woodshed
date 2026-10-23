@@ -133,11 +133,24 @@
       onTime && onTime(active().currentTime);
     }
 
+    // Starts `to` in place of `from` when `from` plays. A start the browser refuses (iOS starts a sound
+    // only from a tap) leaves `from` playing: false, and nothing changed.
+    async function takeOver(from, to) {
+      if (from.paused) return true;
+      try {
+        await to.play();
+      } catch (err) {
+        to.pause();
+        return false;
+      }
+      return true;
+    }
+
     // Switch to another track at the same position. The new track is loaded and positioned first,
     // then started, then the old one stops: no gap, and only a few milliseconds of overlap.
     // Switches queue up, so quick successive clicks end on the last one.
-    // Resolves true when the switch happened, false when the new track could not be read (the
-    // current track then keeps playing).
+    // Resolves true when the switch happened, false when the new track could not be read, and
+    // "refused" when the browser would not start it (the current track then keeps playing).
     function setTrack(id) {
       switching = switching.then(async () => {
         if (id === current) return true;
@@ -151,15 +164,13 @@
           return false;
         }
         to.currentTime = from.currentTime; // the old track kept playing while the new one loaded
-        current = id;
-        if (!from.paused) {
-          try {
-            await to.play();
-          } catch (err) {
-            onError && onError(err);
-          }
-          watch();
+        const wasPlaying = !from.paused;
+        if (!(await takeOver(from, to))) {
+          to.preload = "none";
+          return "refused";
         }
+        current = id;
+        if (wasPlaying) watch();
         from.pause();
         from.preload = "none";
         return true;
@@ -189,15 +200,10 @@
         }
         if (!still()) return true; // asked for a key no longer wanted: the old file plays on
         to.currentTime = from.currentTime;
+        const wasPlaying = !from.paused;
+        if (!(await takeOver(from, to))) return "refused"; // the old file plays on; asked again after a tap
         files[id] = file;
-        if (!from.paused) {
-          try {
-            await to.play();
-          } catch (err) {
-            onError && onError(err);
-          }
-          watch();
-        }
+        if (wasPlaying) watch();
         from.pause();
         from.preload = "none";
         const original = tracks.find((t) => t.id === id).file;
@@ -212,9 +218,27 @@
       return switching;
     }
 
+    // iOS starts a media element only from a tap, and a track switch comes after its file loads: on the
+    // first tap every element is started and stopped at once, silent, so it may play later. Elements made
+    // since (a key rendered by the library) on the next tap. The one playing is left alone.
+    const unlocked = new WeakSet();
+    function unlock() {
+      for (const t of tracks) element(t.id);
+      for (const el of Object.values(els)) {
+        if (unlocked.has(el) || !el.paused) continue;
+        unlocked.add(el);
+        el.muted = true;
+        const started = el.play();
+        el.pause();
+        el.muted = false;
+        if (started) started.catch(() => {}); // stopped before it began: nothing to report
+      }
+    }
+
     return {
       play,
       pause,
+      unlock,
       setTrack,
       setFile,
       fileOf: (id) => files[id],

@@ -59,6 +59,7 @@ def device(browser: Browser, url: str, problems: list[str]) -> Page:
     return page
 
 
+@pytest.mark.tablet
 def test_the_follower_stays_with_the_leader_and_goes_to_the_next_song(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     url = server.url + "pop.woodshed/index.html"

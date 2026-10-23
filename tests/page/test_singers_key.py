@@ -255,3 +255,38 @@ def test_a_library_that_cannot_render_keys_is_a_page_that_says_where(browser: Br
     page.evaluate("Woodshed.app.transposeTo(2)")
     expect(page.get_by_test_id("pitch-cannot")).to_contain_text("The recording keeps its key.")
     expect(page.get_by_test_id("pitch-switch")).to_have_count(0)
+
+
+@pytest.mark.tablet
+def test_a_rendered_file_the_browser_will_not_start_waits_for_a_tap(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    page = browser.new_context(locale="en-US").new_page()
+    # As iOS: a sound not started by a tap is refused; here the rendered files until the next click.
+    page.add_init_script(
+        """
+        window.__tapped = false;
+        const play = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function () {
+          if ((this.dataset.file || '').startsWith('audio/key/') && !__tapped)
+            return Promise.reject(new DOMException('no gesture', 'NotAllowedError'));
+          return play.call(this);
+        };
+        """
+    )
+    page.on("pageerror", lambda e: problems.append(str(e)))
+    page.goto(server.url + "pop.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    page.evaluate("Woodshed.app.setInstrument('voice')")
+    page.get_by_test_id("play").click()
+    until(page, "Woodshed.debug().playing === true")
+    page.evaluate("Woodshed.app.transposeTo(2)")  # on by default for the voice
+    expect(page.get_by_test_id("toast")).to_contain_text(
+        "Tap the page to hear the recording in the new key.", timeout=20_000
+    )
+    assert playing_file(page, "mix") == "audio/mix.flac"  # the original plays on, no silence
+    assert page.evaluate("Woodshed.debug().playing") is True
+    page.evaluate("window.__tapped = true")
+    page.get_by_test_id("key-mark").locator("xpath=..").click()  # a tap on the page
+    until(page, "Woodshed.app.transport.fileOf('mix').startsWith('audio/key/up2/mix.flac?v=')", 20)
+    assert page.evaluate("Woodshed.debug().playing") is True
+    assert problems == []

@@ -95,6 +95,7 @@ addopts = "-ra --strict-markers"
 markers = [
     "stems: needs the stems extra (real Demucs and beat_this, downloads the models once)",
     "page: runs the practice page in real browsers (Playwright; browsers installed once)",
+    "tablet: what an iPad needs of the page, also run in WebKit (spec 011)",
 ]
 # Any warning is a test failure: a NaN or an empty slice usually shows up as a warning first.
 filterwarnings = [

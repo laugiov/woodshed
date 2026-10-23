@@ -477,6 +477,8 @@
       "D'après la piste séparée des claviers : accords sur {hits}. Plus gros point : frappé dans plus de mesures.",
     "No guitar or keys heard in this song.": "Aucune guitare ni aucun clavier entendus dans ce morceau.",
     "No keys heard in this song.": "Aucun clavier entendu dans ce morceau.",
+    "Tap the track again to switch.": "Touche la piste à nouveau pour changer.",
+    "Tap the page to hear the recording in the new key.": "Touche la page pour entendre l'enregistrement dans la nouvelle tonalité.",
     "Vocals alone": "Voix seule",
 
     // The band (views/band.js)
