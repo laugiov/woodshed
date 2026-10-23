@@ -152,6 +152,8 @@ a.tag.add:hover { border-style: solid; background: var(--sheet); }
 @media (prefers-reduced-motion: reduce) { .working .meter.busy i { animation: none; width: 100%; opacity: .5; } }
 .no-match { padding: 14px 16px; }
 .home .foot { color: var(--muted); font-size: 13px; text-align: center; }
+.home .foot a { color: inherit; text-underline-offset: 3px; }
+.home .foot a:hover, .home .foot a:focus-visible { color: var(--accent); }
 
 /* Narrow: tonight's set first, then the songs, the phones last. */
 @media (max-width: 960px) {

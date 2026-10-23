@@ -102,6 +102,8 @@
       "Aucun morceau pour l'instant : ils s'ajoutent sur l'ordinateur où tourne woodshed.",
     "Everything runs on this computer: nothing is uploaded anywhere else.":
       "Tout se passe sur cet ordinateur : rien n'est envoyé ailleurs.",
+    "What's new": "Nouveautés",
+    "How to update": "Comment mettre à jour",
 
     // Wiring: toasts, steps, the export menu (app.js)
     "no chord": "pas d'accord",

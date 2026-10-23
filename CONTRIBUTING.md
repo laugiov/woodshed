@@ -59,7 +59,8 @@ The rules the checks enforce, and the ones they can't:
 ## Pull requests
 
 Keep a pull request to one change, say why in the description, and include a screenshot when the
-page changes. Pull requests are squash-merged; the CI checks must pass first.
+page changes. For every change a user notices, add a line under **Unreleased** in
+[`CHANGELOG.md`](CHANGELOG.md), in a musician's words: what you can do now, or what got fixed. Pull requests are squash-merged; the CI checks must pass first.
 
 ## Code of conduct
 

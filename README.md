@@ -233,8 +233,8 @@ build for them).
      for you, in your Downloads folder.
    - **Windows**: [woodshed-installer-windows.cmd](https://github.com/laugiov/woodshed/releases/latest/download/woodshed-installer-windows.cmd).
 
-   Both come from the [latest release](https://github.com/laugiov/woodshed/releases/latest), with
-   what changed in it.
+   Both come from the [latest release](https://github.com/laugiov/woodshed/releases/latest); what
+   changed in each version is in the [changelog](CHANGELOG.md).
 2. Double-click it. A window says what it does, then installs woodshed for you only: about 1.5 GB
    to download, a few minutes, no administrator rights for the install itself.
 3. When it says **Done**, woodshed starts and opens your library in the browser. Drop a song on

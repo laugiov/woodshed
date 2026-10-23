@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import audio, lyrics, pitch, stems
+from woodshed import __version__, audio, lyrics, pitch, stems
 from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
@@ -1206,9 +1206,17 @@ def public_urls() -> list[str]:
     return out
 
 
+# The library page's footer: what changed (on main on purpose: the newest notes, whatever the version
+# installed) and how to update. Plain links, filled in by the library with its version: the page
+# itself asks nothing of the network.
+CHANGELOG_URL = "https://github.com/laugiov/woodshed/blob/main/CHANGELOG.md"
+UPDATE_URL = "https://github.com/laugiov/woodshed#install"
+
+
 def home_html(token: str) -> str:
     page = resources.files("woodshed").joinpath("page").joinpath("home.html").read_text(encoding="utf-8")
-    return page.replace("{{TOKEN}}", token)
+    filled = {"TOKEN": token, "VERSION": __version__, "CHANGELOG_URL": CHANGELOG_URL, "UPDATE_URL": UPDATE_URL}
+    return re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: filled[m.group(1)], page)
 
 
 class Handler(BaseHTTPRequestHandler):

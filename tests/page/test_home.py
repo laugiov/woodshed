@@ -268,3 +268,27 @@ def test_a_page_made_by_an_older_woodshed_says_to_analyse_it_again(page: Page, s
     page.goto(songs.url)
     expect(row_of(page, "Pop").get_by_test_id("song-stale")).to_contain_text("analyse it again")
     expect(row_of(page, "Night Drive").get_by_test_id("song-stale")).to_have_count(0)
+
+
+def test_the_footer_says_the_version_what_s_new_and_how_to_update(page: Page, server: app.AppServer) -> None:
+    from woodshed import __version__
+
+    asked: list[str] = []
+    page.on("request", lambda r: asked.append(r.url))
+    page.goto(server.url)
+    expect(page.get_by_test_id("version")).to_have_text(f"woodshed {__version__}")
+    news = page.get_by_test_id("whats-new")
+    update = page.get_by_test_id("how-to-update")
+    expect(news).to_have_text("What's new")
+    expect(news).to_have_attribute("href", "https://github.com/laugiov/woodshed/blob/main/CHANGELOG.md")
+    expect(update).to_have_text("How to update")
+    expect(update).to_have_attribute("href", "https://github.com/laugiov/woodshed#install")
+    for link in (news, update):  # opens beside the library, as the page's other outside links
+        expect(link).to_have_attribute("target", "_blank")
+        expect(link).to_have_attribute("rel", "noopener")
+    expect(page.get_by_test_id("about")).to_have_text(f"woodshed {__version__} · What's new · How to update")
+    page.get_by_test_id("lang-fr").click()
+    expect(news).to_have_text("Nouveautés")
+    expect(update).to_have_text("Comment mettre à jour")
+    expect(page.get_by_test_id("version")).to_have_text(f"woodshed {__version__}")
+    assert [u for u in asked if not u.startswith(server.url)] == []  # the version came with the page
