@@ -341,9 +341,39 @@ def test_a_placement_to_check_is_said_so(open_page: Any) -> None:
 
 def test_in_play_mode_up_and_down_start_from_the_bar_playing(open_page: Any) -> None:
     o = open_page("pop", variant="sections")
-    bar(o, 0).focus()
+    tab_to(o, "bar", "section-loop")
     o.js("Woodshed.app.seekBar(2)")  # the song moved, the keyboard stayed on bar 1
     assert o.js(FOCUSED_BAR) == 0
     o.page.keyboard.press("ArrowDown")
     assert o.js("Math.floor(Woodshed.app.store.get().beat / Woodshed.current.per)") == 6
     assert o.js(FOCUSED_BAR) == 6
+
+
+def test_up_and_down_after_a_click_on_a_bar_stay_scroll_keys(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    bar(o, 1).click()  # a click focuses the bar: a pedal's Up or Down must not jump a line
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 2 of 4")
+    o.page.keyboard.press("ArrowDown")
+    o.page.keyboard.press("End")
+    expect(o.page.get_by_test_id("pass-info")).to_have_text("bar 2 of 4")
+    assert o.js("Math.floor(Woodshed.app.store.get().beat / Woodshed.current.per)") == 1
+
+
+def test_enter_on_a_bar_holding_only_a_correction_opens_it(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    o.page.get_by_test_id("doubt").first.click()
+    o.page.get_by_test_id("pick").first.click()
+    fixed = o.page.locator("#sheet .bar", has=o.page.get_by_test_id("fixed")).first
+    fixed.focus()
+    o.page.keyboard.press("Enter")
+    expect(o.page.get_by_test_id("doubt-reset")).to_be_visible()  # to change it, or take it back
+
+
+def test_a_chord_picked_with_the_keyboard_gives_the_keyboard_back_to_the_bar(open_page: Any) -> None:
+    o = open_page("pickup", close_calls=True)
+    o.page.locator("#sheet .bar", has=o.page.get_by_test_id("doubt")).first.focus()
+    o.page.keyboard.press("Enter")
+    expect(o.page.get_by_test_id("pick-first")).to_be_focused()
+    o.page.keyboard.press("Enter")
+    expect(o.page.get_by_test_id("doubt-pop")).to_be_hidden()
+    assert o.js(FOCUSED_BAR) == 0

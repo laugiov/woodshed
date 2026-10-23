@@ -444,7 +444,8 @@
       }
       // Playing: the pedal's keys seek in app.js, one way for every pedal (the next song at the end on
       // stage); the lines and the part's ends from the bar playing, here.
-      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
+      // A bar focused by a click keeps Up, Down, Home and End as scroll keys (a pedal may send them).
+      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(key) || !(app.keyFocus && app.keyFocus())) return;
       e.preventDefault();
       e.stopPropagation();
       const to = moveTo(barEl(curBar(s), s) || e.target, key);

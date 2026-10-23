@@ -439,7 +439,8 @@ The grid's bars are one tab stop (`views/chart.js`, a roving `tabindex`): the ba
 bar in hand; `#sheet` is a `group` named "Chart" whose description says the arrows move. Editing, the arrows move
 the focus (Up and Down by the grid's lines, Home and End the part's first and last bar) and Enter opens the editor;
 playing, Left, Right and the page keys seek in `app.js` as any pedal does (the next song at the end, on stage), Up,
-Down, Home and End seek from the bar playing, and the focus follows it without scrolling the page. A redraw puts the focus back on the same
+Down, Home and End seek from the bar playing when the focus came from the keyboard (after a click they stay scroll
+keys: a pedal may send them), and the focus follows the bar playing without scrolling the page. A redraw puts the focus back on the same
 place in the grid, and the edit strip (`views/editor.js` `renderStrip`) back on the same control. A chord to check
 in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check" ("2 chords to check",
 "placement to check" for a timing doubt), a click on the mark opens the check, Enter on the bar seeks and opens its

@@ -537,8 +537,13 @@
       pendingRemovals.delete(c.doubt.id);
       applyFixes();
       saveCorrections();
+      const fromPop = $("pop").contains(document.activeElement);
       popups.closeAll();
       store.set({ corrections: store.get().corrections + 1 });
+      // Picked with the keyboard: back on the bar (or the mark, in the Lyrics view), drawn again.
+      const mark = fromPop ? document.querySelector('.doubt[data-ref="' + u + "_" + k + '"]') : null;
+      const control = mark && (mark.matches("button") ? mark : mark.closest(".bar"));
+      if (control) control.focus({ preventScroll: true });
       const shared = app.shareFixes ? app.shareFixes(fixes) : false;
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
       app.toast(W.t("Saved: {chord}. {where}", { chord: W.prettyText(app.nameFor(alt, 0, store.get(), u)), where }));
@@ -1050,6 +1055,7 @@
       tabbed = false;
       keyFocus = false;
     }, true);
+    app.keyFocus = () => keyFocus; // the arrows on a bar seek a line only for a keyboard (views/chart.js)
     const pressable = (el) => !!el.matches && el.matches("button, [role=button], [role=switch]") && !el.classList.contains("bar");
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
@@ -1068,7 +1074,8 @@
         app.seekBar(u);
         // A bar with a chord to check: Enter opens the check, as a click on its mark does.
         const now = chart.barEl(u) || bar;
-        const mark = now.querySelector(".doubt:not(.fixed)"); // still to check, not a correction made
+        // The chord still to check, else the correction made (to change it, or take it back).
+        const mark = now.querySelector(".doubt:not(.fixed)") || now.querySelector(".doubt.fixed");
         if (mark) popups.openDoubt(mark, now);
         return;
       }
