@@ -238,6 +238,14 @@ def render(
         if fingerprint(src) != before:
             raise Cancelled("the page changed while its track was rendered")
         os.replace(part, dst)
+    except Cancelled:
+        raise
+    except Exception as exc:
+        # A source that no longer reads (or a child that failed on it) because the page was rebuilt meanwhile:
+        # nothing failed. The same error on an unchanged source is a real one.
+        if not _same(src, before):
+            raise Cancelled("the page changed while its track was rendered") from exc
+        raise
     finally:
         on_child(None)
         for leftover in (wav, part, log, decoded):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
@@ -293,4 +294,61 @@ def test_a_page_rebuilt_mid_render_says_no_failure(renders: pitch.Renders, monke
     until(lambda: renders.running is None, 15)
     assert renders.state("One.woodshed")["failed"] == {}
     renders.cancel_page("One.woodshed")
+    assert renders.state("One.woodshed")["failed"] == {}
+
+
+def rebuild(src: Path) -> None:
+    """The page rebuilt under a render: its file rewritten (here, bytes no decoder reads) with a new time."""
+    src.write_bytes(b"not a flac file yet")
+    os.utime(src, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+
+
+def test_a_source_rewritten_while_ffmpeg_renders_is_a_cancel(tmp_path: Path, fake_ffmpeg: Path) -> None:
+    # The level step reads the source again once ffmpeg is done: rewritten by then, it is the page rebuilt.
+    audio = library(tmp_path / "lib") / "One.woodshed" / "audio"
+    src, dst = audio / "mix.flac", audio / pitch.KEY_DIR / "up2" / "mix.flac"
+
+    def rewritten(child: subprocess.Popen[bytes] | None) -> None:
+        if child is not None:
+            child.wait()
+            rebuild(src)
+
+    with pytest.raises(pitch.Cancelled):
+        pitch.render(src, dst, 2, "mix", pitch.fingerprint(src), on_child=rewritten)
+    assert not dst.exists() and not list(dst.parent.glob(".*"))
+
+
+def test_a_source_rewritten_before_the_render_is_a_cancel(tmp_path: Path, fake_ffmpeg: Path) -> None:
+    audio = library(tmp_path / "lib") / "One.woodshed" / "audio"
+    src, dst = audio / "mix.flac", audio / pitch.KEY_DIR / "up2" / "mix.flac"
+    before = pitch.fingerprint(src)
+    rebuild(src)
+    for using in (None, ("rubberband", "rubberband")):  # read first on both paths
+        with pytest.raises(pitch.Cancelled):
+            pitch.render(src, dst, 2, "mix", before, using=using)
+    assert not dst.exists() and not list(dst.parent.glob(".*"))
+
+
+def test_an_unreadable_source_that_did_not_change_still_fails(tmp_path: Path, fake_ffmpeg: Path) -> None:
+    audio = library(tmp_path / "lib") / "One.woodshed" / "audio"
+    src, dst = audio / "mix.flac", audio / pitch.KEY_DIR / "up2" / "mix.flac"
+    src.write_bytes(b"never a flac file")
+    with pytest.raises(Exception) as error:
+        pitch.render(src, dst, 2, "mix", pitch.fingerprint(src))
+    assert not isinstance(error.value, pitch.Cancelled)
+
+
+def test_the_worker_says_no_failure_for_a_source_rewritten_mid_render(
+    renders: pitch.Renders, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = renders.root / "One.woodshed" / "audio" / "mix.flac"
+    real = pitch.render
+
+    def racing(*args: object, **kwargs: object) -> None:
+        rebuild(src)  # rewritten as the render starts reading it
+        real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(pitch, "render", racing)
+    renders.ask("One.woodshed", "mix", 2)
+    until(lambda: renders.running is None and not renders.queue)
     assert renders.state("One.woodshed")["failed"] == {}

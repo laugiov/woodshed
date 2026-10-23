@@ -249,6 +249,24 @@ def test_a_failed_program_says_why_without_this_computer_s_folders(
 
 
 @fake_only
+def test_a_source_rewritten_while_the_program_renders_is_a_cancel(clean_lookup: Path, tmp_path: Path) -> None:
+    # The decode reads the source; rewritten under it (the page rebuilt), what follows cannot read it: a cancel.
+    program = fake_program(Path(os.environ["WOODSHED_TOOLS"]))
+    src, dst = page_track(tmp_path, harmonic(220.0, 1.0, 0.5))
+    before = pitch.fingerprint(src)
+
+    def rewritten() -> bool:
+        if pitch.fingerprint(src) == before:
+            src.write_bytes(b"not a flac file yet")
+            os.utime(src, ns=(before[1] + 10**9, before[1] + 10**9))
+        return False
+
+    with pytest.raises(pitch.Cancelled):
+        pitch.render(src, dst, 2, "mix", before, should_stop=rewritten, using=("rubberband", str(program)))
+    assert not dst.exists() and leftovers(dst) == []
+
+
+@fake_only
 def test_a_stop_before_the_program_leaves_nothing(clean_lookup: Path, tmp_path: Path) -> None:
     program = fake_program(Path(os.environ["WOODSHED_TOOLS"]))
     src, dst = page_track(tmp_path, harmonic(220.0, 1.0, 0.5))
