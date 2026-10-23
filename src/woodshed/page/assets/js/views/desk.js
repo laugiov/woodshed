@@ -571,15 +571,35 @@
       const other = song.keyName(s.transpose, r) !== song.keyName(s.transpose, 0); // back in the start key: nothing
       badge.hidden = !other;
       badge.textContent = other ? W.t("now in {key}", { key: song.keyWords(song.keyName(s.transpose, r)) }) : "";
+      // The Key box (spec 024): the key of the bar at the cursor lit, by position; its name in words, all keys.
+      const lit = $("trVal").querySelectorAll(".kp");
+      song.keyPath(s.transpose).forEach((k, i) => lit[i] && lit[i].classList.toggle("here", k.first <= r && r <= k.last));
+      const t = s.transpose;
+      const keys = [song.keyWords(song.keyName(t, 0)), ...song.keyChanges.map((k) => W.t("then {key} from bar {n}", { key: song.keyWords(song.keyName(t, k.region)), n: k.bar + 1 }))];
+      $("trStepper").setAttribute("aria-label", W.t("Transpose. Key: {keys}", { keys: keys.join(", ") }) + (t ? W.t(", transposed {n}", { n: (t > 0 ? "+" : "") + t }) : ""));
+    }
+    // The Key box: every key of the song, "A → B♭", then the shift ("E♭ → E (+6)"); one key as it always was.
+    function renderKeyBox(s) {
+      const path = song.keyPath(s.transpose);
+      const shift = s.transpose ? " (" + (s.transpose > 0 ? "+" : "") + s.transpose + ")" : "";
+      const box = $("trVal");
+      box.classList.toggle("key-path", path.length > 1); // never `.path`: the practice path's
+      if (path.length === 1) return clear(box, chordNode(path[0].name), shift);
+      clear(
+        box,
+        path.map((k, i) => [i ? h("span", { class: "kp-arrow", "aria-hidden": "true" }, " → ") : null, h("span", { class: "kp" }, k.name === "…" ? "…" : chordNode(k.name))]),
+        shift ? h("span", { class: "kp-shift" }, shift) : null,
+      );
     }
     store.on((s) => renderKeyNow(s));
 
     function render(s) {
       $("deskTitle").textContent = TITLES()[s.inst];
+      renderKeyBox(s);
       badgeOf = "";
       renderKeyNow(s);
       renderPart(s);
-      $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
+      $("capoCtl").hidden = $("capoWrap").hidden = $("capoStepper").hidden = s.inst !== "guitar";
       const body = { guitar, bass, piano: keys, drums, voice }[s.inst](s);
       const desk = $("desk");
       if (deskOf !== s.inst + "|" + W.lang()) {
@@ -589,7 +609,6 @@
       clear(desk, body);
       renderDockShapes(s);
       if (s.inst === "drums") app.drawDrumStaff();
-      clear($("trVal"), chordNode(song.keyName(s.transpose)), s.transpose ? " (" + (s.transpose > 0 ? "+" : "") + s.transpose + ")" : "");
       $("capoVal").textContent = String(s.capo);
     }
 

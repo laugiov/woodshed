@@ -240,7 +240,7 @@
       const box = document.querySelector("#yourPart [data-part=pitch]");
       if (!box) return;
       if (st.state === "none") return clear(box);
-      const keyName = W.prettyText(song.keyName(s.transpose));
+      const keyName = song.keyPathText(s.transpose); // as the Key box
       if (st.state === "cannot") {
         const why = {
           disk: W.t("The recording keeps its key. Open the page from the woodshed library to hear it in another key."),

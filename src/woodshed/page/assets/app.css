@@ -379,6 +379,14 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 /* Instrument desk */
 .desk-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .keyrow { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: 13.5px; color: var(--muted); }
+.keyrow .ctl { display: inline-flex; align-items: center; gap: 10px; } /* a label wraps with its stepper: "Capo" never alone */
+/* The Key box on a song with key changes (spec 024): "A → B♭", the key of the bar at the cursor lit. chordNode nests
+   spans: the stepper's 74px minimum is for #trVal alone. */
+#trVal { white-space: nowrap; }
+#trVal.key-path { padding: 0 4px; }
+#trVal span { min-width: 0; }
+#trVal .kp, #trVal .kp-arrow, #trVal .kp-shift { color: var(--muted); }
+#trVal .kp.here { color: var(--accent); font-weight: 700; }
 .shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .shape-card { border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px 4px; text-align: center; background: var(--sheet); }
 .shape-card.cur { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }

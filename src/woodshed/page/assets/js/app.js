@@ -295,7 +295,7 @@
     app.transposeTo = function transposeTo(t) {
       const transpose = Math.max(-6, Math.min(6, t));
       store.set({ transpose, capo: song.capoFor(transpose) });
-      const name = W.prettyText(song.keyName(transpose));
+      const name = song.keyPathText(transpose); // as the Key box: "D♭ → D" on a song with a key change
       // Only what changed now: a recording still to render is said to follow when it is ready.
       if (transpose && app.pitchFollows && app.pitchFollows()) {
         app.toast(app.pitchReady()
@@ -316,9 +316,9 @@
       app.toast(t
         ? (follows
           ? (app.pitchReady()
-            ? W.t("The band plays this song in {key}: the chords and the recording follow.", { key: W.prettyText(song.keyName(t)) })
-            : W.t("The band plays this song in {key}: the chords follow. The recording follows when it is ready.", { key: W.prettyText(song.keyName(t)) }))
-          : W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: W.prettyText(song.keyName(t)) }))
+            ? W.t("The band plays this song in {key}: the chords and the recording follow.", { key: song.keyPathText(t) })
+            : W.t("The band plays this song in {key}: the chords follow. The recording follows when it is ready.", { key: song.keyPathText(t) }))
+          : W.t("The band plays this song in {key}: the chords follow, the recording keeps its key.", { key: song.keyPathText(t) }))
         : W.t("The band plays this song in the recorded key again."));
     };
     app.keepBandKey = async () => {
@@ -326,7 +326,7 @@
       const saved = app.shareBand && (await app.shareBand({ transpose: t, key: song.keyName(t) }));
       if (!saved) return app.toast(W.t("Not saved: the app did not answer."));
       app.useBand(saved);
-      app.toast(W.t("Saved: the band plays this song in {key}, on every device.", { key: W.prettyText(song.keyName(t)) }));
+      app.toast(W.t("Saved: the band plays this song in {key}, on every device.", { key: song.keyPathText(t) }));
     };
     app.setStep = function setStep(n, quiet) {
       const s = store.get();

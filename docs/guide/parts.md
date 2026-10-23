@@ -80,6 +80,10 @@ Change the key and everything follows: the chart, the shapes, the tab, the keybo
 key for the whole band, and the recording in that key, are in
 [For singers](singers.md#keep-the-key-for-the-band).
 
+On a song that changes key, the Key box shows every key in order, "A → B♭", with the key of the bar
+you are in lit. The text stays the same while the song plays: only the lit key moves. − and + still
+move the whole song, so after + it reads "B♭ → B (+1)".
+
 ## The four steps of practice
 
 Every page walks you through the same four steps: **listen** with the full band, **learn** your

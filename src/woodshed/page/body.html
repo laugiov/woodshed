@@ -62,10 +62,10 @@
         <div class="desk-head">
           <div class="label"><span id="deskTitle"></span><span class="key-now" id="keyNow" data-testid="key-now" hidden></span></div>
           <div class="keyrow">
-            <span>Key</span>
-            <div class="stepper" aria-label="Transpose"><button type="button" id="trDown" data-testid="transpose-down" aria-label="Transpose down">−</button><span id="trVal" data-testid="transpose"></span><button type="button" id="trUp" data-testid="transpose-up" aria-label="Transpose up">+</button></div>
-            <span id="capoWrap">Capo</span>
-            <div class="stepper" id="capoStepper" aria-label="Capo"><button type="button" id="capoDown" data-testid="capo-down" aria-label="Capo down">−</button><span id="capoVal" data-testid="capo"></span><button type="button" id="capoUp" data-testid="capo-up" aria-label="Capo up">+</button></div>
+            <div class="ctl"><span>Key</span>
+            <div class="stepper" id="trStepper" role="group" aria-label="Transpose"><button type="button" id="trDown" data-testid="transpose-down" aria-label="Transpose down">−</button><span id="trVal" data-testid="transpose"></span><button type="button" id="trUp" data-testid="transpose-up" aria-label="Transpose up">+</button></div></div>
+            <div class="ctl" id="capoCtl"><span id="capoWrap">Capo</span>
+            <div class="stepper" id="capoStepper" aria-label="Capo"><button type="button" id="capoDown" data-testid="capo-down" aria-label="Capo down">−</button><span id="capoVal" data-testid="capo"></span><button type="button" id="capoUp" data-testid="capo-up" aria-label="Capo up">+</button></div></div>
           </div>
         </div>
         <div id="yourPart" class="your-part" data-testid="your-part"></div>

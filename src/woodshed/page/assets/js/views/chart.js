@@ -563,7 +563,7 @@
     }
 
     function keyNote(s) {
-      const key = (t) => W.prettyText(song.keyName(t));
+      const key = (t) => song.keyPathText(t); // as the Key box: "D♭ → D" on a song with a key change
       const out = [s.transpose
         ? h("span", { class: "hint key-note", "data-testid": "key-note" }, recordingNote(s, key))
         : h("span", { class: "hint" }, W.t("Real chords, concert pitch"))];
@@ -707,7 +707,7 @@
       const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere", "editing"].some((k) => changed.has(k));
       if (!full && changed.has("pitchStatus")) {
         const note = document.querySelector("[data-testid=key-note]"); // in place: the chart keeps its scroll
-        if (note) note.textContent = recordingNote(s, (t) => W.prettyText(song.keyName(t)));
+        if (note) note.textContent = recordingNote(s, (t) => song.keyPathText(t));
       }
       // The grid shows the pass playing; the lyrics show every pass, they need no new drawing.
       if (full || (pass !== lastPass && app.sheetMode(s) !== "lyrics")) renderSheet(s);

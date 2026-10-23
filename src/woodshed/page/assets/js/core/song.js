@@ -126,6 +126,16 @@
       const minor = name.endsWith("m");
       return W.prettyText(minor ? name.slice(0, -1) : name) + " " + (minor ? W.t("minor") : W.t("major"));
     };
+    // The keys of the song in order, as the Key box and the sentences name them (spec 024): each region's key at
+    // `transpose`. More than three: the first, "…" for the middle ones, the last, so the text never changes while
+    // the song plays. Each piece says the regions it stands for: the lit one is found by position, never by name.
+    function keyPath(transpose) {
+      const one = (r) => ({ name: keyName(transpose, r), first: r, last: r });
+      if (regions.length <= 3) return regions.map((_, r) => one(r));
+      return [one(0), { name: "…", first: 1, last: regions.length - 2 }, one(regions.length - 1)];
+    }
+    // The same keys in a sentence: "E♭ → E", or "E♭" on a song in one key.
+    const keyPathText = (transpose) => keyPath(transpose).map((k) => W.prettyText(k.name)).join(" → ");
     // The changes after the first region: [{bar, region}] (empty for most songs).
     const keyChanges = regions.slice(1).map((r, i) => ({ bar: r.bar, region: i + 1 }));
     // A region's key as the analysis wrote it ({bar, pc, mode}), for intervals between keys.
@@ -227,7 +237,7 @@
     return {
       data, song, view, per, bars, totalBeats, beatTime, beatAt, chordAtBeat, same, upcoming,
       noteName, chordName, roman, keyName, regionOf, markRegions, keyChanges, regionCount: regions.length, regionKey,
-      changeAhead, regionChords, keyWords, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
+      changeAhead, regionChords, keyWords, keyPath, keyPathText, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
       tracks: view.tracks,
       parts: song.parts,
     };
