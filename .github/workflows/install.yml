@@ -46,6 +46,13 @@ jobs:
         run: |
           "$(uv tool dir --bin)/woodshed" "demo/As I Am.mp3" --no-stems --no-open -o out
           test -f "out/As I Am.woodshed/index.html"
+      - name: The Rubber Band program the script fetched, the pinned one, and it runs
+        if: runner.os == 'macOS'
+        run: |
+          tools="$HOME/Library/Application Support/woodshed/tools"
+          grep -qF "$(shasum -a 256 "$tools/rubberband" | cut -d' ' -f1)" scripts/install.sh
+          test -f "$tools/COPYING"
+          "$tools/rubberband" -V 2>&1 | grep -F 4.0.0
       # The installers download install.sh / install.ps1 from GitHub at this commit, as they do at a
       # tag; what those install is this checkout's archive (WOODSHED_SOURCE, set above).
       - name: The double-click installer, as Finder runs it, and the app it makes
@@ -104,6 +111,17 @@ jobs:
           if (-not (Test-Path "out/As I Am.woodshed/index.html")) { throw "no page" }
           $link = Join-Path ([Environment]::GetFolderPath("Programs")) "woodshed.lnk"
           if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
+      - name: The Rubber Band program the script fetched, the pinned one, and it runs
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:LOCALAPPDATA "woodshed\tools"
+          foreach ($file in "rubberband.exe", "sndfile.dll") {
+            $hash = (Get-FileHash (Join-Path $tools $file) -Algorithm SHA256).Hash.ToLower()
+            if (-not (Select-String -Path scripts/install.ps1 -Pattern $hash -SimpleMatch -Quiet)) { throw "$file is not the pinned one" }
+          }
+          if (-not (Test-Path (Join-Path $tools "COPYING.txt"))) { throw "no licence next to the program" }
+          $version = & (Join-Path $tools "rubberband.exe") -V 2>&1 | Out-String
+          if ($version -notmatch "4\.0\.0") { throw "the program does not run: $version" }
       - name: The double-click installer, and the Start menu shortcut it leaves
         shell: pwsh
         env:

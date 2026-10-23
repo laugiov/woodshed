@@ -161,7 +161,7 @@ class Library:
         # The recording in another key (spec 007): rendered one track at a time, never during an analysis.
         self.renders = (
             pitch.Renders(self.root, busy=lambda: self.running is not None, free_margin=FREE_MARGIN)
-            if opts.pitch and pitch.available()
+            if opts.pitch and pitch.tool() is not None
             else None
         )
         threading.Thread(target=self._work, name="woodshed-jobs", daemon=True).start()
@@ -836,7 +836,9 @@ class Library:
     def pitch_state(self, page: Any) -> dict[str, Any]:
         """For a song page: can this library change the recording's key, and where its renders are."""
         folder = self._page_quick(page)
-        state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch}
+        # The system names the one step that adds the key when it cannot (the installer, or the package).
+        system = {"darwin": "mac", "win32": "windows"}.get(sys.platform, "linux")
+        state: dict[str, Any] = {"can": self.renders is not None, "off": not self.opts.pitch, "system": system}
         return state | (
             self.renders.state(folder)
             if self.renders is not None

@@ -1,9 +1,10 @@
 """The recording in another key, rendered by the library (spec 007, the singer's key).
 
-ffmpeg's `rubberband` filter (Rubber Band, GPL: used as ffmpeg's own filter in a separate program, never linked)
-shifts a page's track by whole semitones, the same length to the sample, so the beats, the click and the chart
-stay where they are. A Python pass then sets the level back to the original's, under the tracks' common peak
-ceiling, and writes the same 24-bit FLAC the page's other files are. The page plays it like any other track.
+Rubber Band (GPL: always a separate program, never linked), as ffmpeg's `rubberband` filter or else as its own
+command-line program (spec 017: the installers fetch it on Mac and Windows), shifts a page's track by whole
+semitones, the same length to the sample, so the beats, the click and the chart stay where they are. A Python
+pass then sets the level back to the original's, under the tracks' common peak ceiling, and writes the same 24-bit
+FLAC the page's other files are. The page plays it like any other track.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -39,6 +41,11 @@ FORMANTS_KEPT = frozenset(
 BLOCK = 1 << 18
 SLOWEST = 10.0  # a render longer than 10x the track's duration is stuck: killed
 LEAST = 60.0  # seconds a render may always take
+PROGRAM_SINCE = (3, 2)
+# The program clamps what goes over 1.0 where ffmpeg's filter keeps it for the level step: it gets the source a
+# quarter down (a power of two: exact in float), the level step gives the quarter back.
+PRESCALE = 0.25
+CLAMPED = 0.99  # a program's peak this high was clamped (4x the source's at most): refused, never a silent clip
 
 
 class Cancelled(Exception):
@@ -47,7 +54,7 @@ class Cancelled(Exception):
 
 @functools.cache
 def available() -> bool:
-    """ffmpeg is installed with the Rubber Band filter (Ubuntu's, Debian's, Homebrew's, Gyan's full build)."""
+    """ffmpeg is installed with the Rubber Band filter (Ubuntu's, Debian's, Gyan's full build; not Homebrew's)."""
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
         return False
@@ -56,6 +63,47 @@ def available() -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return any(line.split()[1:2] == ["rubberband"] for line in out.stdout.splitlines())
+
+
+def tools_dir() -> Path:
+    """woodshed's own programs, put there by the installers: the Rubber Band program on Mac and Windows."""
+    if os.environ.get("WOODSHED_TOOLS"):
+        return Path(os.environ["WOODSHED_TOOLS"])
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "woodshed" / "tools"
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        return (Path(local) if local else Path.home() / "AppData" / "Local") / "woodshed" / "tools"
+    data = os.environ.get("XDG_DATA_HOME")
+    return (Path(data) if data else Path.home() / ".local" / "share") / "woodshed" / "tools"
+
+
+def _version(path: str) -> tuple[int, int] | None:
+    try:
+        out = subprocess.run([path, "-V"], capture_output=True, text=True, timeout=20, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"(\d+)\.(\d+)", out.stdout + out.stderr) if out.returncode == 0 else None
+    return (int(found[1]), int(found[2])) if found else None
+
+
+@functools.cache
+def program() -> str | None:
+    """The Rubber Band program, 3.2 or newer (the R3 engine, a mono-compatible centre focus): the tools
+    folder's first (the installers' pinned build), then the PATH's (Ubuntu 22.04's 2.0.2 is not used)."""
+    name = "rubberband.exe" if sys.platform == "win32" else "rubberband"
+    for found in (tools_dir() / name, shutil.which("rubberband")):
+        if found is not None and Path(found).is_file() and (_version(str(found)) or (0, 0)) >= PROGRAM_SINCE:
+            return str(found)
+    return None
+
+
+def tool() -> tuple[str, str] | None:
+    """What renders a key: ffmpeg with its filter (as before 017), else the Rubber Band program, else nothing."""
+    if available():
+        return "ffmpeg", shutil.which("ffmpeg") or "ffmpeg"
+    found = program()
+    return ("rubberband", found) if found else None
 
 
 def key_dir(semitones: int) -> str:
@@ -86,6 +134,15 @@ def _rms_and_peak(path: Path) -> tuple[float, float]:
     return (float(np.sqrt(total / count)) if count else 0.0), peak
 
 
+def _decode(src: Path, wav: Path, should_stop: Callable[[], bool]) -> None:
+    """The source as a float WAV for the program, a quarter down (PRESCALE)."""
+    with sf.SoundFile(src) as f, sf.SoundFile(wav, "w", f.samplerate, f.channels, "FLOAT", format="WAV") as out:
+        for block in f.blocks(blocksize=BLOCK, dtype="float32", always_2d=True):
+            if should_stop():
+                raise Cancelled("stopped")
+            out.write(block * np.float32(PRESCALE))
+
+
 def render(
     src: Path,
     dst: Path,
@@ -94,11 +151,14 @@ def render(
     before: tuple[int, int],
     should_stop: Callable[[], bool] = lambda: False,
     on_child: Callable[[subprocess.Popen[bytes] | None], None] = lambda child: None,
+    using: tuple[str, str] | None = None,
 ) -> None:
     """Render `src` `semitones` away into `dst` (`<page>/audio/key/<dir>/<track>.flac`). `before`: the source's
-    fingerprint when the render was asked; a source changed since (the page rebuilt) cancels it."""
+    fingerprint when the render was asked; a source changed since (the page rebuilt) cancels it. `using`: the
+    tool (`tool()`'s answer when not given)."""
     if track in UNPITCHED or not -6 <= semitones <= 6 or semitones == 0:
         raise WoodshedError(f"{track} is not rendered {semitones:+d}")
+    kind, path = using or tool() or ("ffmpeg", shutil.which("ffmpeg") or "ffmpeg")
     audio_dir = dst.parents[2]
     if not audio_dir.is_dir():  # never created above the page's own audio folder
         raise Cancelled("the page is gone")
@@ -107,17 +167,32 @@ def render(
     token = secrets.token_hex(4)
     wav = dst.with_name(f".{dst.stem}.{token}.wav")  # dotted: never served, removed at start if left over
     part = dst.with_name(f".{dst.stem}.{token}.part")
+    decoded = dst.with_name(f".{dst.stem}.{token}.in.wav")  # the program's input
     prefix, flags = _low_priority()
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
-    formant = "preserved" if track in FORMANTS_KEPT else "shifted"
-    shift = f"rubberband=pitch={2 ** (semitones / 12):.10f}:pitchq=quality:channels=together:formant={formant}"
-    cmd = [*prefix, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "1"]
-    cmd += ["-i", str(src.resolve()), "-af", shift, "-threads", "1", "-c:a", "pcm_f32le", str(wav.resolve())]
-    log = dst.with_name(f".{dst.stem}.{token}.log")  # ffmpeg's errors: a file, never a pipe that fills up
+    cwd: Path | None = None
+    if kind == "ffmpeg":
+        ffmpeg = path
+        formant = "preserved" if track in FORMANTS_KEPT else "shifted"
+        shift = f"rubberband=pitch={2 ** (semitones / 12):.10f}:pitchq=quality:channels=together:formant={formant}"
+        cmd = [*prefix, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "1"]
+        cmd += ["-i", str(src.resolve()), "-af", shift, "-threads", "1", "-c:a", "pcm_f32le", str(wav.resolve())]
+    else:
+        # The R3 engine, the centre's focus kept (and mono compatibility, 3.2+), formants as ffmpeg's. Relative
+        # ASCII names in the key's folder: libsndfile opens ANSI paths on Windows, and no folder in an error.
+        formants = ["-F"] if track in FORMANTS_KEPT else []
+        cmd = [*prefix, path, "-3", "--centre-focus", *formants, "-p", str(semitones), "-q", "--ignore-clipping"]
+        cmd += [decoded.name, wav.name]
+        cwd = dst.parent
+    log = dst.with_name(f".{dst.stem}.{token}.log")  # the child's errors: a file, never a pipe that fills up
     try:
         deadline = time.monotonic() + max(LEAST, SLOWEST * sf.info(str(src)).duration)
+        if kind != "ffmpeg":
+            _decode(src, decoded, should_stop)
         with open(log, "wb") as errors:
-            child = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=errors, creationflags=flags)
+            child = subprocess.Popen(
+                cmd, stdin=None if kind == "ffmpeg" else subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+                creationflags=flags, cwd=cwd,
+            )  # fmt: skip
         on_child(child)
         while True:
             try:
@@ -134,10 +209,14 @@ def render(
             error = log.read_text(encoding="utf-8", errors="replace")
             last = (error.strip().splitlines() or ["no reason given"])[-1]
             last = re.sub(r"(?:[A-Za-z]:)?[\\/]\S*[\\/]", "", last)  # file names, never this computer's folders
-            raise WoodshedError(f"ffmpeg could not change the key: {last}")
+            if kind == "ffmpeg":
+                raise WoodshedError(f"ffmpeg could not change the key: {last}")
+            raise WoodshedError("could not change the key")
         # The level back to the original's, never above the common ceiling: no clipped sample.
         source_rms, _ = _rms_and_peak(src)
         rendered_rms, rendered_peak = _rms_and_peak(wav)
+        if kind != "ffmpeg" and rendered_peak >= CLAMPED:
+            raise WoodshedError("could not change the key: the render would clip")
         gain = source_rms / rendered_rms if rendered_rms > 0 else 1.0
         if rendered_peak * gain > CEILING:
             gain = CEILING / rendered_peak
@@ -161,7 +240,7 @@ def render(
         os.replace(part, dst)
     finally:
         on_child(None)
-        for leftover in (wav, part, log):
+        for leftover in (wav, part, log, decoded):
             with contextlib.suppress(OSError):
                 leftover.unlink()
 
@@ -255,8 +334,10 @@ class Renders:
             before = fingerprint(src)
         except (RuntimeError, OSError):
             raise WoodshedError("this track cannot be read") from None
-        # The float WAV in the middle is about four times the FLAC.
-        room = shutil.disk_usage(self.root).free >= before[0] * 5 + self.free_margin
+        # The float WAV in the middle is about four times the FLAC; the program's path has two (its input).
+        using = tool()
+        times = 9 if using is not None and using[0] == "rubberband" else 5
+        room = shutil.disk_usage(self.root).free >= before[0] * times + self.free_margin
         with self.cond:
             now = time.monotonic()
             self.used[(page, key)] = now

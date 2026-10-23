@@ -5,6 +5,7 @@
 # It installs uv (Astral's Python installer, for your user) if it is missing, then woodshed in its own
 # environment, with its own Python 3.13 and the CPU build of PyTorch (no GPU needed). If ffmpeg (only
 # needed for AAC (M4A) and video files) is missing, it is installed with winget when winget is there.
+# The Rubber Band program (for the recording in your key) goes in woodshed's tools folder.
 # A Start menu shortcut "woodshed" opens the library in the browser. No administrator rights needed.
 # Double-click instead: scripts/installers/Install woodshed.cmd runs this script.
 #
@@ -18,6 +19,50 @@
 $ErrorActionPreference = "Stop"
 # TLS 1.2 for the downloads: older Windows PowerShell setups do not offer it by default.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+# The singer's key (spec 017): the Rubber Band program in woodshed's tools folder, the official GPL build from
+# breakfastquay.com (with libsndfile's sndfile.dll and the licence), checked against its pinned sha256. A
+# separate program woodshed runs, never linked. Skipped when the files there are already these; a failed
+# download says so in one line and never fails the install. True when the program is there.
+function Get-Rubberband {
+    param(
+        [string]$Tools = $(if ($env:WOODSHED_TOOLS) { $env:WOODSHED_TOOLS } else { Join-Path $env:LOCALAPPDATA "woodshed\tools" }),
+        [string]$Url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip",
+        [string]$Sha256 = "f2d47fc64dbb42f6cc62edf7933ac4fa89d8f0ef8b9cf97b6afc263a7fe05644",
+        [string]$ExeSha256 = "d26d81e20f48ea33070e638f58bdeb6a61ce7f0946d8f2629f30441caa2905d1",
+        [string]$DllSha256 = "4e3bd2de8e1485110eaebef8e1239471f73d608773831c323bf528e05645655e"
+    )
+    $ErrorActionPreference = "Stop"  # every failure caught below, also when loaded alone (CI)
+    $ProgressPreference = "SilentlyContinue"  # Windows PowerShell's progress bar slows a download tenfold
+    $exe = Join-Path $Tools "rubberband.exe"
+    $dll = Join-Path $Tools "sndfile.dll"
+    $same = { param($file, $sum) (Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -eq $sum }
+    if ((& $same $exe $ExeSha256) -and (& $same $dll $DllSha256)) { return $true }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("woodshed-rubberband-" + [Guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        $zip = Join-Path $tmp "rubberband.zip"
+        Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $zip -TimeoutSec 300
+        if (-not (& $same $zip $Sha256)) { throw "not the archive its checksum names" }
+        Expand-Archive -LiteralPath $zip -DestinationPath $tmp
+        $dir = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
+        $from = @{ exe = Join-Path $dir.FullName "rubberband.exe"; dll = Join-Path $dir.FullName "sndfile.dll" }
+        if (-not ((& $same $from.exe $ExeSha256) -and (& $same $from.dll $DllSha256))) { throw "not the files the checksums name" }
+        New-Item -ItemType Directory -Force -Path $Tools | Out-Null
+        Copy-Item -LiteralPath (Join-Path $dir.FullName "COPYING.txt"), $from.dll -Destination $Tools -Force
+        Copy-Item -LiteralPath $from.exe -Destination $Tools -Force
+        Write-Host "The recording in your key: Rubber Band is ready."
+        return $true
+    } catch {
+        Write-Host "The recording in your key is off: Rubber Band could not be downloaded. Run the installer again later to add it."
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+# Loaded with ". install.ps1" (CI), only the functions above: nothing is installed. ("irm | iex" has no
+# script path: it always installs.)
+if ($MyInvocation.InvocationName -eq '.' -and $PSCommandPath) { return }
 
 $Ref = if ($env:WOODSHED_REF) { $env:WOODSHED_REF } else { "main" }
 # A plain archive: git is not needed, and PyPI's PyTorch is the CPU build on Windows.
@@ -66,6 +111,8 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -and $env:WOODSHED_N
         Write-Host "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, add ffmpeg: https://ffmpeg.org/download.html"
     }
 }
+
+$null = Get-Rubberband
 
 if ($env:WOODSHED_NO_MENU -ne "1") {
     $Programs = [Environment]::GetFolderPath("Programs")

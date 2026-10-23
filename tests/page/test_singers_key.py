@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -143,12 +144,15 @@ def test_where_the_recording_cannot_change_key_it_says_why(
 ) -> None:
     monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
     problems: list[str] = []
-    for options, env, sentence in (
-        ({"pitch": False}, "1", "is off in this library"),
-        ({}, "0", "install the full ffmpeg (with Rubber Band), then restart woodshed"),
+    monkeypatch.setattr(pitch, "program", lambda: None)  # no Rubber Band program either (spec 017)
+    for options, env, platform, sentence in (
+        ({"pitch": False}, "1", "linux", "is off in this library"),
+        ({}, "0", "linux", "install ffmpeg (sudo apt install ffmpeg), then restart woodshed"),
+        ({}, "0", "darwin", "run the woodshed installer again, then restart woodshed"),
     ):
         monkeypatch.setenv("FAKE_RUBBERBAND", env)
-        srv = serve(tmp_path / env / str(len(options)), pages_root, **options)
+        monkeypatch.setattr(sys, "platform", platform)  # the one step named for this system
+        srv = serve(tmp_path / env / platform / str(len(options)), pages_root, **options)
         try:
             page = opened(browser, srv.url + "pop.woodshed/index.html", problems)
             page.evaluate("Woodshed.app.transposeTo(2)")

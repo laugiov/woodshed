@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -112,7 +113,7 @@ def test_the_band_s_key_is_prepared_for_every_device(server: app.AppServer, monk
     assert asked == [("One.woodshed", 2, ["mix", "solo-vocals", "minus-vocals"])]
 
 
-def test_without_the_filter_or_with_no_pitch_nothing_is_rendered(
+def test_without_the_filter_or_the_program_or_with_no_pitch_nothing_is_rendered(
     tmp_path: Path, fake_ffmpeg: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = library(tmp_path / "lib")
@@ -120,7 +121,27 @@ def test_without_the_filter_or_with_no_pitch_nothing_is_rendered(
     assert off.renders is None
     monkeypatch.setenv("FAKE_RUBBERBAND", "0")
     pitch.available.cache_clear()
+    monkeypatch.setattr(pitch, "program", lambda: None)  # nor the Rubber Band program (spec 017)
     assert app.Library(root, Options(use_stems=False, open_page=False)).renders is None
+
+
+def test_without_the_filter_the_program_renders(
+    tmp_path: Path, fake_ffmpeg: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_RUBBERBAND", "0")
+    pitch.available.cache_clear()
+    monkeypatch.setattr(pitch, "program", lambda: "rubberband")
+    library_ = app.Library(library(tmp_path / "lib"), Options(use_stems=False, open_page=False))
+    assert library_.renders is not None
+    library_.interrupted()
+
+
+@pytest.mark.parametrize(("platform", "system"), [("darwin", "mac"), ("win32", "windows"), ("linux", "linux")])
+def test_the_library_says_its_system_for_the_one_step_that_adds_the_key(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch, platform: str, system: str
+) -> None:
+    monkeypatch.setattr(sys, "platform", platform)
+    assert state(server)["system"] == system  # the page names the installer (Mac, Windows) or the package (Linux)
 
 
 def test_after_a_restart_the_band_s_key_is_prepared_again_at_the_first_ask(

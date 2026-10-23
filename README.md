@@ -104,11 +104,10 @@ recording 2 semitones up** (on by default for the voice, and for everyone in the
 The library renders each track in that key, one at a time, about 10 s per minute of song, the track
 you play first: the original plays meanwhile and the page swaps to the new one at the same place,
 without stopping. The tracks stay in tune, as long and at their level (a track already at the
-loudest is made a little quieter rather than clipped); the drums alone play as recorded. It needs
-ffmpeg with its Rubber Band filter: Ubuntu's, Debian's and the Docker image's have it; on a Mac,
-Homebrew's plain `ffmpeg` does not, `brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-rubberband` does;
-on Windows, `ffmpeg -filters` lists `rubberband` when yours has it. The library page says when it is
-missing; `woodshed app --no-pitch` turns it off. A page
+loudest is made a little quieter rather than clipped); the drums alone play as recorded. It works
+out of the box with the installers: on a Mac and on Windows they add the Rubber Band program for it;
+on Linux and in Docker, ffmpeg has it (`sudo apt install ffmpeg`). The library page says when it is
+missing and the one step that adds it; `woodshed app --no-pitch` turns it off. A page
 opened from disk plays the recording in its own key. Each page keeps the band's key, the two
 most recently asked others and any key a device played in the last minute; the downloads stay the original files.
 
@@ -319,7 +318,8 @@ The script installs [uv](https://docs.astral.sh/uv/) if needed, then woodshed wi
 and the CPU build of PyTorch, in your home folder: no sudo, nothing system-wide (uv adds its
 folder to your PATH). It adds woodshed to the applications menu on Linux, and the woodshed app to
 `~/Applications` on macOS (Apple silicon only: Intel Macs use Docker). It tells you how to add [ffmpeg](https://ffmpeg.org/download.html) if it
-is missing (only for AAC (M4A) and video files: MP3, WAV, FLAC and Ogg work without it).
+is missing (only for AAC (M4A) and video files: MP3, WAV, FLAC and Ogg work without it; on Linux it also
+brings the recording in your key). On macOS it adds the Rubber Band program for the recording in your key.
 
 On Windows, in PowerShell:
 
@@ -328,7 +328,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/lau
 ```
 
 The same for your user, no administrator rights; ffmpeg comes with winget when it is available,
-and woodshed gets a Start menu shortcut. The double-click installers run these same scripts.
+the Rubber Band program for the recording in your key, and woodshed gets a Start menu shortcut. The double-click installers run these same scripts.
 
 Uninstall: `uv tool uninstall woodshed`. Read the scripts before running them if you like:
 [install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1), and the double-click
@@ -501,8 +501,13 @@ OFL for the fonts) and free for any use, paid gigs included.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,
 and Atkinson Hyperlegible, Barlow Condensed, JetBrains Mono, Noto Music and Bravura fonts (SIL OFL).
-The recording in another key is rendered by your own ffmpeg with its Rubber Band filter (GPL), run as a
-separate program: woodshed neither ships nor links it.
+The recording in another key is rendered by [Rubber Band](https://breakfastquay.com/rubberband/)
+(GPL-2.0-or-later, Particular Programs Ltd), always as a separate program, never linked: your ffmpeg's
+Rubber Band filter, or the Rubber Band program. On a Mac and on Windows the installers download that
+program, the official build from [breakfastquay.com](https://breakfastquay.com/files/releases/), checked
+against a pinned checksum, into woodshed's tools folder with its licence (on Windows with libsndfile,
+LGPL-2.1, which it uses to read and write sound files). woodshed's package, repository and Docker image do
+not contain it.
 
 **Your songs and lyrics are yours to handle.** woodshed works on the files you give it, on your
 computer. Respect the rights on the recordings and lyrics you use, and don't publish pages of songs

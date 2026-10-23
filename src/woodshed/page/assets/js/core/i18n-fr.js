@@ -475,6 +475,8 @@
     Retry: "Réessayer",
     "The recording keeps its key. Open the page from the woodshed library to hear it in another key.": "L'enregistrement garde sa tonalité. Ouvre la page depuis la bibliothèque woodshed pour l'entendre dans une autre tonalité.",
     "This library cannot change the key: install the full ffmpeg (with Rubber Band), then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : installe le ffmpeg complet (avec Rubber Band), puis relance woodshed.",
+    "This library cannot change the key: run the woodshed installer again, then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : lance à nouveau l'installateur de woodshed, puis relance woodshed.",
+    "This library cannot change the key: install ffmpeg (sudo apt install ffmpeg), then restart woodshed.": "Cette bibliothèque ne peut pas changer la tonalité : installe ffmpeg (sudo apt install ffmpeg), puis relance woodshed.",
     "Changing the recording's key is off in this library.": "Le changement de tonalité de l'enregistrement est désactivé dans cette bibliothèque.",
     "The recording plays {shift}": "L'enregistrement joue {shift}",
     "Chords in {key}, the recording too.": "Accords en {key}, l'enregistrement aussi.",

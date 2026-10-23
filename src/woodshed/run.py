@@ -41,7 +41,7 @@ class Options:
     sevenths: bool = False
     bpm: float | None = None
     bar_phase: int | None = None  # the bar lines the band chose: beats before the first bar line; automatic if None
-    pitch: bool = True  # woodshed app renders a song's tracks in another key when asked (ffmpeg with Rubber Band)
+    pitch: bool = True  # woodshed app renders a song's tracks in another key when asked (with Rubber Band)
     # The separation: "four" (guitars and keys together) or "six" (apart); None: the page's own, six for a new one.
     separation: str | None = None
 

@@ -52,17 +52,33 @@ jobs:
       # AAC in MPEG-TS), Homebrew's on macOS (Apple silicon runners: the action is x64 only), the
       # action's build on Windows.
       # A slow mirror would hang the whole job: scripts/ci-apt.sh cuts each try short.
+      # The Rubber Band program (spec 017): Ubuntu 24.04's rubberband-cli (3.3) on Linux; on macOS and Windows
+      # the pinned 4.0.0, fetched and checked by the installers' own function, as users get it.
       - if: runner.os == 'Linux'
-        run: bash scripts/ci-apt.sh ffmpeg
+        run: bash scripts/ci-apt.sh ffmpeg rubberband-cli
       - if: runner.os == 'macOS'
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install ffmpeg
       - if: runner.os == 'Windows'
         uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6  # v3.1
+      - if: runner.os == 'macOS'
+        run: |
+          sed -n '/^get_rubberband() {/,/^}/p' scripts/install.sh > "$RUNNER_TEMP/get_rubberband.sh"
+          WOODSHED_TOOLS="$RUNNER_TEMP/tools" sh -c '. "$1" && get_rubberband' sh "$RUNNER_TEMP/get_rubberband.sh"
+          test -x "$RUNNER_TEMP/tools/rubberband"
+          echo "WOODSHED_TOOLS=$RUNNER_TEMP/tools" >> "$GITHUB_ENV"
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP "tools"
+          . ./scripts/install.ps1
+          if (-not (Get-Rubberband -Tools $tools)) { throw "Rubber Band was not fetched" }
+          "WOODSHED_TOOLS=$tools" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - run: uv run --frozen --group dev pytest -m "not page" --cov --cov-report=term-missing:skip-covered -q
         env:
           # The singer's key needs ffmpeg's Rubber Band filter: Ubuntu's ffmpeg has it, Homebrew's plain one
-          # does not (macOS and Windows skip those tests).
+          # does not (macOS and Windows skip those tests). The Rubber Band program is everywhere.
           WOODSHED_REQUIRE_PITCH: ${{ runner.os == 'Linux' && '1' || '' }}
+          WOODSHED_REQUIRE_RUBBERBAND: "1"
 
   page:
     name: Practice page in Chromium and Firefox

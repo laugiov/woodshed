@@ -8,6 +8,7 @@
 # Nothing is installed system-wide and nothing needs sudo; uv adds its folder to your PATH.
 # On Linux it adds a menu entry, on macOS an app (~/Applications/woodshed.app). ffmpeg is only
 # needed for AAC (M4A) and video files: the script says how to add it, it does not install it.
+# On macOS it also fetches the Rubber Band program (for the recording in your key) into woodshed's tools folder.
 #
 # Intel Macs are not supported (one part has no ready-made build there): Docker works on them.
 #
@@ -64,6 +65,41 @@ echo ""
 $exe app || echo "woodshed stopped: the message above says why."
 EOF
     chmod 755 "$app/Contents/MacOS/woodshed" "$app/Contents/Resources/woodshed.command"
+}
+
+# The singer's key on a Mac (spec 017): Homebrew's ffmpeg has no Rubber Band filter, so the Rubber Band
+# program goes in woodshed's tools folder: the official GPL build from breakfastquay.com, checked against its
+# pinned sha256, kept next to its licence. A separate program woodshed runs, never linked. Skipped when the
+# program there is already this one; a failed download says so in one line and never fails the install.
+# $1 $2 $3 (tests): the archive's URL, its sha256, the program's sha256.
+get_rubberband() {
+    rb_url="${1:-https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-macos.tar.bz2}"
+    rb_sum="${2:-0dc91509a31a94c1144436cc20e6f1d165bdab39fe125f9be7d46139921b733f}"
+    rb_bin_sum="${3:-bffe8a37f204958352e768fc4a751d3dbce18e3b42c2a3427a80498e7d8cee79}"
+    rb_tools="${WOODSHED_TOOLS:-$HOME/Library/Application Support/woodshed/tools}"
+    if command -v shasum >/dev/null 2>&1; then rb_hash="shasum -a 256"; else rb_hash="sha256sum"; fi
+    if [ -f "$rb_tools/rubberband" ] && [ "$($rb_hash "$rb_tools/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ]; then
+        return 0
+    fi
+    rb_tmp="$(mktemp -d)" || rb_tmp=""
+    if [ -n "$rb_tmp" ] \
+        && curl -fsSL --retry 2 --connect-timeout 20 --max-time 300 -o "$rb_tmp/rb.tar.bz2" "$rb_url" \
+        && [ "$($rb_hash "$rb_tmp/rb.tar.bz2" | cut -d' ' -f1)" = "$rb_sum" ] \
+        && tar -xjf "$rb_tmp/rb.tar.bz2" -C "$rb_tmp" 2>/dev/null \
+        && rb_dir="$(dirname "$(ls "$rb_tmp"/*/rubberband)")" \
+        && [ "$($rb_hash "$rb_dir/rubberband" | cut -d' ' -f1)" = "$rb_bin_sum" ] \
+        && mkdir -p "$rb_tools" \
+        && cp "$rb_dir/COPYING" "$rb_tools/COPYING" \
+        && cp "$rb_dir/rubberband" "$rb_tools/.rubberband.part" \
+        && chmod 755 "$rb_tools/.rubberband.part" \
+        && mv -f "$rb_tools/.rubberband.part" "$rb_tools/rubberband"; then
+        printf '%s\n' "The recording in your key: Rubber Band is ready."
+    else
+        rm -f "$rb_tools/.rubberband.part"
+        printf '%s\n' "The recording in your key is off: Rubber Band could not be downloaded. Run the installer again later to add it."
+    fi
+    [ -z "$rb_tmp" ] || rm -rf "$rb_tmp"
+    return 0
 }
 
 REF="${WOODSHED_REF:-main}"
@@ -145,12 +181,19 @@ if [ "$(uname -s)" = "Darwin" ] && [ "${WOODSHED_NO_MENU:-0}" != "1" ]; then
     mac_app "$BIN"
     say "App added: woodshed, in your Applications folder (Launchpad and Spotlight find it too)."
 fi
+if [ "$(uname -s)" = "Darwin" ]; then
+    get_rubberband || true
+fi
 
 say ""
 say "woodshed is installed: $("$BIN/woodshed" --version)"
 if ! command -v ffmpeg >/dev/null 2>&1; then
     say ""
-    say "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, add ffmpeg:"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        say "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, add ffmpeg:"
+    else
+        say "MP3, WAV, FLAC and Ogg files work as they are. For AAC (M4A) and video files, and the recording in your key, add ffmpeg:"
+    fi
     if [ "$(uname -s)" = "Darwin" ]; then
         say "  brew install ffmpeg     (with Homebrew: https://brew.sh)"
     elif command -v apt-get >/dev/null 2>&1; then
