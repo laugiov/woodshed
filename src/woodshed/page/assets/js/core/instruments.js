@@ -144,13 +144,13 @@
   }
 
   // What the keys heard on the record in a bar (`pcs`, before transposition) says against the chart (spec 015):
-  // "none" (no upper note), "root" (the chord's root alone), { other } (the third the chart's chord does not
+  // "none" (no upper note), "root" (the root of the bar's one chord alone), { other } (the third the chart's chord does not
   // have, without its own), or null (a reading to show as heard). The third is only checked on a bar of one
   // chord that has exactly one third (no sus, 5 or no chord).
   function voicingVerdict(cur, chords, pcs) {
     if (!pcs.length) return "none";
     if (cur.pc < 0) return null;
-    if (pcs.length === 1 && mod12(pcs[0]) === mod12(cur.pc)) return "root";
+    if (chords.length === 1 && pcs.length === 1 && mod12(pcs[0]) === mod12(cur.pc)) return "root";
     const quality = CHORDS.qualities[cur.quality];
     if (chords.length !== 1 || !quality) return null;
     const tones = quality.intervals.map(mod12);
@@ -159,6 +159,24 @@
     const heard = pcs.map(mod12);
     const other = mod12(cur.pc + 7 - third);
     return heard.includes(other) && !heard.includes(mod12(cur.pc + third)) ? { other } : null;
+  }
+
+  // The note `semis` (3 or 4) above a spelled root, spelled as a third: the root's letter plus two letters
+  // ("A", 4 -> "C#", not "Db"). Null when that takes a double sharp or flat (D# -> F##): the caller names it plainly.
+  const LETTERS = "CDEFGAB";
+  const NATURAL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  function thirdName(root, semis) {
+    const letter = LETTERS[(LETTERS.indexOf(root[0]) + 2) % 7];
+    const sign = root[1] === "#" ? 1 : root[1] === "b" ? -1 : 0;
+    const off = mod12(NATURAL[root[0]] + sign + semis - NATURAL[letter]);
+    return off === 0 ? letter : off === 1 ? letter + "#" : off === 11 ? letter + "b" : null;
+  }
+
+  // The keys read thin on a song (spec 015, PR review): one note in a quarter of its bars or more, as { n, m },
+  // else null. Said once for the song instead of an instruction on every such bar.
+  function keysThin(voicings, m) {
+    const n = voicings.filter((pcs) => pcs && pcs.length === 1).length;
+    return m > 0 && n * 4 >= m ? { n, m } : null;
   }
 
   // Four-string bass frets for a bar of sixteenths: the lowest comfortable string near the previous fret.
@@ -246,6 +264,6 @@
     // A chord's slash bass moved by t semitones, or null.
     bassOf: (c, t) => (isNone(c.bass) ? null : c.bass + (t || 0)),
     STRINGS, VOICES, tableShape, barreShape, movableShape, openOrBarre, triadOf, triadCandidates, funkVoicings,
-    fingeredMidi, keysMidi, voicingVerdict, bassFrets, counts, bestTranspose, hitsText, grooveHits, playedText,
+    fingeredMidi, keysMidi, voicingVerdict, thirdName, keysThin, mod12, bassFrets, counts, bestTranspose, hitsText, grooveHits, playedText,
   };
 })();

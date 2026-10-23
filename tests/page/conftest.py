@@ -289,6 +289,14 @@ def _keys_after_the_lift(song: dict[str, Any]) -> None:
     song["parts"]["voicings"][17] = [6, 10]
 
 
+def _keys_thin(song: dict[str, Any], below: bool = False) -> None:
+    """The keys read as one note in a quarter of pop's bars (one bar fewer with `below`), the others a triad."""
+    heard = song["parts"]["voicings"]
+    thin = (len(song["bars"]) + 3) // 4 - (1 if below else 0)
+    for u in range(len(song["bars"])):
+        heard[u] = [7] if u < thin else [0, 4, 7]
+
+
 def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _no_sections(song)
     _with_lyrics(song)
@@ -309,6 +317,8 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "lyrics-lift-early": _lyrics_before_the_lift,
     "keys-readings": _keys_readings,
     "keys-lift": _keys_after_the_lift,
+    "keys-thin": _keys_thin,
+    "keys-thin-below": lambda song: _keys_thin(song, below=True),
 }  # fmt: skip
 
 

@@ -71,7 +71,7 @@ never hides inside a lyric line.
 | Keys | Voice |
 |:---:|:---:|
 | <img src="docs/images/desk-keys.png" alt="Keys: the chord on a keyboard and the notes heard on the record, checked against the chart" width="100%"> | <img src="docs/images/desk-voice.png" alt="Voice: the song's range against your voice type" width="100%"> |
-| The chord on a keyboard, the next one outlined, and the notes heard on the record in this bar, checked against the chart: a lone root or a third that disagrees with it is said. | The range of the melody against your voice type, and the key that suits you. |
+| The chord on a keyboard, the next one outlined, and the notes heard on the record in this bar, checked against the chart: a third that disagrees with it is said, and a song where the keys read thin says so once. | The range of the melody against your voice type, and the key that suits you. |
 
 Change the key and everything follows: the chart, the shapes, the tab, the keyboard.
 

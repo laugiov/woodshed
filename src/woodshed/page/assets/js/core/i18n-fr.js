@@ -347,7 +347,7 @@
     "Barre chords": "Accords barrés",
     "Funk triads": "Triades funk",
     "{tip} Click a shape to hear it.": "{tip} Clique sur une position pour l'entendre.",
-    "Rhythm: the guitar's strumming": "Rythme : le grattage de la guitare",
+    "Rhythm: the guitar's strumming": "Rythme : celui de la guitare",
     "Rhythm: when the chords hit": "Rythme : quand tombent les accords",
     Chords: "Accords",
     "From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.":
@@ -376,7 +376,9 @@
     over: "sur",
     "▶ Hear it": "▶ Écouter",
     "No upper notes heard on the record in this bar.": "Aucune note du haut entendue sur le disque dans cette mesure.",
-    "Only the root heard on the record here: play the chord above.": "Seule la fondamentale s'entend sur le disque ici : joue l'accord au-dessus.",
+    "Only the root heard here.": "Seule la fondamentale s'entend ici.",
+    "The keys read thin on this song: one note in {n} of {m} bars. Where only one is heard, play the chart's chord.":
+      "Les claviers s'entendent peu sur ce morceau : une seule note dans {n} mesures sur {m}. Là où une seule s'entend, joue l'accord de la grille.",
     "The record has {note} here, the chart says {chord}: check this bar by ear.":
       "Le disque a {note} ici, la grille dit {chord} : vérifie cette mesure à l'oreille.",
     "Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.":

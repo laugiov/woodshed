@@ -83,16 +83,22 @@ def test_with_no_keys_heard_the_keys_panel_still_names_the_guitars_strumming(ope
     expect(desk.locator(".src-note").last).to_have_text(GUITAR_NOTE)
 
 
-def test_the_guitar_panel_and_the_other_reads_keep_their_rhythm_heading(open_page: Any) -> None:
+def test_the_guitar_panel_keeps_its_rhythm_heading(open_page: Any) -> None:
     o = open_page("pop", six=True)
     o.js("Woodshed.app.setInstrument('guitar')")
     desk = o.page.get_by_test_id("desk")
     expect(rhythm_head(desk)).to_have_text("Rhythm: when the chords hit")
     expect(desk).not_to_contain_text("The keys' own rhythm is not read.")
+
+
+def test_the_strumming_read_from_the_keys_keeps_its_rhythm_heading(open_page: Any) -> None:
     o = open_page("pop", six=True, guitar=False)  # the strumming read from the keys themselves
     desk = keys_at(o, 0)
     expect(rhythm_head(desk)).to_have_text("Rhythm: when the chords hit")
     expect(desk).not_to_contain_text("The keys' own rhythm is not read.")
+
+
+def test_four_stems_keep_their_rhythm_heading(open_page: Any) -> None:
     o = open_page("pop")  # four stems: keys and guitar are one track
     desk = keys_at(o, 0)
     expect(rhythm_head(desk)).to_have_text("Rhythm: when the chords hit")
@@ -103,7 +109,7 @@ def test_the_guitar_panel_and_the_other_reads_keep_their_rhythm_heading(open_pag
 def test_the_guitars_strumming_in_french(open_page: Any) -> None:
     o = open_page("pop", six=True)
     desk = keys_at(o, 0)
-    assert rhythm_head(desk).text_content() == f"Rythme{NBSP}: le grattage de la guitare"
+    assert rhythm_head(desk).text_content() == f"Rythme{NBSP}: celui de la guitare"
     note = str(desk.locator(".src-note").last.text_content())
     assert note.startswith(f"D'après la piste séparée de la guitare{NBSP}: accords sur ")
     assert note.endswith(f"{NBSP}: frappé dans plus de mesures. Le rythme propre des claviers n'est pas lu.")
@@ -158,6 +164,7 @@ def test_the_reading_verdict_of_a_bar(open_page: Any) -> None:
     assert verdict(o, [(9, "m")], []) == "none"
     assert verdict(o, [(-1, "")], []) == "none"
     assert verdict(o, [(7, "")], [7]) == "root"
+    assert verdict(o, [(7, ""), (2, "")], [7]) is None  # two chords: the playhead's root is not the bar's
     assert verdict(o, [(9, "m")], [1, 4]) == {"other": 1}  # Am, a major third heard
     assert verdict(o, [(11, "m7")], [3, 9]) == {"other": 3}  # Bm7, D sharp heard
     assert verdict(o, [(5, "")], [8, 0]) == {"other": 8}  # F, a minor third heard
@@ -179,11 +186,11 @@ def test_no_upper_note_heard_says_so_without_chips(open_page: Any) -> None:
     expect(desk.get_by_test_id("hear-voicing")).to_have_count(0)
 
 
-def test_only_the_root_heard_says_to_play_the_chord_above(open_page: Any) -> None:
+def test_only_the_root_heard_is_a_quiet_statement(open_page: Any) -> None:
     o = open_page("pop", variant="keys-readings")
     desk = keys_at(o, 1)
-    root = "Only the root heard on the record here: play the chord above."
-    expect(desk.get_by_test_id("voicing-root")).to_have_text(root)
+    expect(desk.get_by_test_id("voicing-root")).to_have_text("Only the root heard here.")
+    expect(desk.get_by_test_id("voicing-root")).to_have_class(re.compile(r"\bhint\b"))
     expect(desk.locator(".pc-chip")).to_have_count(0)  # no "G over G"
     expect(desk.get_by_test_id("hear-voicing")).to_be_visible()
 
@@ -191,24 +198,39 @@ def test_only_the_root_heard_says_to_play_the_chord_above(open_page: Any) -> Non
 def test_the_other_third_heard_is_said_under_the_chips(open_page: Any) -> None:
     o = open_page("pop", variant="keys-readings")
     desk = keys_at(o, 2)
-    expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("D♭", "Am"))
+    # The major third of A is C sharp, not D flat: a third is spelled as a third of the chart's root.
+    expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("C♯", "Am"))
     expect(desk.locator(".chips-row .pc-chip")).to_have_count(3)  # the chips as heard, over the root
+    expect(desk.locator(".chips-row .pc-chip").first).to_have_text("C♯")  # the chip agrees with the line
     expect(desk.get_by_test_id("hear-voicing")).to_be_visible()
     desk = keys_at(o, 3)
     expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("A♭", "F"))
+    expect(desk.locator(".chips-row .pc-chip").first).to_have_text("A♭")
 
 
 def test_the_other_third_follows_the_transposition(open_page: Any) -> None:
     o = open_page("pop", variant="keys-readings")
     o.js("Woodshed.app.transposeTo(2)")  # compared before transposition, said in the new key
     desk = keys_at(o, 2)
-    expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("E♭", "Bm"))
+    expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("D♯", "Bm"))
+    expect(desk.locator(".chips-row .pc-chip").first).to_have_text("D♯")
 
 
-def test_the_other_third_is_spelled_in_its_key_region(open_page: Any) -> None:
+def test_the_other_third_is_spelled_from_the_chords_own_root(open_page: Any) -> None:
     o = open_page("lift", variant="keys-lift")
     desk = keys_at(o, 17)
     expect(desk.get_by_test_id("voicing-check")).to_have_text(check_line("G♭", "E♭"))
+    expect(desk.locator(".chips-row .pc-chip").first).to_have_text("G♭")
+
+
+def test_a_third_is_two_letters_above_the_root(open_page: Any) -> None:
+    o = open_page("pop")
+    third = "([root, semis]) => Woodshed.instruments.thirdName(root, semis)"
+    cases = {("A", 4): "C#", ("B", 4): "D#", ("F", 3): "Ab", ("Eb", 3): "Gb", ("C#", 3): "E", ("Bb", 4): "D"}
+    for (root, semis), name in cases.items():
+        assert o.js(third, [root, semis]) == name, (root, semis)
+    assert o.js(third, ["D#", 4]) is None  # F double sharp: the caller falls back to the plain name
+    assert o.js(third, ["Gb", 3]) is None  # B double flat
 
 
 @pytest.mark.parametrize("bar", [4, 5, 6, 7], ids=["no-chord", "sus4", "two-chords", "both-thirds"])
@@ -235,13 +257,53 @@ def test_the_readings_in_french(open_page: Any) -> None:
     o = open_page("pop", variant="keys-readings")
     said = {
         0: ("voicing-none", "Aucune note du haut entendue sur le disque dans cette mesure."),
-        1: ("voicing-root", f"Seule la fondamentale s'entend sur le disque ici{NBSP}: joue l'accord au-dessus."),
-        2: ("voicing-check", f"Le disque a D♭ ici, la grille dit Am{NBSP}: vérifie cette mesure à l'oreille."),
+        1: ("voicing-root", "Seule la fondamentale s'entend ici."),
+        2: ("voicing-check", f"Le disque a C♯ ici, la grille dit Am{NBSP}: vérifie cette mesure à l'oreille."),
     }
     for bar, (testid, text) in said.items():
         desk = keys_at(o, bar)
         expect(desk.get_by_test_id(testid)).to_be_visible()
         assert desk.get_by_test_id(testid).text_content() == text
+
+
+# The keys read thin: said once for the song, under "On the record", from a quarter of the bars.
+
+
+def thin_line(n: int, m: int) -> str:
+    return (
+        f"The keys read thin on this song: one note in {n} of {m} bars."
+        " Where only one is heard, play the chart's chord."
+    )
+
+
+def test_keys_read_thin_on_a_quarter_of_the_bars_is_said_for_the_song(open_page: Any) -> None:
+    o = open_page("pop", variant="keys-thin")
+    m = int(str(o.js("Woodshed.current.bars.length")))
+    n = (m + 3) // 4
+    for bar in (0, m - 1):  # the same note on a one-note bar and on a full one
+        desk = keys_at(o, bar)
+        expect(desk.get_by_test_id("keys-thin")).to_have_count(1)
+        expect(desk.get_by_test_id("keys-thin")).to_have_text(thin_line(n, m))
+        expect(desk.get_by_test_id("keys-thin").locator("xpath=..")).to_have_class(re.compile(r"\bsrc-note\b"))
+
+
+@pytest.mark.parametrize("variant", ["keys-thin-below", "keys-readings"])
+def test_keys_read_thin_below_a_quarter_of_the_bars_says_nothing(open_page: Any, variant: str) -> None:
+    o = open_page("pop", variant=variant)
+    desk = keys_at(o, 1)
+    expect(desk.locator(".chips-row, [data-testid=voicing-root]").first).to_be_visible()
+    expect(desk.get_by_test_id("keys-thin")).to_have_count(0)
+
+
+@french()
+def test_keys_read_thin_in_french(open_page: Any) -> None:
+    o = open_page("pop", variant="keys-thin")
+    m = int(str(o.js("Woodshed.current.bars.length")))
+    desk = keys_at(o, 0)
+    assert desk.get_by_test_id("keys-thin").text_content() == (
+        f"Les claviers s'entendent peu sur ce morceau{NBSP}: une seule note dans {(m + 3) // 4} mesures sur {m}."
+        " Là où une seule s'entend, joue l'accord de la grille."
+    )
 
 
 # R6: French punctuation keeps to its word.
