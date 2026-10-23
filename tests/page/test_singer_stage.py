@@ -172,6 +172,16 @@ def test_part_next_while_stopped_shows_the_part_first_line_with_next(open_page: 
     expect(first_line(o)).to_contain_text("radio")  # the chorus's line, not the verse's held word
 
 
+def test_part_back_while_stopped_shows_the_part_first_line(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-named")
+    on_stage(o)
+    at(o, bar_start(o, 6), False)  # inside the chorus, stopped
+    o.page.get_by_test_id("stage-prev").click()  # back to the start of this part, where its first line starts
+    expect(o.page.get_by_test_id("stage-section")).to_have_text("Chorus 1")
+    expect(first_line(o)).to_have_class("st-line now")  # the cursor on its first word: being sung
+    expect(first_line(o)).to_contain_text("radio")
+
+
 @pytest.mark.parametrize("beats", [0.5, 3])
 def test_part_next_while_stopped_lights_a_pickup_line(open_page: Any, beats: float) -> None:
     o = open_page("pop", variant="lyrics-named")
@@ -240,13 +250,13 @@ def test_stopped_before_a_key_change_the_key_line_comes_first_then_next(open_pag
     assert order[:3] == ["key", "label", "ready"], order
 
 
-def test_stopped_in_a_loop_wrapped_back_the_loop_s_line_comes_next(open_page: Any) -> None:
+def test_stopped_at_a_loop_s_start_the_loop_s_first_line_comes_next(open_page: Any) -> None:
     o = open_page("pop", variant="lyrics")
     on_stage(o)
     data = lyrics_for(o.js("Woodshed.current.song"), 1)
     set_words(o, data)
     o.js("Woodshed.app.setLoop([0, 3], true)")
-    at(o, bar_start(o, 0) + 0.05, False)  # wrapped back to the loop's start, stopped
+    at(o, bar_start(o, 0) + 0.05, False)  # at the loop's start, stopped (where a wrap lands)
     expect(first_line(o)).to_have_class("st-line ready")
     expect(o.page.get_by_test_id("stage-next-label")).to_have_count(1)
 
@@ -270,6 +280,7 @@ def test_next_reads_from_a_mic_stand_and_stands_apart_from_the_chords(open_page:
     size = label.evaluate("(el) => parseFloat(getComputedStyle(el).fontSize)")
     assert size >= 15
     gap = o.js("""(() => { const l = document.querySelector('[data-testid=stage-next-label]').getBoundingClientRect();
-      const c = document.querySelector('#stLyrics .st-line .lc, #stLyrics .st-line').getBoundingClientRect();
+      const chords = document.querySelector('#stLyrics .st-line .lc') || document.querySelector('#stLyrics .st-line');
+      const c = chords.getBoundingClientRect();
       return c.top - l.bottom; })()""")
     assert gap >= 4
