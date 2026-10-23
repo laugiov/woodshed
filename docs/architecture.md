@@ -405,7 +405,7 @@ While the song plays, `keepInView` (`views/chart.js`) scrolls the page so the ba
 `audio/transport.js` plays the real recording, not a synthesis.
 
 - One `<audio>` element per track. Only one plays at a time, so instruments never drift apart. Switching "full mix" to "without bass" swaps the element at the same position.
-- The new element takes over only once it plays: a start the browser refuses (iOS starts a sound only from a tap, and a switch comes after its file loads) leaves the old one playing, and `setTrack` / `setFile` resolve `"refused"`; the page asks for another tap (spec 011). On iOS and iPadOS (`W.iOS()`: iPadOS Safari says "Macintosh", its touch points tell it apart) each `touchend`, `click` or `keydown` calls `transport.unlock()`: every element not yet unlocked is started muted and paused at once, so it may play later.
+- The new element takes over only once it plays: a start the browser refuses (iOS starts a sound only from a tap, and a switch comes after its file loads) leaves the old one playing, and `setTrack` / `setFile` resolve `"refused"`; the page asks for another tap (spec 011). On iOS and iPadOS (`W.iOS()`: iPadOS Safari says "Macintosh", its touch points tell it apart) each `touchend`, `click` or `keydown` calls `transport.unlock()`: every element not yet unlocked is started and paused at once (no sound comes out), so it may play later.
 - Speed changes use the browser's own time-stretch: `playbackRate` with `preservesPitch`. woodshed has no stretching code of its own.
 - Loops are checked on `timeupdate` too, because throttled tabs run no animation frames.
 

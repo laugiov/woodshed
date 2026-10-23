@@ -243,15 +243,17 @@
       if (!song.tracks.some((t) => t.id === id)) return false;
       store.set({ track: id }); // the menu shows the choice at once; the audio follows when loaded
       const ok = await transport.setTrack(id);
+      // A switch asked since this one (queued) keeps its mark in the menu.
+      const stillMine = () => store.get().track === id;
       if (ok === "refused") {
-        store.set({ track: transport.track });
+        if (stillMine()) store.set({ track: transport.track });
         app.toast(W.t("Tap the track again to switch."));
         return false;
       }
       if (!ok) {
         const kept = song.tracks.find((t) => t.id === transport.track);
         const failed = song.tracks.find((t) => t.id === id);
-        store.set({ track: transport.track });
+        if (stillMine()) store.set({ track: transport.track });
         app.toast(W.t("Could not read {file}. Still playing: {track}.", { file: failed.file, track: W.t(kept.label) }));
         return ok;
       }

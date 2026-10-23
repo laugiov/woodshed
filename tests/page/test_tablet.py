@@ -112,6 +112,40 @@ def test_a_track_switch_the_browser_refuses_keeps_the_old_track_playing(
     assert problems == []
 
 
+def test_switches_queued_behind_a_refused_one_keep_the_menu_on_the_last(
+    browser: Browser, server: app.AppServer
+) -> None:
+    problems: list[str] = []
+    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE, ipad=False)
+    playing(page)
+    page.evaluate("__refuse.add('solo-bass')")
+    said = page.evaluate("Promise.all([Woodshed.app.setTrack('solo-bass'), Woodshed.app.setTrack('minus-bass')])")
+    assert said == [False, True]
+    assert page.evaluate("[Woodshed.app.store.get().track, Woodshed.app.transport.track]") == ["minus-bass"] * 2
+    assert problems == []
+
+
+def test_a_key_changed_while_its_file_starts_keeps_the_music(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    slow = """
+    const play0 = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      const started = play0.call(this);
+      if (this.dataset.file !== 'audio/minus-bass.flac') return started;
+      return new Promise((resolve) => setTimeout(() => resolve(started), 600)); // a slow start
+    };
+    """
+    page = tablet(browser, server.url + "pop.woodshed/index.html", problems, slow, ipad=False)
+    playing(page)
+    page.evaluate("window.__wanted = true; setTimeout(() => (window.__wanted = false), 200)")  # another key, meanwhile
+    said = page.evaluate("Woodshed.app.transport.setFile('mix', 'audio/minus-bass.flac', () => window.__wanted)")
+    assert said is True
+    assert page.evaluate("Woodshed.app.transport.fileOf('mix')") == "audio/mix.flac"
+    assert not page.evaluate("document.querySelector(`audio[data-file='audio/mix.flac']`).paused")  # no silence
+    assert page.evaluate("document.querySelector(`audio[data-file='audio/minus-bass.flac']`)") is None
+    assert problems == []
+
+
 def test_a_key_the_browser_refuses_keeps_the_original_file_playing(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     page = tablet(browser, server.url + "pop.woodshed/index.html", problems, REFUSE, ipad=False)

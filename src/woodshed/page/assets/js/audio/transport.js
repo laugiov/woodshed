@@ -205,11 +205,17 @@
         to.currentTime = from.currentTime;
         const wasPlaying = !from.paused;
         const took = await takeOver(from, to);
-        if (took === "failed" || !still()) {
-          to.remove(); // a file that will not play, or a key no longer wanted: not kept
-          delete els[id + "|" + file];
+        const wanted = still(); // another key may have been asked while it started
+        if (took !== "ok" || !wanted) {
+          to.pause();
+          to.preload = "none";
+          if (took === "failed" || !wanted) {
+            to.remove(); // a file that will not play, or a key no longer wanted: not kept
+            delete els[id + "|" + file];
+          }
+          if (!wanted) return true; // the old file plays on, as asked
+          return took === "refused" ? "refused" : false; // the old file plays on
         }
-        if (took !== "ok") return took === "refused" ? "refused" : false; // the old file plays on
         files[id] = file;
         if (wasPlaying) watch();
         from.pause();
