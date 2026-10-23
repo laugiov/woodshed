@@ -46,7 +46,6 @@ def test_songs_are_short_enough_for_fast_tests() -> None:
     assert all(synth.render(n).mix.size / synth.SR <= (70.0 if n in synth.KEY_SONGS else 30.0) for n in synth.SONGS)
 
 
-
 def test_write_creates_wav_and_lab(tmp_path: Path) -> None:
     out = synth.write("pop", tmp_path)
     assert out.wav.exists() and out.lab.exists()
