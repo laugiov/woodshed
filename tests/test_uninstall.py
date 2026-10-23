@@ -657,6 +657,7 @@ def test_a_tools_setting_that_is_not_a_folder_of_its_own_is_ignored(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: str
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Path.home() on Windows
     monkeypatch.setenv("WOODSHED_TOOLS", value)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     assert paths.tools_dir("linux") == tmp_path / ".local" / "share" / "woodshed" / "tools"
