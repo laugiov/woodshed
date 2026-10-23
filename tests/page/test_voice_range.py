@@ -3,6 +3,8 @@ sentence saying whether it goes higher, the best key over the whole range, the c
 
 from __future__ import annotations
 
+import json
+import shutil
 import threading
 import time
 from collections.abc import Iterator
@@ -11,10 +13,11 @@ from typing import Any
 
 import pytest
 from playwright.sync_api import Browser, Page, expect
+from playwright.sync_api import Error as PlaywrightError
 
-from tests.page.conftest import built
+from tests.page.conftest import VARIANTS, rewritten
 from tests.page.test_band import until
-from woodshed import app
+from woodshed import app, build
 from woodshed.run import MANIFEST, Options
 
 NBSP = "\u00a0"
@@ -138,7 +141,7 @@ def test_in_french(open_page: Any, variant: str, text: str) -> None:
     page = voice(open_page, variant, "fr")
     expect(ending(page)).to_have_text(text)
     if variant == "voice-lift-inside":
-        assert f"Dès la mesure 17{NBSP}: F3 à B♭3" in labels(page)
+        assert f"À partir de la mesure 17{NBSP}: F3 à B♭3" in labels(page)
 
 
 @pytest.mark.parametrize(("variant", "best"), [("voice-lift-inside", "-5"), ("voice-lift-higher", "-6")])
@@ -207,14 +210,14 @@ def test_a_song_in_one_key_shows_nothing_new(open_page: Any) -> None:
 
 @pytest.fixture
 def library(tmp_path: Path, pages_root: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[app.AppServer]:
-    import json
-    import shutil
-
+    """lift's page as a page built before the voice range per key (not measured yet), served by a library."""
     monkeypatch.setenv("WOODSHED_CACHE", str(tmp_path / "cache"))
     root = tmp_path / "library"
-    shutil.copytree(built("pop", True, pages_root), root / "pop.woodshed")
-    summary = {"title": "pop", "key": "C", "bpm": 120, "meter": "4/4", "duration": 16, "doubts": 0, "stems": True}
-    (root / "pop.woodshed" / MANIFEST).write_text(json.dumps({"settings": {}, "summary": summary, "complete": True}))
+    shutil.copytree(
+        rewritten("lift", pages_root, "voice-lift-unmeasured", VARIANTS["voice-lift-unmeasured"]), PAGE(root)
+    )
+    summary = {"title": "lift", "key": "C", "bpm": 120, "meter": "4/4", "duration": 58, "doubts": 0, "stems": True}
+    (PAGE(root) / MANIFEST).write_text(json.dumps({"settings": {}, "summary": summary, "complete": True}))
     srv = app.AppServer(app.Library(root, Options(use_stems=False, open_page=False)))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield srv
@@ -223,20 +226,114 @@ def library(tmp_path: Path, pages_root: str, monkeypatch: pytest.MonkeyPatch) ->
     srv.server_close()
 
 
-def test_an_open_page_loads_again_once_the_library_measured_it(browser: Browser, library: app.AppServer) -> None:
-    page = browser.new_context(locale="en-US").new_page()
-    page.goto(library.url + "pop.woodshed/index.html")
-    until(page, "window.Woodshed && window.Woodshed.ready === true")
+def PAGE(root: Path) -> Path:
+    return root / "lift.woodshed"
+
+
+def measured(srv: app.AppServer) -> str:
+    """The library's measure, as build.add_vocal_regions leaves the page; the old page's text is returned."""
+    index = PAGE(srv.library.root) / "index.html"
+    text = index.read_text(encoding="utf-8")
+    found = build.DATA_BLOCK.search(text)
+    assert found is not None
+    data = json.loads(found.group(1))
+    data["song"]["parts"]["vocal"]["regions"] = [
+        {"bar": 0, "low": 53, "high": 61, "notes": 68},
+        {"bar": 16, "low": 53, "high": 58, "notes": 13},
+    ]
+    index.write_text(text[: found.start(1)] + build.script_json(data) + text[found.end(1) :], encoding="utf-8")
+    srv.live.page_updated("lift.woodshed")
+    return text
+
+
+def settled(page: Page, expression: str, timeout: float = 15) -> None:
+    """`expression` true, across the page's own reloads."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            if page.evaluate(expression):
+                return
+        except PlaywrightError:  # loading again
+            pass
+        assert time.monotonic() < deadline, f"still false after {timeout} s: {expression}"
+        page.wait_for_timeout(50)
+
+
+def listening(srv: app.AppServer) -> None:
     deadline = time.monotonic() + 10
-    while library.live.followers < 1:  # the page listens to the library
+    while srv.live.followers < 1:  # the page listens to the library
         assert time.monotonic() < deadline
         time.sleep(0.05)
+
+
+def test_an_open_page_loads_again_once_the_library_measured_it(browser: Browser, library: app.AppServer) -> None:
+    page = browser.new_context(locale="en-US").new_page()
+    page.goto(library.url + "lift.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    listening(library)
+    page.get_by_test_id("stage-open").click()  # on stage, playing
     page.evaluate("window.notReloaded = true; Woodshed.app.togglePlay()")
     until(page, "Woodshed.debug().playing === true")
-    library.live.page_updated("pop.woodshed")
-    page.wait_for_timeout(500)
+    measured(library)
+    page.wait_for_timeout(1000)
     assert page.evaluate("window.notReloaded === true")  # never under the music
     with page.expect_navigation():  # stopped: the page loads again, with what the library measured
         page.evaluate("Woodshed.app.togglePlay()")
     until(page, "window.Woodshed && window.Woodshed.ready === true && window.notReloaded === undefined")
+    until(page, "Woodshed.app.store.get().stage === true")  # still on stage
+    page.evaluate("Woodshed.app.setInstrument('voice')")
+    expect(page.get_by_test_id("voice-ending")).to_have_count(1)
+    page.evaluate("window.notReloaded = true")
+    page.wait_for_timeout(1000)
+    assert page.evaluate("window.notReloaded === true")  # measured now: loaded once, not again
+    page.context.close()
+
+
+def test_a_page_that_loaded_before_the_measure_never_misses_it(browser: Browser, library: app.AppServer) -> None:
+    """The measure lands between the page's load and its first word with the library: still loaded again."""
+    old = measured(library)
+    page = browser.new_context(locale="en-US").new_page()
+    served: list[str] = []
+
+    def first_the_old_page(route: Any) -> None:
+        if not served:
+            served.append(route.request.url)
+            route.fulfill(body=old, content_type="text/html; charset=utf-8")
+        else:
+            route.continue_()
+
+    page.route("**/lift.woodshed/index.html", first_the_old_page)
+    page.goto(library.url + "lift.woodshed/index.html")  # the old page, then the measured one
+    settled(page, "window.Woodshed && window.Woodshed.ready === true && !!Woodshed.app.song.parts.vocal.regions")
+    assert len(served) == 1
+    page.context.close()
+
+
+def test_a_leading_page_is_not_loaded_again_until_it_leads_no_more(browser: Browser, library: app.AppServer) -> None:
+    """A reload does not take the lead back: the band would lose its leader."""
+    page = browser.new_context(locale="en-US").new_page()
+    page.goto(library.url + "lift.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    listening(library)
+    page.get_by_test_id("band-lead").click()
+    until(page, "Woodshed.band.mode() === 'lead'")
+    page.evaluate("window.notReloaded = true")
+    measured(library)
+    page.wait_for_timeout(1500)
+    assert page.evaluate("window.notReloaded === true")  # stopped, but leading
+    with page.expect_navigation():
+        page.get_by_test_id("band-alone").click()  # on its own again: now it loads
+    settled(page, "window.Woodshed && window.Woodshed.ready === true && !!Woodshed.app.song.parts.vocal.regions")
+    page.context.close()
+
+
+def test_a_page_already_measured_is_not_loaded_again(browser: Browser, library: app.AppServer) -> None:
+    measured(library)
+    page = browser.new_context(locale="en-US").new_page()
+    page.goto(library.url + "lift.woodshed/index.html")
+    until(page, "window.Woodshed && window.Woodshed.ready === true")
+    listening(library)
+    page.evaluate("window.notReloaded = true")
+    page.wait_for_timeout(1000)
+    assert page.evaluate("window.notReloaded === true")
     page.context.close()

@@ -150,6 +150,7 @@ class Library:
         self.jobs: dict[str, Job] = {}
         self.reserved: set[str] = set()
         self.running: Path | None = None
+        self.measuring: Path | None = None  # a page whose voice range per key is measured (spec 024)
         self.stopping = threading.Event()  # set by interrupted(): the worker takes no new job, records no failure
         # Analyses and words share one queue: one heavy job at a time. Words carry their text.
         self.queue: queue.Queue[tuple[Job, Path, Options, bool, str | None]] = queue.Queue()
@@ -162,7 +163,7 @@ class Library:
         self.on_reload: Callable[[str], None] | None = None  # told when a page's data changed (Live.page_updated)
         # The recording in another key (spec 007): rendered one track at a time, never during an analysis.
         self.renders = (
-            pitch.Renders(self.root, busy=lambda: self.running is not None, free_margin=FREE_MARGIN)
+            pitch.Renders(self.root, busy=self.busy, free_margin=FREE_MARGIN)
             if opts.pitch and pitch.tool() is not None
             else None
         )
@@ -218,37 +219,89 @@ class Library:
                 print(f"woodshed app: {manifest.parent.name}: not updated ({exc})", flush=True)
         return updated
 
+    def busy(self) -> bool:
+        """A heavy job runs (an analysis, words, a measure): the renders wait."""
+        return self.running is not None or self.measuring is not None
+
     def measure_voices(self) -> list[str]:
         """Pages built before the voice's range per key region (spec 024) get it, measured on their own vocal
-        track: queued behind any analysis, never during the start. A measure that fails leaves the page as it
-        was, so the next start tries again: the page's own data says what is measured, not its page revision."""
+        track in the background: never during the start, and songs, words and the renders a page waits for go
+        first. The page's own data says what is measured, not its page revision. A measure that fails is tried
+        again at the next start, then only once the page or woodshed changed (a note beside the page)."""
         queued = []
         for manifest in sorted(self.root.glob(f"*.woodshed/{MANIFEST}")):
             page = manifest.parent
-            if page.is_symlink() or not build.needs_vocal_regions(page):
+            if page.is_symlink() or not build.needs_vocal_regions(page) or self._gave_up(page):
                 continue
             job = Job(secrets.token_hex(6), page.name, page=page.name, kind="voice")  # the library's own: not listed
             self.queue.put((job, page, self.opts, False, None))
             queued.append(page.name)
         return queued
 
+    VOICE_TRIES = 2  # failed measures of one page, as it is, before the starts stop trying
+
+    def _voice_note(self, page: Path) -> Path:
+        return page.with_name(f".{page.name}.voice")
+
+    def _page_stamp(self, page: Path) -> list[Any]:
+        index = (page / "index.html").stat()
+        return [__version__, index.st_mtime_ns, index.st_size]
+
+    def _gave_up(self, page: Path) -> bool:
+        try:
+            note = json.loads(self._voice_note(page).read_text(encoding="utf-8"))
+            return bool(note["page"] == self._page_stamp(page) and note["failures"] >= self.VOICE_TRIES)
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def _voice_failed(self, page: Path, why: str) -> None:
+        note = self._voice_note(page)
+        try:
+            stamp = self._page_stamp(page)
+            try:
+                before = json.loads(note.read_text(encoding="utf-8"))
+                failures = int(before["failures"]) if before["page"] == stamp else 0
+            except (OSError, ValueError, KeyError, TypeError):
+                failures = 0
+            note.write_text(json.dumps({"page": stamp, "failures": failures + 1, "error": why}), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _others_first(self, item: tuple[Job, Path, Options, bool, str | None]) -> bool:
+        """Before a measure: a song or words queued go first (the measure goes back to the end of the queue,
+        True), and a render a page waits for is let through (waited for here)."""
+        while not self.stopping.is_set():
+            with self.queue.mutex:
+                others = any(queued[0].kind != "voice" for queued in self.queue.queue)
+            if others:
+                self.queue.put(item)
+                self.queue.task_done()
+                return True
+            if self.renders is None or not self.renders.wanted():
+                return False
+            time.sleep(0.2)
+        return False
+
     def _measure_voice(self, job: Job, page: Path) -> None:
         try:
             with self.lock:
                 if self.stopping.is_set():
                     return
-                self.running = page  # the renders wait, as for an analysis
+                self.measuring = page  # the renders wait, as for an analysis
             job.status = "measuring"
             if build.add_vocal_regions(page) and self.on_reload is not None:
                 self.on_reload(page.name)
+            self._voice_note(page).unlink(missing_ok=True)
             job.status = "done"
-        except Exception as exc:  # the page stays as it was, measured again at the next start
+        except Exception as exc:  # the page stays as it was
             job.status, job.message = "failed", str(exc)
+            if not self.stopping.is_set():
+                self._voice_failed(page, str(exc))
             print(f"woodshed app: {page.name}: the voice range per key was not measured ({exc})", flush=True)
         finally:
             job.ended = time.time()
             with self.lock:
-                self.running = None
+                self.measuring = None
             self.queue.task_done()
 
     def _page_song(self, page: Path) -> dict[str, Any] | None:
@@ -766,7 +819,8 @@ class Library:
         while True:
             job, path, opts, uploaded, words = self.queue.get()
             if job.kind == "voice":
-                self._measure_voice(job, path)
+                if not self._others_first((job, path, opts, uploaded, words)):
+                    self._measure_voice(job, path)
                 continue
             if words is not None:
                 self._place_words(job, path, words, opts)

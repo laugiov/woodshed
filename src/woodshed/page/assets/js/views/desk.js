@@ -487,8 +487,8 @@
     let measurer = null;
     function textWidth(text, size) {
       measurer = measurer || document.createElement("canvas").getContext("2d");
-      measurer.font = size + "px " + getComputedStyle(document.body).fontFamily;
-      return measurer.measureText(text).width;
+      measurer.font = size + "px " + getComputedStyle($("desk")).fontFamily;
+      return measurer.measureText(text).width * 1.08; // a margin: the drawing's text may render a little wider
     }
 
     function voiceBody(s) {
@@ -516,13 +516,13 @@
           range.append(svg("text", { x: X(m), y: bottom + fs, "font-size": fs, "text-anchor": "middle", fill: "var(--muted)" }, "C" + (m / 12 - 1)));
         }
       }
-      // A range's bar, its label beside it: on its right, else on its left, else inside.
+      // A range's bar, its label beside it: on its right, else on its left, else over it, inside the drawing.
       const bar = (a, b, y, label, attrs) => {
         range.append(svg("rect", { x: X(a), y, width: X(b) - X(a), height: fs + 5, rx: 5, ...attrs }));
         const w = textWidth(label, fs);
         const right = X(b) + 6 + w <= width;
         const left = X(a) - 6 - w >= 0;
-        const at = right ? { x: X(b) + 6 } : left ? { x: X(a) - 6, "text-anchor": "end" } : { x: X(a) + 6 };
+        const at = right ? { x: X(b) + 6 } : left ? { x: X(a) - 6, "text-anchor": "end" } : { x: Math.max(0, Math.min(X(a) + 6, width - w)) };
         range.append(svg("text", { ...at, y: y + fs, "font-size": fs, fill: "var(--ink)" }, label));
       };
       bar(vocal.low + t, vocal.high + t, 8, W.t("Song: {low}–{high}", { low: name(vocal.low), high: name(vocal.high) }), { fill: "var(--warn-soft)", stroke: "var(--warn)" });

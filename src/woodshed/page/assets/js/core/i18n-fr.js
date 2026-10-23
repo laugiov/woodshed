@@ -439,7 +439,7 @@
       "Aucun chant détecté sur la piste de voix séparée : pas de tessiture à comparer.",
     "Song vocal range against your voice": "Tessiture du morceau face à ta voix",
     "Song: {low}–{high}": "Morceau : {low} à {high}",
-    "From bar {n}: {low}–{high}": "Dès la mesure {n} : {low} à {high}",
+    "From bar {n}: {low}–{high}": "À partir de la mesure {n} : {low} à {high}",
     "From bar {n}: too little singing to measure.": "À partir de la mesure {n} : trop peu de chant pour mesurer.",
     "From bar {n} it goes higher and lower: {low} to {high}.": "À partir de la mesure {n}, ça monte plus haut et descend plus bas : de {low} à {high}.",
     "From bar {n} it goes higher: up to {high}.": "À partir de la mesure {n}, ça monte plus haut : jusqu'à {high}.",

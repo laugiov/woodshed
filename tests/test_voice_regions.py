@@ -18,7 +18,7 @@ import soundfile as sf
 
 from tests import synth
 from tests.test_analysis import fake_stems
-from woodshed import analysis, app, build, stems
+from woodshed import analysis, app, build, pitch, stems
 from woodshed import song as song_json
 from woodshed.model import KeyRegion, RegionRange, Song
 from woodshed.run import MANIFEST, Options
@@ -166,7 +166,7 @@ def test_the_measure_never_holds_the_start(tmp_path: Path, sung_lift: Sung, monk
     def serve_forever(self: app.AppServer) -> None:
         # The app is serving while the measure still runs: the start never waited for it.
         assert measuring.wait(20)
-        served.append(self.library.running is not None)  # one heavy job at a time: it holds the queue's turn
+        served.append(self.library.busy())  # one heavy job at a time: the renders wait for it
         release.set()
         self.library.queue.join()
 
@@ -178,32 +178,131 @@ def test_the_measure_never_holds_the_start(tmp_path: Path, sung_lift: Sung, monk
     assert data_of(root / "lift.woodshed")["song"]["parts"]["vocal"]["regions"][1]["high"] == 72
 
 
-def test_a_failed_measure_is_tried_again_at_the_next_start(
+REGIONS = [{"bar": 0, "low": 60, "high": 70, "notes": 20}, {"bar": 16, "low": 62, "high": 72, "notes": 9}]
+
+
+def test_a_failed_measure_is_tried_again_at_the_next_start_but_not_at_every_start(
     tmp_path: Path, sung_lift: Sung, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = library_with(tmp_path, sung_lift)
     page = root / "lift.woodshed"
     index = (page / "index.html").read_bytes()
-    real = build.measure_vocal_regions
 
     def broken(page: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
         raise RuntimeError("the vocal track could not be read")
 
+    def start(expected: list[str]) -> app.Library:
+        lib = app.Library(root, Options(use_stems=False, open_page=False))
+        assert lib.measure_voices() == expected
+        lib.queue.join()
+        lib.interrupted()
+        return lib
+
     monkeypatch.setattr(build, "measure_vocal_regions", broken)
-    lib = app.Library(root, Options(use_stems=False, open_page=False))
     told: list[str] = []
+    lib = app.Library(root, Options(use_stems=False, open_page=False))
     lib.on_reload = told.append
     assert lib.measure_voices() == ["lift.woodshed"]
     lib.queue.join()
+    lib.interrupted()
     assert (page / "index.html").read_bytes() == index  # the page as it was
     assert told == []
     assert "lift.woodshed: the voice range per key was not measured" in capsys.readouterr().out
-    lib.interrupted()
-    monkeypatch.setattr(build, "measure_vocal_regions", real)
-    again = app.Library(root, Options(use_stems=False, open_page=False))  # the next start
-    assert again.measure_voices() == ["lift.woodshed"]
-    again.queue.join()
-    assert len(data_of(page)["song"]["parts"]["vocal"]["regions"]) == 2
+    assert (root / ".lift.woodshed.voice").is_file()  # the failure noted beside the page
+    start(["lift.woodshed"])  # the next start tries again, once
+    start([])  # failed twice: not at every start
+    monkeypatch.setattr(app, "__version__", "9.9.9")
+    start(["lift.woodshed"])  # another woodshed: tried again, twice at most
+    start(["lift.woodshed"])
+    start([])
+    monkeypatch.setattr(build, "measure_vocal_regions", lambda page, data: REGIONS)
+    rewrite(page, lambda d: d["song"].update(title="lift, edited"))  # the page changed: tried again
+    start(["lift.woodshed"])
+    assert data_of(page)["song"]["parts"]["vocal"]["regions"] == REGIONS
+    assert not (root / ".lift.woodshed.voice").exists()  # measured: the note goes
+
+
+def test_a_render_waited_for_goes_between_two_measures(
+    tmp_path: Path, sung_lift: Sung, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = library_with(tmp_path, sung_lift)
+    shutil.copytree(root / "lift.woodshed", root / "lift2.woodshed")
+    events: list[str] = []
+    measuring = threading.Event()
+    release = threading.Event()
+
+    def slow(page: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
+        events.append("measure " + page.name)
+        if page.name == "lift.woodshed":
+            measuring.set()
+            assert release.wait(20)
+        return REGIONS
+
+    def render(src: Path, dst: Path, *args: Any, **kwargs: Any) -> None:
+        events.append("render")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(b"rendered")
+
+    monkeypatch.setattr(build, "measure_vocal_regions", slow)
+    monkeypatch.setattr(pitch, "render", render)
+    lib = app.Library(root, Options(use_stems=False, open_page=False, pitch=False))
+    lib.renders = pitch.Renders(root, busy=lib.busy)
+    try:
+        assert lib.measure_voices() == ["lift.woodshed", "lift2.woodshed"]
+        assert measuring.wait(20)
+        assert lib.renders.ask("lift.woodshed", "mix", 2, pitch.WAITED) == "queued"  # a page waits for it
+        time.sleep(1.5)
+        assert events == ["measure lift.woodshed"]  # never during a measure
+        release.set()
+        lib.queue.join()
+        assert events == ["measure lift.woodshed", "render", "measure lift2.woodshed"]
+    finally:
+        lib.interrupted()
+
+
+def test_a_page_rebuilt_during_the_measure_is_left_as_it_is(
+    tmp_path: Path, sung_lift: Sung, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = library_with(tmp_path, sung_lift) / "lift.woodshed"
+    export = (page / "exports" / "lift.json").read_bytes()
+
+    def rebuilt_meanwhile(page: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
+        index = page / "index.html"
+        index.write_text(index.read_text(encoding="utf-8") + "<!-- rebuilt -->", encoding="utf-8")
+        return REGIONS
+
+    monkeypatch.setattr(build, "measure_vocal_regions", rebuilt_meanwhile)
+    assert build.add_vocal_regions(page) is False
+    rebuilt = (page / "index.html").read_bytes()
+    assert rebuilt.endswith(b"<!-- rebuilt -->")
+    assert "regions" not in data_of(page)["song"]["parts"]["vocal"]  # the new page, byte for byte
+    assert (page / "exports" / "lift.json").read_bytes() == export
+    assert not [p.name for p in page.iterdir() if p.name.startswith(".")]
+
+
+def test_a_write_cut_short_leaves_the_page_and_nothing_else(
+    tmp_path: Path, sung_lift: Sung, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = library_with(tmp_path, sung_lift) / "lift.woodshed"
+    before = {p.name: p.read_bytes() for p in (page / "index.html", page / "exports" / "lift.json")}
+    monkeypatch.setattr(build, "measure_vocal_regions", lambda page, data: REGIONS)
+    real = Path.replace
+    for target in ("index.html", "lift.json"):
+
+        def failing(self: Path, to: Any, target: str = target) -> Path:
+            if Path(to).name == target:
+                raise OSError("no space left on device")
+            return real(self, to)
+
+        monkeypatch.setattr(Path, "replace", failing)
+        with pytest.raises(OSError):
+            build.add_vocal_regions(page)
+        monkeypatch.setattr(Path, "replace", real)
+        assert not [p.name for p in page.rglob(".*")]  # no temporary file left
+        assert (page / "index.html").read_bytes() == before["index.html"]  # the page as it was: measured again
+        if target == "lift.json":  # the export goes first: never newer than the page, never half written
+            assert (page / "exports" / "lift.json").read_bytes() == before["lift.json"]
+        (page / "exports" / "lift.json").write_bytes(before["lift.json"])
 
 
 def test_pages_that_need_no_measure_are_left_alone(

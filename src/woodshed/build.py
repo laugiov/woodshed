@@ -208,13 +208,19 @@ def add_vocal_regions(page: Path) -> bool:
         return False
     song = data["song"]
     song["parts"]["vocal"] = {**song["parts"]["vocal"], "regions": regions}
-    fresh = page / ".index.html.voice"
-    fresh.write_text(text[: found.start(1)] + script_json(data) + text[found.end(1) :], encoding="utf-8")
-    shutil.copymode(index, fresh)
-    fresh.replace(index)  # in one step: the page is the old one or the new one, never half of each
     export = page / "exports" / f"{exports.file_stem(song)}.json"
-    if export.is_file():  # as exports.write_all writes it
-        export.write_bytes((json.dumps(song, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+    fresh, fresh_export = page / ".index.html.voice", export.with_name(f".{export.name}.voice")
+    try:
+        fresh.write_text(text[: found.start(1)] + script_json(data) + text[found.end(1) :], encoding="utf-8")
+        shutil.copymode(index, fresh)
+        if export.is_file():  # as exports.write_all writes it; first, so it is never newer than the page
+            fresh_export.write_bytes((json.dumps(song, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+            shutil.copymode(export, fresh_export)
+            fresh_export.replace(export)
+        fresh.replace(index)  # in one step: the page is the old one or the new one, never half of each
+    finally:
+        fresh.unlink(missing_ok=True)
+        fresh_export.unlink(missing_ok=True)
     return True
 
 

@@ -379,6 +379,11 @@ class Renders:
         prune(audio_dir, keep)  # outside the lock: folders removed while the pages poll
         return "queued"
 
+    def wanted(self) -> bool:
+        """A render runs, or a page waits for one: a background job of the library lets it through."""
+        with self.cond:
+            return self.running is not None or any(r.priority == WAITED for r in self.queue)
+
     def touch(self, page: str, key: str) -> None:
         """A rendered file served: its key is playing somewhere."""
         with self.cond:
