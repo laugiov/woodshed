@@ -29,6 +29,9 @@ def set_words(o: Any, data: dict[str, Any]) -> None:
 
 
 def on_stage(o: Any, inst: str = "Voice") -> None:
+    # Stage mode asks for full screen, and headless Firefox then grows the window to the screen: the layout is
+    # checked at the size each test sets (on a real phone full screen is the phone's own screen).
+    o.js("Element.prototype.requestFullscreen = function () { return Promise.resolve(); }")
     o.page.locator("#instruments button", has_text=inst).click()
     o.page.get_by_test_id("stage-open").click()
     expect(o.page.get_by_test_id("stage")).to_be_visible()
@@ -38,6 +41,12 @@ def at(o: Any, t: float, playing: bool) -> None:
     """The stage at time `t` (seconds), as while playing or stopped."""
     o.js("([t, playing]) => { Woodshed.app.seekTime(t); Woodshed.app.store.set({ playing }); }", [t, playing])
     o.page.wait_for_timeout(150)
+
+
+def sized(o: Any, width: int, height: int) -> None:
+    """The viewport resized, and the page laid out at that size (Firefox applies it a moment later)."""
+    o.page.set_viewport_size({"width": width, "height": height})
+    o.page.wait_for_function("([w, h]) => innerWidth === w && innerHeight === h", arg=[width, height])
 
 
 def bar_start(o: Any, u: int) -> float:
@@ -72,7 +81,7 @@ def test_the_sung_line_is_on_screen_at_the_top_of_the_words(
     open_page: Any, width: int, height: int, inst: str, words: str
 ) -> None:
     o = open_page("pop", variant="lyrics")
-    o.page.set_viewport_size({"width": width, "height": height})
+    sized(o, width, height)
     if words == "long":
         set_words(o, long_words(o.js("Woodshed.current.song")))
     on_stage(o, inst)
@@ -99,7 +108,7 @@ def test_the_sung_line_is_on_screen_at_the_top_of_the_words(
 
 def test_the_chart_panel_still_gives_way_to_the_words_for_a_singer_on_a_phone(open_page: Any) -> None:
     o = open_page("pop", variant="lyrics")
-    o.page.set_viewport_size({"width": 390, "height": 844})
+    sized(o, 390, 844)
     o.page.locator("#instruments button", has_text="Voice").click()
     expect(o.page.locator(".panel > .now")).to_be_hidden()  # the big chord of the chart: the words first
 
@@ -271,7 +280,7 @@ def test_a_song_with_no_parts_still_says_next(open_page: Any) -> None:
 
 def test_next_reads_from_a_mic_stand_and_stands_apart_from_the_chords(open_page: Any) -> None:
     o = open_page("pop", variant="lyrics")
-    o.page.set_viewport_size({"width": 390, "height": 844})
+    sized(o, 390, 844)
     data = lyrics_for(o.js("Woodshed.current.song"), 1)
     set_words(o, data)
     on_stage(o)
