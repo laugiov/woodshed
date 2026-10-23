@@ -675,6 +675,29 @@ def test_the_library_updates_its_pages_when_it_starts(tmp_path: Path, cache: Pat
     assert lib.update_pages() == []  # up to date now
 
 
+def test_the_library_fills_the_analysis_revision_from_the_manifest_when_it_starts(tmp_path: Path, cache: Path) -> None:
+    from tests.test_build import as_analysed_by
+    from woodshed import __version__, app, build
+    from woodshed.analysis import REVISION
+    from woodshed.run import Options
+
+    library = tmp_path / "library"
+    assert cli.main([str(synth.write("pop", tmp_path).wav), "--no-stems", "--no-open", "-o", str(library)]) == 0
+    page = library / "pop.woodshed"
+    _as_built_by_an_older_woodshed(page)
+    as_analysed_by(page, "0.3.0", None)  # data written before it said its revision
+    manifest = json.loads((page / "woodshed.json").read_text(encoding="utf-8"))
+    manifest["settings"]["analysis"] = REVISION - 1
+    (page / "woodshed.json").write_text(json.dumps(manifest), encoding="utf-8")
+    lib = app.Library(library, Options(use_stems=False, open_page=False))
+    assert lib.update_pages() == ["pop.woodshed"]
+    found = build.DATA_BLOCK.search((page / "index.html").read_text(encoding="utf-8"))
+    assert found is not None
+    data = json.loads(found.group(1))
+    assert data["page"] == {"version": __version__, "analysis": REVISION}
+    assert (data["song"]["meta"]["version"], data["song"]["meta"]["analysis"]) == ("0.3.0", REVISION - 1)
+
+
 def test_a_page_the_library_cannot_update_is_said_stale(tmp_path: Path, cache: Path) -> None:
     from woodshed import app
     from woodshed.run import Options

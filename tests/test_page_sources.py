@@ -41,10 +41,11 @@ def test_the_page_forbids_remote_content() -> None:
 # The data a page carries, by format version: a page built by an older woodshed gets the new page
 # code only when its data has the format that code reads (build.refresh_code). A schema change
 # must come with a new version number, here, in song.py or view.py, and in core/song.js.
+# One exception: an optional field that no reader requires may be added without a bump (its hash is
+# updated here, with the reason); the schema is not a frozen external contract.
 DATA_FORMATS = {
     (2, 1): ("9ab2b7d621a5157b", "6c8a1aef3cb83902"),
-    # Key regions (spec 012). Then meta.analysis (spec 026): optional, the page code reads data without it,
-    # so a page of the format before still gets the new code, no new version.
+    # Key regions (spec 012). Then meta.analysis (spec 026): optional, the page code reads data without it.
     (3, 2): ("ef4e36f6adb5b538", "3001f6cba1d9ac6b"),
 }
 

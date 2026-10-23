@@ -234,8 +234,10 @@
     "Page: woodshed {page}": "Page : woodshed {page}",
     "Page: woodshed {page} · chords and beats found by woodshed {analysis} (still current)":
       "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis} (toujours à jour)",
-    "Page: woodshed {page} · chords and beats found by woodshed {analysis} (older: adding the song again uses this version's analysis; chords you corrected may need checking again)":
-      "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis} (plus ancienne : ajouter à nouveau le morceau utilise l'analyse de cette version ; les accords que tu as corrigés seront peut-être à revérifier)",
+    "Page: woodshed {page} · chords and beats found by woodshed {analysis} (older analysis: add the song again to get the new one; chords you corrected may need checking again)":
+      "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis} (analyse plus ancienne : ajoute à nouveau le morceau pour profiter de la nouvelle analyse ; les accords que tu as corrigés seront peut-être à revérifier)",
+    "Page: woodshed {page} · chords and beats found by woodshed {analysis}":
+      "Page : woodshed {page} · accords et temps trouvés par woodshed {analysis}",
     "Chords and beats found by woodshed {analysis}": "Accords et temps trouvés par woodshed {analysis}",
     "Made from {file} on this computer: nothing was uploaded.":
       "Fait à partir de {file} sur cet ordinateur : rien n'a été envoyé.",

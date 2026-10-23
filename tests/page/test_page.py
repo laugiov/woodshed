@@ -1318,11 +1318,24 @@ VERSION_LINES = {
         "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 0.4.0 (toujours à jour)",
     ),
     "older": (
-        "Page: woodshed {v} · chords and beats found by woodshed 0.3.0 (older: adding the song again uses this"
-        " version's analysis; chords you corrected may need checking again)",
-        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 0.3.0 (plus ancienne\u00a0: ajouter à"
-        " nouveau le morceau utilise l'analyse de cette version\u00a0; les accords que tu as corrigés seront"
-        " peut-être à revérifier)",
+        "Page: woodshed {v} · chords and beats found by woodshed 0.3.0 (older analysis: add the song again to"
+        " get the new one; chords you corrected may need checking again)",
+        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 0.3.0 (analyse plus ancienne\u00a0:"
+        " ajoute à nouveau le morceau pour profiter de la nouvelle analyse\u00a0; les accords que tu as corrigés"
+        " seront peut-être à revérifier)",
+    ),
+    # Same version number, older revision (an update from git): the revision decides, not the number.
+    "same-number-older": (
+        "Page: woodshed {v} · chords and beats found by woodshed {v} (older analysis: add the song again to"
+        " get the new one; chords you corrected may need checking again)",
+        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed {v} (analyse plus ancienne\u00a0:"
+        " ajoute à nouveau le morceau pour profiter de la nouvelle analyse\u00a0; les accords que tu as corrigés"
+        " seront peut-être à revérifier)",
+    ),
+    # An analysis newer than the page's code (woodshed went back a version): the versions, no claim.
+    "newer": (
+        "Page: woodshed {v} · chords and beats found by woodshed 9.9.9",
+        "Page\u00a0: woodshed {v} · accords et temps trouvés par woodshed 9.9.9",
     ),
     "unknown": ("Page: woodshed {v}", "Page\u00a0: woodshed {v}"),
     # Data no woodshed stamped (made by hand): only what the data says, the analysis.
@@ -1334,7 +1347,7 @@ def refreshed(pages_root: str, case: str) -> Path:
     """The pop page as `woodshed app` leaves it after an update: this version's code on the data of its analysis."""
     from tests.page.conftest import built
     from tests.test_build import as_analysed_by
-    from woodshed import analysis, build
+    from woodshed import __version__, analysis, build
 
     source = built("pop", True, pages_root)
     folder = source.parent / f"versions-{case}" / "pop.woodshed"
@@ -1345,6 +1358,8 @@ def refreshed(pages_root: str, case: str) -> Path:
         version, revision = {
             "current": ("0.4.0", analysis.REVISION),
             "older": ("0.3.0", analysis.REVISION - 1),
+            "same-number-older": (__version__, analysis.REVISION - 1),
+            "newer": ("9.9.9", analysis.REVISION + 1),
             "unknown": ("0.3.0", None),
             "unstamped": ("0.4.0", analysis.REVISION),
         }[case]

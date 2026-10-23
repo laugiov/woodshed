@@ -358,12 +358,13 @@ Song Name.woodshed/
 
 - Assembled in a temp folder next to the target, then renamed in one step. An interrupted build never leaves a half page. On Windows a page open in a browser can block the rename, and the error says so.
 - `index.html` comes from `page/template.html` and `page/body.html`. Song data goes into a `<script type="application/json" id="woodshed-data">` element. `script_json` escapes `<`, `>`, `&` and the line separators so a title cannot close the element.
-- The data has two blocks. `song` follows `src/woodshed/song.schema.json` (written by `src/woodshed/song.py`, `SCHEMA_VERSION = 2`). `view` follows `src/woodshed/view.schema.json` (display tables and the track list from `view.py`).
+- The data has two blocks. `song` follows `src/woodshed/song.schema.json` (written by `src/woodshed/song.py`, `SCHEMA_VERSION = 3`). `view` follows `src/woodshed/view.schema.json` (display tables and the track list from `view.py`).
+- Beside them, `page: {version, analysis}`: the woodshed version and analysis revision (`analysis.REVISION`) that wrote the page code, stamped by `build._page_html` at a build and at a refresh. The song's `meta.version` and `meta.analysis` say which woodshed found its chords and with which revision; `meta.analysis` is optional (pages analysed before it existed lack it, and a refresh takes it from the manifest's `settings.analysis`). The page footer compares the two: same, still current, older analysis (add the song again), or just the versions when a revision is unknown.
 - The model in `src/woodshed/model.py` is plain data with no audio library, so exporters and the songbook do not load librosa.
 
 ### Page revision
 
-`page_revision()` hashes every shipped file under `page/` (names and bytes) and keeps 16 hex characters. It goes into the manifest. If the page code changes, even without a version bump (an update from git), the page gets the new code without a new analysis: `refresh_code` writes `index.html` again from the data it carries and replaces `assets/`, and `woodshed app` does it for every page when it starts. Only data of another format (`SCHEMA_VERSION`, `VIEW_VERSION`, pinned by a test against the schemas) needs a rebuild.
+`page_revision()` hashes every shipped file under `page/` (names and bytes) and keeps 16 hex characters. It goes into the manifest. If the page code changes, even without a version bump (an update from git), the page gets the new code without a new analysis: `refresh_code` writes `index.html` again from the data it carries and replaces `assets/`, and `woodshed app` does it for every page when it starts. Only data of another format (`SCHEMA_VERSION`, `VIEW_VERSION`, pinned by a test against the schemas) needs a rebuild. An optional field that no reader requires (such as `meta.analysis`) may be added without a version bump: the test's hash is updated with the reason, since the schema is not a frozen external contract.
 
 ### Strict CSP and no network
 

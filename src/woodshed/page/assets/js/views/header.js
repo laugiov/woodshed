@@ -96,11 +96,19 @@
       const found = meta.meta.version;
       const revision = meta.meta.analysis;
       if (typeof page !== "string") return W.t("Chords and beats found by woodshed {analysis}", { analysis: found });
+      // The revisions decide when both are known: an update from git can change the analysis, not the number.
+      if (typeof revision === "number" && typeof made.analysis === "number") {
+        if (revision < made.analysis) {
+          return W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (older analysis: add the song again to get the new one; chords you corrected may need checking again)", { page, analysis: found });
+        }
+        if (revision > made.analysis) {
+          // Analysed by a later woodshed than the one running the page: the versions, no claim.
+          return W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis}", { page, analysis: found });
+        }
+        if (page !== found) return W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (still current)", { page, analysis: found });
+      }
       if (page === found) return W.t("Page and analysis: woodshed {version}", { version: page });
-      if (typeof revision !== "number" || typeof made.analysis !== "number") return W.t("Page: woodshed {page}", { page });
-      return revision < made.analysis
-        ? W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (older: adding the song again uses this version's analysis; chords you corrected may need checking again)", { page, analysis: found })
-        : W.t("Page: woodshed {page} · chords and beats found by woodshed {analysis} (still current)", { page, analysis: found });
+      return W.t("Page: woodshed {page}", { page });
     }
 
     function renderCredits() {
