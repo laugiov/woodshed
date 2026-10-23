@@ -314,7 +314,9 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .bar .rn { position: absolute; right: 6px; bottom: 3px; font-size: 12px; color: var(--muted); font-family: var(--font-chord); font-weight: 600; max-width: calc(100% - 2.4em); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } /* never over the bar number */
 .key-now { margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .key-change .check { color: var(--warn); }
-.shape-group { grid-column: 1 / -1; display: flex; gap: 8px; align-items: baseline; margin: 10px 0 2px; }
+.shape-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; margin: 10px 0 2px; }
+.shape-group .hint { white-space: nowrap; }
+.voice-moves { margin-bottom: 12px; }
 .shape-group b { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .shape-hands { grid-column: 1 / -1; margin: 4px 0 0; }
 .bar .key-change { position: absolute; left: 4px; top: -1.4em; font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; pointer-events: none; }
@@ -613,9 +615,9 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .stage-top .map { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .stage-top .st-section { font-family: var(--font-chord); font-size: clamp(26px, 4vw, 48px); color: var(--ink); line-height: 1; }
 .st-coming { font-family: var(--font-chord); font-weight: 700; font-size: clamp(22px, 3vw, 40px); color: var(--warn); min-height: 1.2em; }
-.st-key { font-family: var(--font-chord); font-weight: 700; font-size: clamp(20px, 2.6vw, 34px); color: var(--warn); min-height: 2.6em; } /* two lines kept on a phone: NEXT does not jump */
-.st-key:empty { min-height: 0; }
-.stage.keyed .st-key:empty { min-height: 2.6em; }
+.st-key { font-family: var(--font-chord); font-weight: 700; font-size: clamp(20px, 2.6vw, 34px); color: var(--warn); }
+.stage.keyed .st-key { min-height: 1.3em; } /* its height kept on a song whose key changes: NEXT does not jump */
+@media (max-width: 700px) { .stage.keyed .st-key { min-height: 3.9em; } }
 
 .setlist { margin: 6px 0 4px; padding: 0; list-style: none; counter-reset: set; display: grid; gap: 6px; font-size: 17px; }
 .setlist li { display: flex; align-items: center; gap: 12px; counter-increment: set; }

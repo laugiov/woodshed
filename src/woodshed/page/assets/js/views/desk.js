@@ -109,7 +109,9 @@
       // On a song whose key changes, the shapes come by key, each group headed (spec 013); one capo for the song.
       const groups = song.regionCount > 1 ? Array.from({ length: song.regionCount }, (_, r) => song.regionChords(r)) : [chords];
       const shown = groups.flat();
-      const funk = s.pos === "funk" ? I.funkVoicings(shown.map((c) => ({ pc: c.pc + t, quality: c.quality, bass: I.bassOf(c, t) }))) : null;
+      // Funk voicings chained within each group (a chord in two keys gets one shape per group).
+      const funkOf = (list) => I.funkVoicings(list.map((c) => ({ pc: c.pc + t, quality: c.quality, bass: I.bassOf(c, t) })));
+      const funks = s.pos === "funk" ? groups.map(funkOf) : null;
       const here = song.regionOf(curBar(s));
       const card = (c) => {
         let shape;
@@ -126,7 +128,7 @@
           label = app.nameFor(c, 0, s);
           sub = W.t("no capo");
         } else {
-          shape = funk[funkKey(c, t)]; // keyed as funkVoicings builds it
+          shape = funks[song.regionCount > 1 ? c.region : 0][funkKey(c, t)]; // keyed as funkVoicings builds it
           label = app.nameFor(c, 0, s);
           sub = W.t("strings 3-2-1");
         }
@@ -154,7 +156,7 @@
         const out = [h("div", { class: "shape-group" }, h("b", { "data-testid": "shape-group" }, name), n ? h("span", { class: "hint" }, n === 1 ? W.t("1 barre chord") : W.t("{n} barre chords", { n })) : null), ...list.map(card)];
         const step = r ? (song.regionKey(r).pc - song.regionKey(r - 1).pc + 12) % 12 : 0;
         // A lift of a semitone or a tone: the same hand, slid up (no capo moves mid-song).
-        if (step === 1 || step === 2) {
+        if (s.pos === "open" && (step === 1 || step === 2)) {
           out.push(h("p", { class: "hint shape-hands", "data-testid": "shape-hands" },
             step === 1 ? W.t("A semitone up: the same shapes one fret higher, as barre chords.") : W.t("A whole tone up: the same shapes two frets higher, as barre chords.")));
         }
@@ -538,8 +540,9 @@
       if (shown === badgeOf) return;
       badgeOf = shown;
       const badge = $("keyNow");
-      badge.hidden = r === 0;
-      badge.textContent = r ? W.t("now in {key}", { key: song.keyWords(song.keyName(s.transpose, r)) }) : "";
+      const other = song.keyName(s.transpose, r) !== song.keyName(s.transpose, 0); // back in the start key: nothing
+      badge.hidden = !other;
+      badge.textContent = other ? W.t("now in {key}", { key: song.keyWords(song.keyName(s.transpose, r)) }) : "";
     }
     store.on((s) => renderKeyNow(s));
 
@@ -563,6 +566,7 @@
     }
 
     let lastBar = -1;
+    let lastRegion = -1;
     let lastChord = "";
     // A tablet or a phone puts the guitar panel under the chart: the shapes of the chord now and the
     // next one ride above the player instead, in sight while the page follows the song (CSS shows
@@ -598,9 +602,11 @@
       const full = ["transpose", "capo", "inst", "pos", "voiceType", "corrections"].some((k) => changed.has(k)) || (s.inst === "bass" && (changed.has("loop") || changed.has("loopOn")));
       const perBar = s.inst === "bass" || s.inst === "piano";
       const perChord = s.inst === "guitar" || s.inst === "piano";
-      if (full || (perBar && u !== lastBar) || (perChord && chordKey !== lastChord)) render(s);
+      const region = song.regionOf(u); // a new key region: the guitar's lit card moves to its group (spec 013)
+      if (full || (perBar && u !== lastBar) || (perChord && chordKey !== lastChord) || region !== lastRegion) render(s);
       lastBar = u;
       lastChord = chordKey;
+      lastRegion = region;
     });
 
     return { render };

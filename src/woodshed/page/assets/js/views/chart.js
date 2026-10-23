@@ -211,7 +211,7 @@
     const keyWords = song.keyWords;
     app.keyWords = keyWords;
     // Doubtful bars within 2 bars of a change: the mark says to check by ear there (spec 013).
-    const doubtfulNear = (u) => song.bars.slice(Math.max(0, u - 2), u + 3).some((b) => b.chords.some((c) => c.doubt && !c.fixed && (c.doubt.kind || "chord") === "chord"));
+    const doubtfulNear = (u) => song.bars.slice(Math.max(0, u - 2), u + 3).some((b) => b.chords.some((c) => c.doubt && !c.fixed && c.doubt.kind === "chord"));
     const keyMark = (u, s) =>
       changeAt.has(u)
         ? h("span", { class: "key-change", "aria-hidden": "true", "data-testid": "key-change" },

@@ -16,7 +16,12 @@ from woodshed import build
 
 
 def _variant(
-    pages_root: str, tag: str, change_at: int, doubt_at: int | None = None, back_at: int | None = None
+    pages_root: str,
+    tag: str,
+    change_at: int,
+    doubt_at: int | None = None,
+    back_at: int | None = None,
+    same_at: int | None = None,
 ) -> Path:
     """`lift` (C, then D-flat from bar 17) with its change moved to bar `change_at` + 1, and a doubt there."""
     source = built("lift", False, pages_root)
@@ -34,6 +39,8 @@ def _variant(
     if back_at is not None:  # a third region: back to the first key
         data["song"]["key_regions"].append({**data["song"]["key_regions"][0], "bar": back_at})
         data["view"]["regions"].append({**data["view"]["regions"][0], "bar": back_at})
+    if same_at is not None:  # the chord of the bar before runs on over the change
+        data["song"]["bars"][same_at]["chords"] = [dict(c) for c in data["song"]["bars"][same_at - 1]["chords"]]
     if doubt_at is not None:
         chord = data["song"]["bars"][doubt_at]["chords"][0]
         alternatives = [{"pc": chord["pc"], "quality": "m", "share": 40}]
@@ -173,7 +180,7 @@ def test_in_french(page: Page, mid: Path) -> None:
 def test_inside_a_loop_no_warning_crosses_its_end(page: Page, mid: Path) -> None:
     opened(page, mid)
     stage(page)
-    page.evaluate("Woodshed.app.store.set({ loop: [15, 17] })")  # the change (bar 19) is after the loop
+    page.evaluate("Woodshed.app.store.set({ loop: [15, 17], loopOn: true })")  # the change (bar 19) is after the loop
     at(page, 16, True)
     expect(page.get_by_test_id("stage-key")).to_have_text("")
 
@@ -185,3 +192,54 @@ def test_two_changes_two_lines_for_the_singer(page: Page, pages_root: str) -> No
     expect(lines).to_have_count(2)
     expect(lines.nth(0)).to_have_text("Up a semitone at bar 19: D♭ major.")
     expect(lines.nth(1)).to_have_text("Down a semitone at bar 25: C major.")
+
+
+def test_a_loop_switched_off_no_longer_holds_the_warning_back(page: Page, mid: Path) -> None:
+    opened(page, mid)
+    stage(page)
+    page.evaluate("Woodshed.app.store.set({ loop: [15, 17], loopOn: false })")  # the range kept, the loop off
+    at(page, 16, True)
+    expect(page.get_by_test_id("stage-key")).to_have_text("Key change in 2 bars: D♭ major")
+
+
+def test_a_change_on_a_part_s_second_bar_is_warned_from_the_part_before(page: Page, pages_root: str) -> None:
+    opened(page, _variant(pages_root, "second", 17))  # the second part starts on bar 17 (index 16)
+    stage(page)
+    at(page, 15, True)
+    expect(page.get_by_test_id("stage-key")).to_have_text("Key change in 2 bars: D♭ major")
+
+
+def test_back_in_the_start_key_the_badge_goes(page: Page, pages_root: str) -> None:
+    opened(page, _variant(pages_root, "twice", 18, back_at=24))
+    page.evaluate("Woodshed.app.setInstrument('guitar')")
+    at(page, 20, False)
+    expect(page.get_by_test_id("key-now")).to_be_visible()
+    at(page, 25, False)
+    expect(page.get_by_test_id("key-now")).to_be_hidden()
+
+
+def test_the_lit_shape_is_the_one_of_the_key_playing(page: Page, pages_root: str) -> None:
+    opened(page, built("lift", False, pages_root))
+    page.evaluate("Woodshed.app.setInstrument('guitar')")
+    at(page, 16, False)
+    lit = page.locator(".shape-card.cur")
+    expect(lit).to_have_count(1)
+    expect(lit).to_have_attribute("data-region", "1")
+
+
+def test_the_shape_groups_follow_the_band_s_key_and_the_language(page: Page, pages_root: str) -> None:
+    opened(page, built("lift", False, pages_root), "fr")
+    page.evaluate("Woodshed.app.transposeTo(6); Woodshed.app.setInstrument('guitar')")
+    groups = page.get_by_test_id("shape-group")
+    expect(groups.nth(0)).to_have_text("F♯ majeur")
+    expect(groups.nth(1)).to_have_text("Dès la mesure 17 : G majeur")
+
+
+def test_the_lit_shape_moves_with_the_key_on_the_same_chord(page: Page, pages_root: str) -> None:
+    opened(page, _variant(pages_root, "same", 16, same_at=16))  # F on bars 16 and 17, the key changes on 17
+    page.evaluate("Woodshed.app.setInstrument('guitar')")
+    at(page, 15, False)
+    expect(page.locator(".shape-card.cur")).to_have_attribute("data-region", "0")
+    page.evaluate("Woodshed.app.transport.seek(Woodshed.current.bars[16].start + 0.05)")  # as playback moves on
+    page.wait_for_timeout(300)
+    expect(page.locator(".shape-card.cur")).to_have_attribute("data-region", "1")

@@ -171,25 +171,28 @@
       const what = next ? W.partName(next) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
       // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
       const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
-      $("stComing").textContent = !what ? "" : (soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "")) + ((soon || !s.playing) && next ? inKey : "");
+      const coming = !what ? "" : (soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "")) + ((soon || !s.playing) && next ? inKey : "");
+      if ($("stComing").textContent !== coming) $("stComing").textContent = coming;
       // A key change inside the part (not where a part starts: the part line says that one) on its own line:
       // two bars ahead, on the bar, and stopped, where it is (spec 013).
       let keyLine = "";
       if (keyed) {
-        const inside = (change) => change && change.bar < sec.end && !list.some((p) => p.start === change.bar);
-        const ahead = song.changeAhead(u, 2, s.loop);
+        // Not where a part starts (the part line says that one); stopped, only a change left in this part.
+        const midPart = (change) => change && !list.some((p) => p.start === change.bar);
+        const inside = (change) => midPart(change) && change.bar < sec.end;
+        const ahead = song.changeAhead(u, 2, s.loopOn && s.loop);
         const now = song.keyChanges.find((c) => c.bar === u);
-        if (s.playing && inside(ahead)) {
+        if (s.playing && midPart(ahead)) {
           keyLine = ahead.bar - u === 1
             ? W.t("Key change next bar: {key}", { key: keyOf(ahead.region) })
             : W.t("Key change in {n} bars: {key}", { n: ahead.bar - u, key: keyOf(ahead.region) });
-        } else if (s.playing && inside(now)) keyLine = W.t("Now in {key}", { key: keyOf(now.region) });
+        } else if (s.playing && midPart(now)) keyLine = W.t("Now in {key}", { key: keyOf(now.region) });
         else if (!s.playing) {
           const rest = song.keyChanges.find((c) => c.bar > u && inside(c));
           if (rest) keyLine = W.t("Key change at bar {n}: {key}", { n: rest.bar + 1, key: keyOf(rest.region) });
         }
       }
-      $("stKey").textContent = keyLine;
+      if ($("stKey").textContent !== keyLine) $("stKey").textContent = keyLine; // a live region: written on a change only
       renderLyrics(s, list);
     }
 
