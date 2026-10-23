@@ -271,8 +271,8 @@
       const analysed = app.analysedChord(chord.doubt.id) || chord;
       const alts = chord.doubt.alternatives.slice();
       if (!alts.some((a) => same(a, analysed))) alts.push({ pc: analysed.pc, quality: analysed.quality, share: null });
-      const node = (c) => W.chordNode(app.nameFor(c, 0, s));
-      const named = (c) => W.prettyText(app.nameFor(c, 0, s));
+      const node = (c) => W.chordNode(app.nameFor(c, 0, s, u)); // spelled in the bar's key (spec 012)
+      const named = (c) => W.prettyText(app.nameFor(c, 0, s, u));
       let note;
       if (chord.fixed && same(chord, analysed)) note = W.nodes(W.t("You confirmed {chord}, the analysis's chord."), { chord: node(chord) });
       else if (chord.fixed) note = W.nodes(W.t("Your correction: {chord}. The analysis had {analysed}."), { chord: node(chord), analysed: node(analysed) });

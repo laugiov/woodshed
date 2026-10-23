@@ -148,6 +148,8 @@ their beats (from disk: `woodshed "song.mp3" --bar-phase 1`). Shapes, keys, the 
 every export follow, and each typed bar or part can go back to the analysis, or the whole chart at
 once (with an undo). Through the library the band's phones get it live.
 
+<img src="docs/images/key-change.png" alt="A key change on the chart: the last chorus lifted to D-flat, marked before its first bar, its numerals I V vi IV again" width="100%">
+
 **Key changes.** A last chorus lifted a semitone, a bridge in another key: woodshed finds where the key
 changes and marks the bar ("→ D♭ major", with a double bar line). From there the numerals read in the new
 key (I V vi IV again, not bII), the chords are spelled in it (G♭, not F♯), and a chord it hesitates on is

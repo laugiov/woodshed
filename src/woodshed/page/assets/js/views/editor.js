@@ -68,7 +68,7 @@
         const name = h("b", null, shown(label));
         const beats = k === 0 ? (n === 1 ? W.t("for 1 beat") : W.t("for {n} beats", { n })) : n === 1 ? W.t("for 1") : W.t("for {n}", { n });
         const real = concert(label);
-        const bass = c.bass === null || c.bass === undefined ? null : W.t("{note} in the bass", { note: W.prettyText(song.noteName(real.bass, T())) });
+        const bass = c.bass === null || c.bass === undefined ? null : W.t("{note} in the bass", { note: W.prettyText(song.noteName(real.bass, T(), song.regionOf(atBar))) });
         return [name, " ", beats, bass ? [", ", bass] : null];
       });
       return parts.flatMap((p, k) => (k ? [W.t(", then "), p] : [p]));

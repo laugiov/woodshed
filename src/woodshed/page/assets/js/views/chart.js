@@ -233,7 +233,7 @@
         cells.push(
           h(
             "div",
-            { class: "bar" + (changeAt.has(u) ? " key-change-bar" : ""), "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
+            { class: "bar" + (changeAt.has(u) && col > 0 ? " key-change-bar" : ""), "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
             keyMark(u, s),
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
@@ -385,7 +385,7 @@
           h(
             "div",
             {
-              class: "bar" + (b.edited ? " edited" : "") + (changeAt.has(u) ? " key-change-bar" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
+              class: "bar" + (b.edited ? " edited" : "") + (changeAt.has(u) && col > 0 ? " key-change-bar" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
               "aria-label": b.edited ? W.t("{bar}, typed by the band", { bar: barLabel(b, u, s) }) : barLabel(b, u, s),
             },
             keyMark(u, s),
@@ -566,8 +566,10 @@
         if (n > 0) prog.append(h("div", { style: { flexBasis: "100%", height: "0" } }));
         if (sections.length > 1) prog.append(h("b", { class: "prog-sec" }, labels[n]));
         // Spelled in the key of the bar where the part is first heard, as its numerals are (spec 012).
-        const g = app.analysisGroups.find((gr) => gr.family === sec.label.split("+")[0]);
-        const first = g ? g.occurrences[0][0] : 0;
+        // The earliest bar of the family, over all its groups, as harmony_summary takes it.
+        const family = sec.label.split("+")[0];
+        const heard = app.analysisGroups.filter((gr) => gr.family === family).flatMap((gr) => gr.occurrences.map((o) => o[0]));
+        const first = heard.length ? Math.min(...heard) : 0;
         sec.chords.forEach(([pc, q], i) => prog.append(h("span", null, chordNode(app.nameFor({ pc, quality: q }, 0, s, first)), h("small", { translate: "no" }, sec.romans[i]))));
         if (!sec.name) return;
         const named = W.t(sec.name); // a well-known progression's name (theory.PROGRESSIONS), in core/i18n-fr.js

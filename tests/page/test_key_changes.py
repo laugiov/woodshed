@@ -19,7 +19,7 @@ def test_the_lift_is_marked_and_read_in_its_new_key(open_page: Any) -> None:
     mark = page.get_by_test_id("key-change")
     expect(mark).to_have_count(1)
     expect(bar(o, 16).get_by_test_id("key-change")).to_have_text("→ D♭ major")
-    expect(bar(o, 16)).to_have_class("bar key-change-bar")
+    expect(bar(o, 16)).to_have_class("bar")  # first of its line: the repeat sign is its bar line, no double bar
     assert mark.get_attribute("aria-hidden") == "true"
     expect(bar(o, 16)).to_have_attribute("aria-label", "Bar 17: D♭, key change: D♭ major")
     for u, numeral in ((0, "I"), (1, "V"), (16, "I"), (17, "V"), (18, "vi"), (19, "IV")):
@@ -142,3 +142,12 @@ def test_a_sung_part_holding_the_change_exports_as_python_does(open_page: Any) -
     text = download(o, "export-chordpro")
     assert text == exports.chordpro(data, words)
     assert "{key: Db}" in text or "{comment: key change to Db at bar 17}" in text
+
+
+def test_a_doubt_after_the_lift_is_spelled_in_the_new_key(open_page: Any) -> None:
+    o = open_page("lift", stems=False)
+    names = o.js(
+        "(() => { const c = { pc: 6, quality: '' }; const s = Woodshed.app.store.get();"
+        " return [Woodshed.app.nameFor(c, 0, s, 19), Woodshed.app.nameFor(c, 0, s, 3)]; })()"
+    )
+    assert names == ["G♭", "F♯"] or names == ["Gb", "F#"]  # a chord made on the fly takes its bar's key

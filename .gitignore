@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .numba-cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 # Anchored: a dist/ or build/ folder inside the package must still ship.
