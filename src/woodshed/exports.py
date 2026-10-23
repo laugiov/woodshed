@@ -152,7 +152,9 @@ def _grid(song: Song, label: str, rows: list[tuple[list[int], int]], keys: Keys)
     out = ['{start_of_grid: label="' + directive_text(label).replace('"', "'") + '"}']
     for bars, times in rows:
         text = " | ".join(_cells(song, u, keys) for u in bars)
-        out.append("|: " + text + " :|" + (f" x{times}" if times > 2 else "") if times > 1 else "| " + text + " |")
+        out.append(
+            "|: " + text + " :| x" + str(times) if times > 1 else "| " + text + " |"
+        )  # x2 said too, as chord rows
     out.append("{end_of_grid}")
     return out
 

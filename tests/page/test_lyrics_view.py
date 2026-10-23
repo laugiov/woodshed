@@ -211,12 +211,12 @@ def test_damaged_part_names_are_ignored(open_page: Any, bad: Any) -> None:
     assert o.js("Woodshed.app.sections().map((s) => s.name)") == names
 
 
-@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named", "lyrics-stacked", "lyrics-midline"])
+@pytest.mark.parametrize("variant", ["lyrics", "lyrics-named", "lyrics-stacked", "lyrics-midline", "lyrics-lift"])
 def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, variant: str) -> None:
     from tests.page.test_page import download
     from woodshed import exports
 
-    o = open_page("pop", variant=variant)
+    o = open_page("lift" if variant == "lyrics-lift" else "pop", variant=variant)
     data = o.js("Woodshed.current.song")
     words = json.loads((o.folder / "lyrics.json").read_text())
     text = download(o, "export-chordpro")
@@ -225,9 +225,13 @@ def test_the_chordpro_from_the_page_has_the_words_like_python(open_page: Any, va
     if variant == "lyrics-named":
         assert '{start_of_chorus: label="Chorus 1"}' in text  # the parts as the page names them
     if variant in ("lyrics-stacked", "lyrics-midline"):
-        # One chord a word: the chords before it on a row of their own, bar by bar.
-        assert not re.search(r"\] *\[[^\]]*\]\w", text) and "][" not in text
-        assert re.search(r"^\| \[[^\]]+\] \|$", text, re.M)  # a chord row above the line, framed by bar lines
+        # One chord a word, never two glued: before the first word on a row of their own, bar by bar; inside a
+        # line inline, each over its own space (spec 014).
+        assert "][" not in text
+        if variant == "lyrics-stacked":
+            assert re.search(r"^\| \[[^\]]+\] \|$", text, re.M)  # a chord row above the line, framed by bar lines
+        else:
+            assert re.search(r"\] \[[^\]]+\]\w", text)  # "[G] [Am]late": inline, the line not cut
         assert "{comment: check by ear: " in text and "(" in text.split("check by ear: ")[1].split("}")[0]
 
 

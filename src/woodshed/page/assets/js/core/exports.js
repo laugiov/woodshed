@@ -13,6 +13,34 @@
   // Text inside a ChordPro directive: one line, no braces (as woodshed.exports.directive_text).
   const directiveText = (text) => text.replace(/[\r\n]+/g, " ").replace(CONTROL, "").replace(/\{/g, "(").replace(/\}/g, ")");
 
+  // Chord rows played again, folded as exports.fold_rows: a run of one row "x2"; of a pair "|: … :| x2".
+  function foldRows(rows) {
+    const out = [];
+    let i = 0;
+    while (i < rows.length) {
+      let n = 1;
+      while (i + n < rows.length && rows[i + n] === rows[i]) n++;
+      if (n > 1) {
+        out.push(rows[i] + " x" + n);
+        i += n;
+        continue;
+      }
+      const pair = rows.slice(i, i + 2);
+      let m = 1;
+      const same = (k) => rows[i + 2 * k] === pair[0] && rows[i + 2 * k + 1] === pair[1];
+      while (pair.length === 2 && pair[0] !== pair[1] && i + 2 * m + 1 < rows.length && same(m)) m++;
+      if (m > 1) {
+        out.push("|:" + pair[0].slice(1), pair[1].slice(0, -1) + ":| x" + m);
+        i += 2 * m;
+        continue;
+      }
+      out.push(rows[i]);
+      i += 1;
+    }
+    return out;
+  }
+  const keyWords = (name) => (name.endsWith("m") ? name.slice(0, -1) + " minor" : name + " major"); // as exports._key_words
+
   // The song as published (schema v1), with corrections in place of the doubts they settle.
   function data(song) {
     const out = JSON.parse(JSON.stringify(song.song));
@@ -59,7 +87,7 @@
       '{start_of_grid: label="' + quote(label) + '"}',
       ...rows.map(([bars, times]) => {
         const text = bars.map(cells).join(" | ");
-        return times > 1 ? "|: " + text + " :|" + (times > 2 ? " x" + times : "") : "| " + text + " |";
+        return times > 1 ? "|: " + text + " :| x" + times : "| " + text + " |"; // x2 said too, as chord rows
       }),
       "{end_of_grid}",
     ];
@@ -105,7 +133,7 @@
       for (const group of d.groups) lines.push("", ...announce(song.regionOf(group.occurrences[0][0])), ...grid(group.label, [[group.occurrences[0], group.occurrences.length]]));
       return lines.join("\n") + "\n";
     }
-    const sung = sungRows(song, words, sections, name);
+    const sung = sungRows(song, words, sections, name, (region) => song.keyName(transpose, region));
     const rowsOf = (bars) => {
       const rows = [];
       for (let i = 0; i < bars.length; i += 4) {
@@ -121,22 +149,18 @@
       const bars = [];
       for (let u = sec.start; u < sec.end; u++) bars.push(u);
       if (sung.has(k)) {
-        // The part's key before it; a change inside its lines said there too, with its bar.
+        // The part's key before it; a change inside its lines is said before the line holding it.
         lines.push(...announce(song.regionOf(sec.start)));
-        for (const u of bars.slice(1)) {
-          if (song.regionOf(u) !== song.regionOf(u - 1)) {
-            said = song.regionOf(u);
-            lines.push("{comment: key change to " + song.keyName(transpose, said) + " at bar " + (u + 1) + "}");
-          }
-        }
+        said = song.regionOf(sec.end - 1);
         const env = ENVIRONMENT[sec.role] || "verse";
         lines.push("{start_of_" + env + ': label="' + quote(sec.name) + '"}', ...sung.get(k), "{end_of_" + env + "}");
       } else {
-        // A grid splits at the bar where the key changes, the same label on both sides.
+        // A grid splits at the bar where the key changes: the change said between, the rest "continued".
         const cuts = [0, ...bars.slice(1).filter((u) => song.regionOf(u) !== song.regionOf(u - 1)).map((u) => u - sec.start), bars.length];
         for (let i = 0; i + 1 < cuts.length; i++) {
           const piece = bars.slice(cuts[i], cuts[i + 1]);
-          lines.push(...announce(song.regionOf(piece[0])), ...grid(sec.name, rowsOf(piece)));
+          if (i) lines.push("{comment: Key change: " + keyWords(song.keyName(transpose, song.regionOf(piece[0]))) + "}");
+          lines.push(...announce(song.regionOf(piece[0])), ...grid(i ? sec.name + ", continued" : sec.name, rowsOf(piece)));
         }
       }
     });
@@ -156,7 +180,7 @@
 
   // The rows of each sung part: its lines with the chords on their words, the chords between lines
   // on rows of their own, the chords of the bar leading into a line on its first word.
-  function sungRows(song, words, sections, name) {
+  function sungRows(song, words, sections, name, keyOf) {
     const out = new Map();
     if (!words || !words.lines.length) return out;
     const per = song.per;
@@ -168,7 +192,8 @@
       });
       return k;
     };
-    const chord = (p) => "[" + name(p.chord) + "]";
+    // N.C. is said, never a chord to transpose: a ChordPro 6 annotation (as exports.py).
+    const chord = (p) => (p.chord.pc < 0 ? "[*N.C.]" : "[" + name(p.chord) + "]");
     // Chords with no word of their own: bar by bar, four bars a row, never one long row.
     const chordRows = (ps) => {
       const bars = [];
@@ -182,7 +207,7 @@
       }
       const out = [];
       for (let i = 0; i < bars.length; i += 4) out.push("| " + bars.slice(i, i + 4).map((b) => b.join(" ")).join(" | ") + " |"); // framed, as exports.py
-      return out;
+      return foldRows(out);
     };
     const placed = words.place(words.changes());
     const bySection = new Map();
@@ -204,6 +229,15 @@
         onWord.get(key).push(p);
       }
     }
+    // The chord sounding at time t: the last change at or before it.
+    const sounding = (t) => {
+      let last = null;
+      for (const p of placed) if (p.t <= t) last = p;
+      return last;
+    };
+    // Key changes said before the line that holds them (spec 014): the bar's start time, its region.
+    const keyAt = song.keyChanges.map((c) => ({ t: c.bar < song.bars.length ? song.bars[c.bar].start : Infinity, region: c.region }));
+    const breakGap = 2 * barTime; // a gap of two bars or more inside a line is a real break
     for (const [k, ids] of bySection) {
       const rows = [];
       let waiting = (gaps.get(k) || []).slice();
@@ -212,24 +246,40 @@
         const lead = waiting.filter((p) => ln.start - barTime <= p.t && p.t < ln.start);
         const before = waiting.filter((p) => p.t < ln.start - barTime);
         rows.push(...chordRows(before));
+        for (const c of keyAt.filter((x) => x.t < ln.end)) {
+          keyAt.splice(keyAt.indexOf(c), 1);
+          rows.push("{comment: Key change: " + keyWords(keyOf(c.region)) + "}", "{key: " + keyOf(c.region) + "}");
+        }
+        let afterRow = before.length > 0;
         let inside = waiting.filter((p) => ln.start <= p.t && p.t < ln.end);
         waiting = waiting.filter((p) => p.t >= ln.end);
         let tokens = [];
+        let lastEnd = ln.start;
         ln.words.forEach((w, wi) => {
           const timed = typeof w.start === "number" && typeof w.end === "number"; // as lyrics.js reads a word
           const ahead = inside.filter((p) => timed && p.t <= w.start);
           inside = inside.filter((p) => !(timed && p.t <= w.start));
-          const chords = [...(wi === 0 ? lead : []), ...ahead, ...(onWord.get(li + ":" + wi) || [])];
-          // One chord a word. Those before it go on a chord row of their own: above the line for its
-          // first word; for a later word the line breaks there (they change while the word before it
-          // is held).
-          const extra = chords.slice(0, -1);
-          if (extra.length && tokens.length) {
+          const on = (onWord.get(li + ":" + wi) || []).slice().sort((x, y) => x.t - y.t);
+          const pre = [...(wi === 0 ? lead : []), ...ahead];
+          // One chord on the word: its own first, else the last one before it. Others before it go inline (a row
+          // above the line for its first word); those landing while it is held, after it (as exports.py).
+          let wordChord = on.length ? on[0] : pre.length ? pre[pre.length - 1] : null;
+          const extraBefore = on.length ? pre : pre.slice(0, -1);
+          const extraAfter = on.slice(1);
+          if (extraBefore.length && !tokens.length) {
+            rows.push(...chordRows(extraBefore));
+            afterRow = true;
+          } else if (extraBefore.length && timed && w.start - lastEnd >= breakGap) {
             rows.push(lyricRow(tokens.join(" ")));
             tokens = [];
-          }
-          rows.push(...chordRows(extra));
-          tokens.push((chords.length ? chord(chords[chords.length - 1]) : "") + lyricText(w.text));
+            rows.push(...chordRows(extraBefore));
+            afterRow = true;
+          } else tokens.push(...extraBefore.map(chord));
+          if (!wordChord && !tokens.length && afterRow && timed) wordChord = sounding(w.start); // the chord playing on the first word
+          tokens.push((wordChord ? chord(wordChord) : "") + lyricText(w.text));
+          tokens.push(...extraAfter.map(chord));
+          afterRow = false;
+          if (timed) lastEnd = w.end;
         });
         tokens.push(...inside.map(chord));
         const backing = (ln.backing || []).map((b) => " (" + lyricText(b) + ")").join("");

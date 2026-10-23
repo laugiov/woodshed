@@ -14,7 +14,7 @@ from woodshed import analysis, exports, song
 
 def line_of(data: dict[str, Any], spans: list[tuple[str, float, float]]) -> dict[str, Any]:
     """Words given as (text, start bar, end bar), in bars of the song (fractions allowed)."""
-    starts = [b["start"] for b in data["bars"]]
+    starts = [float(b["start"]) for b in data["bars"]]
     bar = starts[1] - starts[0]
 
     def at(x: float) -> float:
@@ -107,3 +107,12 @@ def test_a_key_change_in_sung_lines_is_said_before_the_line_that_holds_it(lift: 
     said = rows.index("{comment: Key change: Db major}")
     assert rows[said + 1] == "{key: Db}" and any("over" in r for r in rows[said + 2 : said + 4])  # with its line
     assert "key change to" not in "\n".join(rows)  # the 0.4.0 part-level comment is gone
+
+
+def test_the_bars_after_a_line_are_folded_where_they_repeat(lift: dict[str, Any]) -> None:
+    data = {**lift, "sections": [{"name": "Verse 1", "role": "verse", "letter": "A", "start": 0, "end": 16}]}
+    words = {**words_for(data), "lines": [line_of(data, [("One", 0.0, 0.4)])], "sections": data["sections"]}
+    rows = exports.chordpro(data, words).split('{start_of_verse: label="Verse 1"}\n')[1].split("\n{end_of_verse}")[0]
+    n = names(data)
+    row = f"| [{n[1][0]}] | [{n[2][0]}] | [{n[3][0]}] | [{n[4][0]}] |"
+    assert f"{row} x3" in rows.splitlines()  # bars 2-13: the same four bars three times
