@@ -15,8 +15,10 @@
 # Options, as environment variables:
 #   WOODSHED_SOURCE   what to install (default: the version WOODSHED_REF names, on GitHub)
 #   WOODSHED_REF      a branch or a version tag on GitHub (default: main)
-#   WOODSHED_NO_MENU  set to 1 to skip the menu entry (Linux) or the app (macOS)
-# Uninstall: uv tool uninstall woodshed (and remove the menu entry or the app)
+#   WOODSHED_NO_MENU  set to 1 to skip the menu entries (Linux) or the apps (macOS)
+#   WOODSHED_TOOLS    woodshed's tools folder (the Linux uninstall script goes there)
+# Uninstall: open "Uninstall woodshed" (the menu, or Applications on a Mac); in a terminal,
+# woodshed uninstall, then the command it prints.
 
 set -eu
 
@@ -108,6 +110,111 @@ get_rubberband() {
     return 0
 }
 
+# Uninstall woodshed (spec 018), from here to linux_uninstall_entry.
+# A word in single quotes for sh, whatever it holds.
+sh_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# The script the Uninstall shortcuts run: woodshed removes its cache, tools and shortcuts (asking first),
+# then uv removes woodshed once it has exited. $1: the folder of the woodshed command, $2: uv.
+uninstall_script() {
+    cat <<EOF
+#!/bin/sh
+# Made by the woodshed installer: removes woodshed from this computer, asking first. Your songs stay.
+pause() { [ "\${WOODSHED_NO_PAUSE:-0}" = "1" ] || { printf 'Press Enter to close this window. '; read -r _ || true; }; }
+echo "Uninstall woodshed"
+echo "------------------"
+echo ""
+if ! $(sh_quote "$1/woodshed") uninstall --keep-self "\$@"; then
+    echo ""
+    echo "Nothing more was removed."
+    pause
+    exit 1
+fi
+echo ""
+echo "Removing woodshed itself..."
+if ! $(sh_quote "$2") tool uninstall woodshed; then
+    echo "woodshed itself could not be removed: the message above says why."
+    pause
+    exit 1
+fi
+$(sh_quote "$2") cache prune >/dev/null 2>&1 || true
+echo ""
+echo "woodshed is removed. Your songs stay where they are."
+pause
+EOF
+}
+
+# The macOS app "Uninstall woodshed", next to woodshed in ~/Applications: made here, not downloaded, so
+# macOS does not quarantine it. $1: the folder of the woodshed command, $2: uv.
+mac_uninstall_app() {
+    app="$HOME/Applications/Uninstall woodshed.app"
+    rm -rf "$app"
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+    cat > "$app/Contents/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Uninstall woodshed</string>
+	<key>CFBundleExecutable</key>
+	<string>uninstall</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.laugiov.woodshed.uninstall</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Uninstall woodshed</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+</dict>
+</plist>
+EOF
+    cat > "$app/Contents/MacOS/uninstall" <<'EOF'
+#!/bin/sh
+exec open -a Terminal "$(dirname "$0")/../Resources/uninstall.command"
+EOF
+    uninstall_script "$1" "$2" > "$app/Contents/Resources/uninstall.command"
+    chmod 755 "$app/Contents/MacOS/uninstall" "$app/Contents/Resources/uninstall.command"
+}
+
+# Where woodshed keeps the programs it adds, as woodshed computes it (uninstall.tools_dir).
+woodshed_tools_dir() {
+    if [ -n "${WOODSHED_TOOLS:-}" ]; then
+        printf '%s\n' "$WOODSHED_TOOLS"
+    elif [ "$(uname -s)" = "Darwin" ]; then
+        printf '%s\n' "$HOME/Library/Application Support/woodshed/tools"
+    else
+        case "${XDG_DATA_HOME:-}" in
+            /*) printf '%s\n' "$XDG_DATA_HOME/woodshed/tools" ;;
+            *) printf '%s\n' "$HOME/.local/share/woodshed/tools" ;;
+        esac
+    fi
+}
+
+# The Linux menu entry "Uninstall woodshed": a terminal window runs the script above, kept in woodshed's
+# tools folder (woodshed uninstall removes that folder). $1: the folder of the woodshed command, $2: uv,
+# $3: the applications folder.
+linux_uninstall_entry() {
+    tools="$(woodshed_tools_dir)"
+    mkdir -p "$tools"
+    uninstall_script "$1" "$2" > "$tools/uninstall-woodshed.sh"
+    chmod 755 "$tools/uninstall-woodshed.sh"
+    cat > "$3/woodshed-uninstall.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Uninstall woodshed
+Comment=Remove woodshed from this computer (your songs stay)
+Exec=sh "$tools/uninstall-woodshed.sh"
+Terminal=true
+Categories=AudioVideo;Audio;Music;
+EOF
+}
+
 REF="${WOODSHED_REF:-main}"
 PYTHON=3.13
 if [ "$(uname -s)" = "Darwin" ]; then
@@ -189,6 +296,16 @@ if [ "$(uname -s)" = "Darwin" ] && [ "${WOODSHED_NO_MENU:-0}" != "1" ]; then
 fi
 if [ "$(uname -s)" = "Darwin" ]; then
     get_rubberband || true
+fi
+# "Uninstall woodshed" next to woodshed: it runs woodshed uninstall, then uv removes woodshed.
+if [ "${WOODSHED_NO_MENU:-0}" != "1" ]; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        mac_uninstall_app "$BIN" "$(command -v uv)"
+        say "App added: Uninstall woodshed, next to it (to remove woodshed one day; your songs stay)."
+    elif [ "$(uname -s)" = "Linux" ]; then
+        linux_uninstall_entry "$BIN" "$(command -v uv)" "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+        say "Menu entry added: Uninstall woodshed (to remove woodshed one day; your songs stay)."
+    fi
 fi
 
 say ""

@@ -3,6 +3,7 @@
 woodshed SONG [SONG ...]   build a practice page per song and open it
 woodshed chart SONG        the text chart (timeline and bar grid)
 woodshed cache             where the stems and models are; clear them
+woodshed uninstall         remove woodshed from this computer (the songs stay)
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from woodshed import __version__
 from woodshed.errors import WoodshedError
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTERRUPTED = 0, 1, 2, 130
-COMMANDS = ("chart", "cache", "app", "lyrics")
+COMMANDS = ("chart", "cache", "app", "lyrics", "uninstall")
 
 
 def _meter(parser: argparse.ArgumentParser) -> None:
@@ -37,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Turn a song file into a local practice room: chart, parts and play-along, offline.",
         epilog="Other commands: 'woodshed app' opens your library in the browser; 'woodshed chart SONG' prints"
         " the text chart; 'woodshed lyrics PAGE WORDS.txt' puts the words on a page; 'woodshed cache' manages"
-        " the cache.",
+        " the cache; 'woodshed uninstall' removes woodshed (your songs stay).",
     )
     parser.add_argument("--version", action="version", version=f"woodshed {__version__}")
     parser.add_argument(
@@ -311,9 +312,22 @@ def run_cache(argv: Sequence[str]) -> int:
     return EXIT_OK
 
 
+def run_uninstall(argv: Sequence[str]) -> int:
+    from woodshed import uninstall
+
+    return uninstall.main(argv)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     # "chart" and "cache" are commands, unless a file of that name is meant.
     if args and args[0] in COMMANDS and not Path(args[0]).exists():
-        return {"chart": run_chart, "cache": run_cache, "app": run_app, "lyrics": run_lyrics}[args[0]](args[1:])
+        commands = {
+            "chart": run_chart,
+            "cache": run_cache,
+            "app": run_app,
+            "lyrics": run_lyrics,
+            "uninstall": run_uninstall,
+        }
+        return commands[args[0]](args[1:])
     return run_pages(args)

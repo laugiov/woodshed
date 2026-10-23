@@ -223,3 +223,132 @@ def test_a_release_packages_installers_that_install_its_tag(tmp_path: Path) -> N
 def test_a_release_refuses_a_strange_tag(tmp_path: Path, tag: str) -> None:
     proc = subprocess.run(["bash", str(PACKAGE), str(tmp_path / "dist"), tag], capture_output=True, text=True)
     assert proc.returncode != 0 and "bad tag" in proc.stderr
+
+
+# Uninstall woodshed (spec 018): the shortcuts the installers make run "woodshed uninstall --keep-self",
+# then uv removes woodshed once it has exited.
+
+PS1 = ROOT / "scripts" / "install.ps1"
+
+
+def uninstall_stubs(tmp_path: Path, woodshed_exit: int = 0) -> tuple[Path, Path, Path]:
+    """A woodshed and a uv that log their arguments, in folders whose names hold a space and a quote."""
+    bin_dir, uv_dir, log = tmp_path / "Jane O'Doe bin", tmp_path / "uv dir", tmp_path / "calls.log"
+    bin_dir.mkdir()
+    uv_dir.mkdir()
+    write_script(bin_dir / "woodshed", f"echo \"woodshed $*\" >> '{log}'\nexit {woodshed_exit}")
+    write_script(uv_dir / "uv", f"echo \"uv $*\" >> '{log}'")
+    return bin_dir, uv_dir / "uv", log
+
+
+def calls_of(log: Path) -> list[str]:
+    return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+
+
+def run_uninstall_script(script: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp_path), "WOODSHED_NO_PAUSE": "1"}
+    return subprocess.run(["sh", str(script), "--yes"], env=env, capture_output=True, text=True, check=False)
+
+
+@posix_only
+@pytest.mark.parametrize("woodshed_exit", [0, 1])
+def test_the_mac_uninstall_app_runs_woodshed_then_uv(tmp_path: Path, woodshed_exit: int) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir, uv, log = uninstall_stubs(tmp_path, woodshed_exit)
+    make = shell_function("sh_quote") + shell_function("uninstall_script") + shell_function("mac_uninstall_app")
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    for _ in range(2):  # installing again replaces the app
+        subprocess.run(
+            ["sh", "-c", make + 'mac_uninstall_app "$1" "$2"', "sh", str(bin_dir), str(uv)], env=env, check=True
+        )
+
+    contents = home / "Applications" / "Uninstall woodshed.app" / "Contents"
+    info = plistlib.loads((contents / "Info.plist").read_bytes())
+    from woodshed import uninstall
+
+    assert info["CFBundleIdentifier"].startswith(uninstall.APP_ID)  # what woodshed uninstall recognises
+    assert info["CFBundleName"] == "Uninstall woodshed" and info["CFBundlePackageType"] == "APPL"
+    launcher, command = contents / "MacOS" / info["CFBundleExecutable"], contents / "Resources" / "uninstall.command"
+    assert launcher.stat().st_mode & 0o111 and command.stat().st_mode & 0o111
+    assert 'open -a Terminal "$(dirname "$0")/../Resources/uninstall.command"' in launcher.read_text(encoding="utf-8")
+
+    proc = run_uninstall_script(command, tmp_path)
+    if woodshed_exit == 0:
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert calls_of(log) == ["woodshed uninstall --keep-self --yes", "uv tool uninstall woodshed", "uv cache prune"]
+    else:  # declined or refused: woodshed stays
+        assert proc.returncode == 1
+        assert calls_of(log) == ["woodshed uninstall --keep-self --yes"]
+        assert "Nothing more was removed" in proc.stdout
+
+
+@posix_only
+@pytest.mark.parametrize("tools_env", ["WOODSHED_TOOLS", "XDG_DATA_HOME", ""])
+def test_linux_gets_an_uninstall_menu_entry_and_its_script(tmp_path: Path, tools_env: str) -> None:
+    from woodshed import uninstall
+
+    home = tmp_path / "home"
+    env = {"WOODSHED_NO_MENU": "0"}
+    if tools_env == "WOODSHED_TOOLS":
+        env["WOODSHED_TOOLS"] = str(tmp_path / "my tools")
+        tools = tmp_path / "my tools"
+    elif tools_env == "XDG_DATA_HOME":
+        env["XDG_DATA_HOME"] = str(tmp_path / "data")
+        tools = tmp_path / "data" / "woodshed" / "tools"
+    else:
+        tools = home / ".local" / "share" / "woodshed" / "tools"
+    code, out, _ = run_install(tmp_path, "Linux", "x86_64", **env)
+    assert code == 0, out
+    apps = Path(env.get("XDG_DATA_HOME", home / ".local" / "share")) / "applications"
+    entry = (apps / "woodshed-uninstall.desktop").read_text(encoding="utf-8")
+    script = tools / "uninstall-woodshed.sh"
+    assert "Name=Uninstall woodshed\n" in entry and "Terminal=true\n" in entry
+    assert f'Exec=sh "{script}"\n' in entry
+    # The same folder woodshed uninstall removes, so the script goes with it.
+    os_env = {k: v for k, v in env.items() if k != "WOODSHED_NO_MENU"}
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("HOME", str(home))
+        mp.delenv("WOODSHED_TOOLS", raising=False)
+        mp.delenv("XDG_DATA_HOME", raising=False)
+        for k, v in os_env.items():
+            mp.setenv(k, v)
+        assert uninstall.tools_dir("linux") == tools
+    text = script.read_text(encoding="utf-8")
+    assert f"'{tmp_path / 'b.in (x+y)'}/woodshed' uninstall --keep-self" in text
+    assert f"'{tmp_path / 'stubs' / 'uv'}' tool uninstall woodshed" in text
+
+
+@posix_only
+def test_the_uninstall_script_survives_odd_folder_names(tmp_path: Path) -> None:
+    bin_dir, uv, log = uninstall_stubs(tmp_path)
+    script = tmp_path / "u.sh"
+    make = shell_function("sh_quote") + shell_function("uninstall_script") + 'uninstall_script "$1" "$2" > "$3"'
+    subprocess.run(["sh", "-c", make, "sh", str(bin_dir), str(uv), str(script)], check=True)
+    proc = run_uninstall_script(script, tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert calls_of(log)[0] == "woodshed uninstall --keep-self --yes"
+
+
+def test_the_windows_installer_registers_the_uninstall_woodshed_knows() -> None:
+    from woodshed import uninstall
+
+    text = PS1.read_text(encoding="utf-8")
+    assert uninstall.UNINSTALL_KEY in text and uninstall.WINDOWS_SCRIPT in text
+    assert '"Uninstall woodshed.lnk"' in text
+    for value in (
+        "DisplayName",
+        "DisplayVersion",
+        "DisplayIcon",
+        "UninstallString",
+        "EstimatedSize",
+        "NoModify",
+        "NoRepair",
+        '"woodshed project"',
+        "uninstall --keep-self",
+        "tool uninstall woodshed",
+        "reg delete",
+    ):
+        assert value in text, value
+    # The tools folder as woodshed computes it on Windows.
+    assert 'Join-Path $env:LOCALAPPDATA "woodshed\\tools"' in text and "$env:WOODSHED_TOOLS" in text

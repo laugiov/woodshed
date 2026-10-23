@@ -55,7 +55,7 @@ What makes this safe to repeat:
 
 For a folder of songs, `run_folder` builds every mix-only page first. Then it adds the stems song by song and rewrites the index (`src/woodshed/songbook.py`).
 
-The commands live in `src/woodshed/cli.py`: `woodshed SONG`, and the subcommands `chart`, `cache`, `app`, `lyrics`.
+The commands live in `src/woodshed/cli.py`: `woodshed SONG`, and the subcommands `chart`, `cache`, `app`, `lyrics`, `uninstall`.
 
 ---
 
@@ -557,6 +557,18 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 - `WOODSHED_PUBLIC_URL`: a comma-separated list of the addresses the phones should type (for example `http://192.168.1.20:8000`). Used when the app cannot know them. Each URL is checked against a pattern.
 - Uploads must be allowed from the network inside a container, because every request comes through the bridge. Publish the port as `127.0.0.1:8000:8000` to keep it to your computer.
 
+### Uninstall
+
+`src/woodshed/uninstall.py` (spec 018) removes what woodshed and its installers put on the computer, after one question (`--yes` skips it):
+
+- the cache's `stems/` and `models/` only (never the rest of `cache_dir()`), woodshed's tools folder (`tools_dir()`: `WOODSHED_TOOLS`, else `~/Library/Application Support/woodshed/tools`, `%LOCALAPPDATA%\woodshed\tools` or `$XDG_DATA_HOME/woodshed/tools`), then those folders' parents only when left empty;
+- the shortcuts: `~/Applications/woodshed.app` and `Uninstall woodshed.app` (only with woodshed's bundle id), the Linux `woodshed.desktop` and `woodshed-uninstall.desktop`, the Windows Start menu's `woodshed.lnk` and `Uninstall woodshed.lnk`, and the HKCU `...\CurrentVersion\Uninstall\woodshed` key, last;
+- a link is removed, never what it points to.
+
+It never touches the library (`~/woodshed`, listed as kept) and refuses, removing nothing, when the library and a folder it would remove contain each other, when a folder is the home or a parent of it, while woodshed runs (its port answers, or another `woodshed` process than itself and its parent), outside a uv tool install (no `uv-receipt.toml` in `sys.prefix`) and in Docker (`WOODSHED_CONTAINER`).
+
+A running program cannot remove itself, so the installers' Uninstall shortcuts run `woodshed uninstall --keep-self`, then `uv tool uninstall woodshed` and `uv cache prune` once it has exited: on macOS the app's `uninstall.command` in Terminal, on Linux `uninstall-woodshed.sh` in the tools folder (the `.desktop` has `Terminal=true`), on Windows `uninstall-woodshed.cmd` in the tools folder (the Start menu shortcut and Settings > Apps both run it). On Windows `--keep-self` also leaves that `.cmd` and the Settings key: the `.cmd` deletes the key after uv, then itself. Typed in a terminal, `woodshed uninstall` prints the last command instead.
+
 ---
 
 ## 12. Testing and CI
@@ -589,7 +601,7 @@ The `Dockerfile` sets `WOODSHED_CONTAINER=1` and `WOODSHED_CACHE=/cache`, and ru
 In `.github/workflows/`:
 
 - `ci.yml`: on push and pull request. Jobs: checks (guard, lock, ruff, mypy, actionlint), tests on Python 3.10 to 3.14 (Ubuntu, plus macOS and Windows on 3.10 and 3.14), the page in Chromium and Firefox, the tablet tests in WebKit, a package build and smoke test, and the stems extra with real models.
-- `install.yml`: tries the install scripts on Linux, macOS and Windows (on macOS and Windows from an archive, as users get it), the double-click installers (`scripts/installers/`) and the macOS app they make, and the Docker image, when those files change.
+- `install.yml`: tries the install scripts on Linux, macOS and Windows (on macOS and Windows from an archive, as users get it), the double-click installers (`scripts/installers/`) and the macOS app they make, the Uninstall woodshed shortcuts (run with `--yes`: woodshed gone from `uv tool list`, the shortcuts, Settings entry and cache tracks gone, a library file kept, the uv cache size printed before and after), and the Docker image, when those files (or `uninstall.py`, `cli.py`) change.
 - `installers.yml`: on version tags, attaches the double-click installers to the GitHub release (`woodshed-installer-macos.zip`, `woodshed-installer-windows.cmd`), set to install that tag (`scripts/package-installers.sh` sets their `WOODSHED_REF`). Pull requests that touch them build them as an artifact, without a write token.
 - `docker.yml`: builds the image on native x86 and ARM machines and publishes one tag for both, from `main` and from version tags.
 

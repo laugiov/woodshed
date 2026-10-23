@@ -13,8 +13,9 @@
 #   WOODSHED_SOURCE     what to install (default: the version WOODSHED_REF names, on GitHub)
 #   WOODSHED_REF        a branch or a version tag on GitHub (default: main)
 #   WOODSHED_NO_FFMPEG  set to 1 to leave ffmpeg alone
-#   WOODSHED_NO_MENU    set to 1 to skip the Start menu shortcut
-# Uninstall: uv tool uninstall woodshed
+#   WOODSHED_NO_MENU    set to 1 to skip the Start menu shortcuts
+#   WOODSHED_TOOLS      woodshed's tools folder (the uninstall script goes there)
+# Uninstall: "Uninstall woodshed" in the Start menu, or woodshed in Settings > Apps.
 
 $ErrorActionPreference = "Stop"
 # TLS 1.2 for the downloads: older Windows PowerShell setups do not offer it by default.
@@ -170,6 +171,95 @@ if ($env:WOODSHED_NO_MENU -ne "1") {
     $Link.Save()
     Write-Host "Start menu shortcut added: woodshed."
 }
+
+# Uninstall woodshed (spec 018), self-contained: a small .cmd in woodshed's tools folder (as woodshed computes
+# it, uninstall.tools_dir) runs "woodshed uninstall --keep-self" (it asks first, then removes the cache, the
+# tools and the shortcuts), then uv removes woodshed once it has exited, then the Settings entry goes and the
+# .cmd deletes itself. The Start menu's "Uninstall woodshed" and Settings > Apps run it. No administrator rights.
+function Add-WoodshedUninstall([string]$Exe, [bool]$Menu) {
+    $Key = "Software\Microsoft\Windows\CurrentVersion\Uninstall\woodshed"
+    $Uv = (Get-Command uv).Source
+    $Own = -not $env:WOODSHED_TOOLS
+    $Tools = if ($Own) { Join-Path $env:LOCALAPPDATA "woodshed\tools" } else { $env:WOODSHED_TOOLS }
+    New-Item -ItemType Directory -Force -Path $Tools | Out-Null
+    $Script = Join-Path $Tools "uninstall-woodshed.cmd"
+    # In the .cmd, the user's folders by name (%LOCALAPPDATA%...): its text stays ASCII whatever the user's name.
+    $InCmd = {
+        param([string]$Path)
+        $Path = $Path -replace "%", "%%"
+        foreach ($Var in "LOCALAPPDATA", "USERPROFILE") {
+            $Value = [Environment]::GetEnvironmentVariable($Var)
+            if ($Value -and $Path.StartsWith($Value, [StringComparison]::OrdinalIgnoreCase)) {
+                return '"%' + $Var + '%' + $Path.Substring($Value.Length) + '"'
+            }
+        }
+        '"' + $Path + '"'
+    }
+    # The last line deletes the .cmd itself ((goto) first, so cmd does not read on), then its folder if empty,
+    # and woodshed's own data folder if empty (only the default one: a chosen folder's parent is not ours).
+    $Last = '(goto) 2>nul & del "%~f0" & rd "%~dp0." 2>nul'
+    if ($Own) { $Last += ' & rd "%~dp0.." 2>nul' }
+    $Lines = @(
+        '@echo off',
+        'rem Made by the woodshed installer: removes woodshed from this computer, asking first. Your songs stay.',
+        'setlocal',
+        'title Uninstall woodshed',
+        'cd /d "%USERPROFILE%"',
+        'echo Uninstall woodshed',
+        'echo ------------------',
+        'echo.',
+        ((& $InCmd $Exe) + ' uninstall --keep-self %*'),
+        'if errorlevel 1 goto :stopped',
+        'echo.',
+        'echo Removing woodshed itself...',
+        ((& $InCmd $Uv) + ' tool uninstall woodshed'),
+        'if errorlevel 1 goto :failed',
+        ((& $InCmd $Uv) + ' cache prune >nul 2>&1'),
+        ('reg delete "HKCU\' + $Key + '" /f >nul 2>&1'),
+        'echo.',
+        'echo woodshed is removed. Your songs stay where they are.',
+        'if not "%WOODSHED_NO_PAUSE%"=="1" pause',
+        $Last,
+        ':stopped',
+        'echo.',
+        'echo Nothing more was removed.',
+        'goto :end',
+        ':failed',
+        'echo woodshed itself could not be removed: the message above says why.',
+        ':end',
+        'if not "%WOODSHED_NO_PAUSE%"=="1" pause',
+        'exit /b 1'
+    )
+    # cmd.exe reads labels right only with Windows line endings.
+    [IO.File]::WriteAllText($Script, (($Lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+
+    if ($Menu) {
+        $Programs = [Environment]::GetFolderPath("Programs")
+        $Link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $Programs "Uninstall woodshed.lnk"))
+        $Link.TargetPath = $Script
+        $Link.WorkingDirectory = $env:USERPROFILE  # not the tools folder, which the .cmd removes
+        $Link.Description = "Remove woodshed from this computer (your songs stay)"
+        $Link.Save()
+    }
+
+    # Settings > Apps: the key goes last, in the .cmd, once woodshed is removed.
+    $Version = ((& $Exe --version) -replace "^woodshed\s+", "").Trim()
+    $ToolEnv = Join-Path (uv tool dir).Trim() "woodshed"
+    $Size = 0
+    if (Test-Path $ToolEnv) { $Size = [int](((Get-ChildItem -Recurse -File -Force $ToolEnv | Measure-Object Length -Sum).Sum) / 1KB) }
+    $Path = "HKCU:\$Key"
+    New-Item -Path $Path -Force | Out-Null
+    $Strings = @{
+        DisplayName = "woodshed"; DisplayVersion = $Version; Publisher = "woodshed project"
+        UninstallString = ('"' + $Script + '"'); DisplayIcon = $Exe
+        URLInfoAbout = "https://github.com/laugiov/woodshed"
+    }
+    foreach ($Name in $Strings.Keys) { New-ItemProperty -Path $Path -Name $Name -Value $Strings[$Name] -PropertyType String -Force | Out-Null }
+    $Numbers = @{ NoModify = 1; NoRepair = 1; EstimatedSize = $Size }
+    foreach ($Name in $Numbers.Keys) { New-ItemProperty -Path $Path -Name $Name -Value $Numbers[$Name] -PropertyType DWord -Force | Out-Null }
+}
+Add-WoodshedUninstall $Exe ($env:WOODSHED_NO_MENU -ne "1")
+Write-Host "Uninstall woodshed added: in the Start menu and in Settings > Apps (to remove it one day; your songs stay)."
 
 Write-Host ""
 Write-Host ("woodshed is installed: " + (& $Exe --version))

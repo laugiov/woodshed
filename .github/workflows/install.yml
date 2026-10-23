@@ -2,14 +2,15 @@ name: Install
 
 # The ways a musician installs woodshed, tried on real machines: the install scripts on Linux,
 # macOS and Windows (from this checkout), then a page built from the demo song; the double-click
-# installers on macOS and Windows; and the Docker image on x86 and ARM.
+# installers on macOS and Windows; the Uninstall woodshed shortcuts they leave; and the Docker
+# image on x86 and ARM.
 
 on:
   push:
     branches: [main]
-    paths: ["scripts/install.*", "scripts/installers/**", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+    paths: ["scripts/install.*", "scripts/installers/**", "src/woodshed/uninstall.py", "src/woodshed/cli.py", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
   pull_request:
-    paths: ["scripts/install.*", "scripts/installers/**", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
+    paths: ["scripts/install.*", "scripts/installers/**", "src/woodshed/uninstall.py", "src/woodshed/cli.py", "Dockerfile", "compose.yaml", ".dockerignore", "pyproject.toml", "uv.lock", ".github/workflows/install.yml"]
   workflow_dispatch:
 
 permissions:
@@ -85,6 +86,54 @@ jobs:
             pgrep -fil "terminal|woodshed" || true
             exit 1
           fi
+      # What the Uninstall woodshed shortcut runs (the Mac app's script, the Linux menu entry's), with
+      # --yes for the question: woodshed, its cache tracks and its shortcuts go, a library stays.
+      - name: Uninstall woodshed as its shortcut does, the songs kept
+        timeout-minutes: 5
+        env:
+          WOODSHED_NO_PAUSE: "1"
+        run: |
+          set -eu
+          bin="$(uv tool dir --bin)"
+          mkdir -p ~/woodshed && echo "a song" > ~/woodshed/kept.txt
+          cache="$("$bin/woodshed" cache | sed -n 's/^cache: //p')"
+          mkdir -p "$cache/stems/x" "$cache/models" && echo x > "$cache/stems/x/vocals.flac"
+          data="${XDG_DATA_HOME:-$HOME/.local/share}"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            app=~/Applications/"Uninstall woodshed.app"/Contents
+            plutil -lint "$app/Info.plist"
+            test -x "$app/MacOS/uninstall"
+            script="$app/Resources/uninstall.command"
+            tools=~/"Library/Application Support/woodshed/tools"
+          else
+            entry="$data/applications/woodshed-uninstall.desktop"
+            grep -qx 'Terminal=true' "$entry"
+            tools="$data/woodshed/tools"
+            script="$tools/uninstall-woodshed.sh"
+            grep -qxF "Exec=sh \"$script\"" "$entry"
+          fi
+          sh -n "$script"
+          # The app started above may still be closing: woodshed refuses while its port answers.
+          for _ in $(seq 1 30); do curl -s -m 2 -o /dev/null http://127.0.0.1:8000/ || break; sleep 1; done
+          before="$(du -sk "$(uv cache dir)" | cut -f1)"
+          sh "$script" --yes
+          gone=""
+          for _ in $(seq 1 60); do
+            if ! uv tool list 2>/dev/null | grep -q '^woodshed '; then gone=1; break; fi
+            sleep 1
+          done
+          after="$(du -sk "$(uv cache dir)" | cut -f1)"
+          echo "uv cache: ${before} KB before, ${after} KB after the uninstall (uv cache prune)"
+          test -n "$gone" || { echo "::error::woodshed is still in uv tool list after 60 s"; exit 1; }
+          test ! -e "$bin/woodshed"
+          test ! -e "$cache/stems" && test ! -e "$cache/models"
+          test ! -e "$tools"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            test ! -e ~/Applications/woodshed.app && test ! -e ~/Applications/"Uninstall woodshed.app"
+          else
+            test ! -e "$data/applications/woodshed.desktop" && test ! -e "$data/applications/woodshed-uninstall.desktop"
+          fi
+          test "$(cat ~/woodshed/kept.txt)" = "a song"
 
   windows:
     name: Install script, windows-latest
@@ -136,6 +185,50 @@ jobs:
           if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
           $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
           if (-not (Test-Path $target)) { throw "the shortcut points to nothing: $target" }
+      # What Settings > Apps and the Start menu's Uninstall woodshed run, with --yes for the question:
+      # woodshed, its cache tracks, its shortcuts and its Settings entry go, a library stays.
+      - name: Uninstall woodshed as Settings > Apps does, the songs kept
+        shell: pwsh
+        timeout-minutes: 5
+        env:
+          WOODSHED_NO_PAUSE: "1"
+        run: |
+          $exe = Join-Path (uv tool dir --bin).Trim() "woodshed.exe"
+          $lib = Join-Path $env:USERPROFILE "woodshed"
+          New-Item -ItemType Directory -Force $lib | Out-Null
+          Set-Content -Path (Join-Path $lib "kept.txt") -Value "a song"
+          $cache = ((& $exe cache) | Select-String "^cache: (.*)$").Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force (Join-Path $cache "stems\x"), (Join-Path $cache "models") | Out-Null
+          Set-Content -Path (Join-Path $cache "stems\x\vocals.flac") -Value "x"
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\woodshed"
+          $entry = Get-ItemProperty $key
+          if ($entry.Publisher -ne "woodshed project" -or $entry.NoModify -ne 1 -or $entry.NoRepair -ne 1) { throw "the Settings entry is incomplete" }
+          if ($entry.DisplayVersion -match "woodshed" -or -not $entry.DisplayVersion) { throw "DisplayVersion: $($entry.DisplayVersion)" }
+          if ($entry.EstimatedSize -le 0) { throw "EstimatedSize: $($entry.EstimatedSize)" }
+          $programs = [Environment]::GetFolderPath("Programs")
+          $links = (Join-Path $programs "woodshed.lnk"), (Join-Path $programs "Uninstall woodshed.lnk")
+          foreach ($l in $links) { if (-not (Test-Path $l)) { throw "no shortcut: $l" } }
+          $script = $entry.UninstallString.Trim('"')
+          if ((New-Object -ComObject WScript.Shell).CreateShortcut($links[1]).TargetPath -ne $script) { throw "the shortcut does not run the uninstall script" }
+          $tools = Split-Path $script
+          $bytes = Get-Item (uv cache dir).Trim() | Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum
+          & $script --yes
+          Write-Host "the uninstall script exited with $LASTEXITCODE"
+          $gone = $false
+          foreach ($i in 1..60) {
+            if (-not ((uv tool list 2>$null) -match "^woodshed ")) { $gone = $true; break }
+            Start-Sleep 1
+          }
+          $after = Get-Item (uv cache dir).Trim() | Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum
+          Write-Host ("uv cache: {0:N0} KB before, {1:N0} KB after the uninstall (uv cache prune)" -f ($bytes.Sum / 1KB), ($after.Sum / 1KB))
+          if (-not $gone) { throw "woodshed is still in uv tool list after 60 s" }
+          if (Test-Path $exe) { throw "woodshed.exe is still there" }
+          foreach ($l in $links) { if (Test-Path $l) { throw "the shortcut is still there: $l" } }
+          if (Test-Path $key) { throw "the Settings > Apps entry is still there" }
+          if ((Test-Path (Join-Path $cache "stems")) -or (Test-Path (Join-Path $cache "models"))) { throw "the cache tracks are still there" }
+          if (Test-Path $script) { throw "the uninstall script is still there" }
+          if (Test-Path $tools) { throw "the tools folder is still there" }
+          if ((Get-Content (Join-Path $lib "kept.txt")) -ne "a song") { throw "the library was touched" }
 
   docker:
     name: Docker image, ${{ matrix.runner }}

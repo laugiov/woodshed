@@ -268,11 +268,11 @@ Encoder**, then select the song and **File** > **Convert** > **Create MP3 Versio
 
 **To update**, close woodshed first (its window), download the installer again from the
 [latest release](https://github.com/laugiov/woodshed/releases/latest) and run it. **To uninstall**,
-open Terminal (Mac) or PowerShell (Windows) and type `uv tool uninstall woodshed`, then
-`uv cache clean` (it frees the space the downloads took). Then remove the shortcut: on a Mac, drag
-**woodshed** from the Applications folder of your home folder to the Trash; on Windows, delete
-`woodshed` from the Start menu folder (right-click it, **Open file location**). Your songs stay
-where they are.
+close woodshed, then open **Uninstall woodshed** (in Applications on a Mac, in the Start menu or
+**Settings** > **Apps** on Windows, in the applications menu on Linux). A window lists what goes
+and asks once: the downloaded models and separated tracks, the shortcuts, then woodshed itself.
+Your songs and their practice pages stay where they are, and so do uv and ffmpeg, which other
+programs may use.
 
 ### With Docker: Windows, macOS or Linux
 
@@ -330,7 +330,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/lau
 The same for your user, no administrator rights; ffmpeg comes with winget when it is available,
 the Rubber Band program for the recording in your key, and woodshed gets a Start menu shortcut. The double-click installers run these same scripts.
 
-Uninstall: `uv tool uninstall woodshed`. Read the scripts before running them if you like:
+To uninstall: open **Uninstall woodshed** (Applications on a Mac, the Start menu or Settings >
+Apps on Windows, the menu on Linux). In a terminal, `woodshed uninstall` removes the same things
+(asking first), then prints the last command to type, `uv tool uninstall woodshed`. Read the
+scripts before running them if you like:
 [install.sh](scripts/install.sh), [install.ps1](scripts/install.ps1), and the double-click
 installers from the [latest release](https://github.com/laugiov/woodshed/releases/latest)
 (their source is in `scripts/installers/`).
