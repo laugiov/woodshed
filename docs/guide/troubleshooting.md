@@ -123,7 +123,9 @@ no network address"**. Join the Wi-Fi (or a phone's hotspot: see
 
 **A phone cannot open the address.** Your computer may have asked whether woodshed (or Python) may
 accept incoming connections: allow it on private networks (on Windows: tick **Private networks**,
-click **Allow access**). Check that the phone is on the same Wi-Fi.
+click **Allow access**). If Windows calls this Wi-Fi a Public network (a hotspot or a venue usually
+is), make it Private: **Settings** > **Network & internet** > **Wi-Fi** > the network > **Private
+network**. Check that the phone is on the same Wi-Fi.
 
 **"the phones cannot be let in on port 8000"**. Another program uses that port, or the system refused
 it: close the other program, or start woodshed on another port from a terminal

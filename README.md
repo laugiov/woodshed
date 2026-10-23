@@ -37,22 +37,23 @@ Chords, words and a part for each musician, on your own computer. Free, offline,
 ## Install
 
 For a Mac with Apple silicon (M1 or newer) or a Windows PC: no Python, no GPU, no administrator
-rights. About 1.5 GB to download, a few minutes.
+rights (your Mac asks for your password once, to allow the installer). About 1.5 GB to download, a
+few minutes.
 
 **On a Mac**
 
 1. Download [woodshed-installer-macos.zip](https://github.com/laugiov/woodshed/releases/latest/download/woodshed-installer-macos.zip)
    and double-click it: you get **Install woodshed**.
-2. Double-click **Install woodshed**. The first time, your Mac says it cannot check it: open it from
+2. Double-click **Install woodshed**. Your Mac says it cannot check it (again after each update): open it from
    **System Settings** > **Privacy & Security** > **Open Anyway** ([step by step](docs/guide/install.md#the-first-time-your-computers-warnings)).
 3. When the window says **Done**, your library opens in the browser. Drop a song on it and play.
 
 **On Windows**
 
 1. Download [woodshed-installer-windows.cmd](https://github.com/laugiov/woodshed/releases/latest/download/woodshed-installer-windows.cmd).
-   If Edge holds it back: **…**, then **Keep**, then **Keep anyway**.
-2. Double-click it. If a blue box says "Windows protected your PC": **More info**, then **Run
-   anyway** ([step by step](docs/guide/install.md#the-first-time-your-computers-warnings)).
+   If Edge holds it back: **…**, **Keep**, then **Show more** and **Keep anyway**.
+2. Double-click it and click **Run**. If a blue box says "Windows protected your PC": **More info**,
+   then **Run anyway** ([step by step](docs/guide/install.md#the-first-time-your-computers-warnings)).
 3. When the window says **Done**, your library opens in the browser. Drop a song on it and play.
 
 **Linux, or you like a terminal**: one line installs it, see [in a terminal](docs/guide/install.md#in-a-terminal-linux-macos-or-windows).<br>

@@ -13,7 +13,13 @@ song and press **Follow**.
 
 The first time, your computer may ask whether woodshed (or Python) may accept incoming connections:
 allow it on private networks (on Windows, the "Windows Security" box: tick **Private networks** and
-click **Allow access**). The phones can play, lead and follow, not add songs, and the button lets
+click **Allow access**).
+
+If Windows calls this Wi-Fi a Public network (a phone hotspot or a venue's Wi-Fi usually is), make
+it Private first: **Settings** > **Network & internet** > **Wi-Fi** > the network > **Private
+network**.
+
+The phones can play, lead and follow, not add songs, and the button lets
 them out again. From a terminal, `woodshed app --host 0.0.0.0 --allow-network` starts the library
 already open to the network.
 

@@ -42,7 +42,7 @@ bar 17" before you pick a key.
 
 ## Keep the key for the band
 
-Then, in the library, **Keep E♭ for the band** (the button names your key): every device opens the
+Then, on the song's page opened from the library, **Keep E♭ for the band** (the button names your key): every device opens the
 song in it. Served by the library, the recording follows too (see below); a page opened from disk
 keeps its own key, and the page says so.
 

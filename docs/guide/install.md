@@ -39,7 +39,8 @@ for it. On Windows they add ffmpeg too when they can (for [M4A and video files](
 
 ### The first time: your computer's warnings
 
-The first time only, your computer warns you about the installer, because this free project does
+The first time you open a downloaded installer (and again after each update, since it is a new
+download), your computer warns you about it, because this free project does
 not pay Apple or Microsoft to sign it. The warning is about who made the file, not about anything
 found in it. Open the steps for your computer: each one says what to click.
 
@@ -47,7 +48,10 @@ found in it. Open the steps for your computer: each one says what to click.
 <summary><strong>On a Mac: the first time you open the installer</strong></summary>
 
 macOS cannot check the installer, because this free project does not pay Apple to sign it. You allow it once, in
-three steps. What you will see (drawn, macOS 15 Sequoia, drawn 2026-10):
+three steps. What you will see (drawn from macOS 15 Sequoia, 2026-10):
+
+On macOS 14 Sonoma or older, there is a shorter way: right-click the file, choose **Open**, then
+**Open** again.
 
 1. A box says "“Install woodshed” Not Opened". Click **Done** (Terminé).
 
@@ -70,7 +74,7 @@ three steps. What you will see (drawn, macOS 15 Sequoia, drawn 2026-10):
    *What you will see (drawn): click Open Anyway (Ouvrir quand même), then your password or Touch ID. macOS 15
    Sequoia, drawn 2026-10.*
 
-The words in these boxes vary a little from one macOS or Edge version to the next. The **Open Anyway** button in Privacy & Security shows for about an hour after you tried to open the file: if it is
+The words in these boxes vary a little from one macOS version to the next. The **Open Anyway** button in Privacy & Security shows for about an hour after you tried to open the file: if it is
 gone, double-click the installer again and start over at step 1. Since macOS 15 Sequoia, right-click then **Open**
 no longer skips these steps.
 
@@ -80,7 +84,7 @@ no longer skips these steps.
 <summary><strong>On Windows with Edge: the download and the first run</strong></summary>
 
 Edge and Windows do not know the installer yet, because this free project does not pay Microsoft to sign it. You
-allow it once. What you will see (drawn, Windows 11 with Edge, drawn 2026-10):
+allow it once. What you will see (drawn from Windows 11 with Edge, 2026-10):
 
 1. Edge holds the download back: "woodshed-installer-windows.cmd isn't commonly downloaded". Click **…** next to
    the file (Plus d'actions), then **Keep** (Conserver).
@@ -116,9 +120,6 @@ In Chrome, step 1 is a single **Keep** (Conserver) and step 2 does not appear. I
 file, choose **Properties**, tick **Unblock**, click **OK** and double-click it again.
 
 </details>
-
-On macOS 14 Sonoma or older, there is a shorter way: right-click the file, choose **Open**, then
-**Open** again.
 
 ### Next time: starting woodshed
 
@@ -267,7 +268,8 @@ waltz, `--sevenths` adds 7th chords, `--bar-phase 1` puts the first bar line one
 
 Close woodshed first (its window), download the installer again from the
 [latest release](https://github.com/laugiov/woodshed/releases/latest) and run it, as the first
-time. Your songs, corrections and set list stay where they are. The library page's footer shows
+time (your computer shows the same warnings again: it is a new download). Your songs, corrections
+and set list stay where they are. The library page's footer shows
 the version you have, with a link to [what's new](../../CHANGELOG.md).
 
 - **In a terminal**: run the same install line again.
@@ -281,14 +283,17 @@ song again (a minute or two, from its separated tracks; the band's typed bars st
 
 Close woodshed, then open **Uninstall woodshed**, next to woodshed:
 
-- on a Mac, in Applications (the Applications folder of your home folder);
+- on a Mac: press Cmd+Space and type **Uninstall woodshed** (it is in the Applications folder of your
+  home folder, not the one in the Finder sidebar);
 - on Windows, in the Start menu, or in **Settings** > **Apps**;
 - on Linux, in the applications menu.
 
-A window lists what goes and asks once. It removes woodshed and what it downloaded: the models and
+A window lists what goes and asks once: type **y**, then press Enter (Enter alone keeps everything). It removes woodshed and what it downloaded: the models and
 the separated tracks, its tools (the Rubber Band program), the shortcuts, and the room woodshed's
 big packages took in uv's cache. Your songs and their practice pages stay where they are, and so do
 uv and ffmpeg, which other programs may use.
+
+No **Uninstall woodshed**? It came with woodshed 0.5.0: run the latest installer once, it adds it.
 
 In a terminal, `woodshed uninstall` removes the same things (asking first), then prints the last
 command to type, `uv tool uninstall woodshed`. With Docker: `docker compose down --volumes`, then
