@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:woodshed:view:1",
+  "$id": "urn:woodshed:view:2",
   "title": "woodshed page view tables",
   "description": "Names and tables the page displays, computed by woodshed.theory so that the page holds no music theory.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["view_version", "transpositions", "romans", "shapes", "tracks", "pending", "exports"],
+  "required": ["view_version", "transpositions", "romans", "regions", "shapes", "tracks", "pending", "exports"],
   "$defs": {
     "twelve_strings": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 12, "maxItems": 12},
     "frets": {"type": "array", "items": {"type": "integer", "minimum": -1, "maximum": 24}, "minItems": 6, "maxItems": 6}
   },
   "properties": {
-    "view_version": {"const": 1},
+    "view_version": {"const": 2},
     "transpositions": {"type": "array", "minItems": 12, "maxItems": 12, "items": {
       "type": "object", "additionalProperties": false, "required": ["key", "roots", "capo"],
       "properties": {"key": {"type": "string"}, "roots": {"$ref": "#/$defs/twelve_strings"},
@@ -19,6 +19,16 @@
     "romans": {"type": "object", "additionalProperties": false, "required": ["", "m", "7", "m7"],
                "properties": {"": {"$ref": "#/$defs/twelve_strings"}, "m": {"$ref": "#/$defs/twelve_strings"},
                               "7": {"$ref": "#/$defs/twelve_strings"}, "m7": {"$ref": "#/$defs/twelve_strings"}}},
+    "regions": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "additionalProperties": false, "required": ["bar", "transpositions", "romans"],
+      "properties": {
+        "bar": {"type": "integer", "minimum": 0},
+        "transpositions": {"type": "array", "minItems": 12, "maxItems": 12, "items": {
+          "type": "object", "additionalProperties": false, "required": ["key", "roots"],
+          "properties": {"key": {"type": "string"}, "roots": {"$ref": "#/$defs/twelve_strings"}}}},
+        "romans": {"type": "object", "additionalProperties": false, "required": ["", "m", "7", "m7"],
+                   "properties": {"": {"$ref": "#/$defs/twelve_strings"}, "m": {"$ref": "#/$defs/twelve_strings"},
+                                  "7": {"$ref": "#/$defs/twelve_strings"}, "m7": {"$ref": "#/$defs/twelve_strings"}}}}}},
     "shapes": {"type": "object", "additionalProperties": false, "required": ["open", "easy_barres"],
                "properties": {"open": {"type": "object", "additionalProperties": {"$ref": "#/$defs/frets"}},
                               "easy_barres": {"type": "object", "additionalProperties": {"$ref": "#/$defs/frets"}}}},

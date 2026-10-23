@@ -22,13 +22,14 @@
       group: out.bars[u].group,
       occurrence: out.bars[u].occurrence,
       column: out.bars[u].column,
-      chords: bar.chords.map((c) => ({
-        pc: c.pc,
-        quality: c.quality,
-        ...(hasBass(c) ? { bass: c.bass } : {}),
-        beats: c.beats,
-        doubt: c.fixed ? null : c.doubt,
-      })),
+      chords: bar.chords.map((c) =>
+        // The chord's key region rides along unseen (not in the JSON export): its name is spelled in it.
+        Object.defineProperty(
+          { pc: c.pc, quality: c.quality, ...(hasBass(c) ? { bass: c.bass } : {}), beats: c.beats, doubt: c.fixed ? null : c.doubt },
+          "region",
+          { value: c.region, enumerable: false },
+        ),
+      ),
     }));
     return out;
   }
@@ -64,7 +65,7 @@
     ];
     const lines = [
       "{title: " + directiveText(d.title) + "}",
-      "{key: " + song.keyName(transpose) + "}",
+      "{key: " + song.keyName(transpose, 0) + "}",
       "{tempo: " + Math.round(d.bpm) + "}",
       "{time: " + d.beats_per_bar + "/4}",
       "{comment: chords found by woodshed from " + directiveText(d.file) + "}",
@@ -93,26 +94,43 @@
       }
       lines.push("{comment: check by ear: " + directiveText(check) + "}");
     }
+    // A key change is announced where it happens (spec 012): before the part, or the grid line, it starts.
+    let said = 0;
+    const announce = (region) => {
+      if (region === said) return [];
+      said = region;
+      return ["{key: " + song.keyName(transpose, region) + "}"];
+    };
     if (!sections.length) {
-      for (const group of d.groups) lines.push("", ...grid(group.label, [[group.occurrences[0], group.occurrences.length]]));
+      for (const group of d.groups) lines.push("", ...announce(song.regionOf(group.occurrences[0][0])), ...grid(group.label, [[group.occurrences[0], group.occurrences.length]]));
       return lines.join("\n") + "\n";
     }
     const sung = sungRows(song, words, sections, name);
+    const rowsOf = (bars) => {
+      const rows = [];
+      for (let i = 0; i < bars.length; i += 4) {
+        const row = bars.slice(i, i + 4);
+        const last = rows[rows.length - 1];
+        if (last && last[0].map(cells).join("|") === row.map(cells).join("|")) last[1] += 1;
+        else rows.push([row, 1]);
+      }
+      return rows;
+    };
     sections.forEach((sec, k) => {
       lines.push("");
+      const bars = [];
+      for (let u = sec.start; u < sec.end; u++) bars.push(u);
       if (sung.has(k)) {
+        lines.push(...announce(song.regionOf(sec.end - 1))); // a change inside sung lines is said before the part
         const env = ENVIRONMENT[sec.role] || "verse";
         lines.push("{start_of_" + env + ': label="' + quote(sec.name) + '"}', ...sung.get(k), "{end_of_" + env + "}");
       } else {
-        const rows = [];
-        for (let u = sec.start; u < sec.end; u += 4) {
-          const row = [];
-          for (let v = u; v < Math.min(u + 4, sec.end); v++) row.push(v);
-          const last = rows[rows.length - 1];
-          if (last && last[0].map(cells).join("|") === row.map(cells).join("|")) last[1] += 1;
-          else rows.push([row, 1]);
+        // A grid splits at the bar where the key changes, the same label on both sides.
+        const cuts = [0, ...bars.slice(1).filter((u) => song.regionOf(u) !== song.regionOf(u - 1)).map((u) => u - sec.start), bars.length];
+        for (let i = 0; i + 1 < cuts.length; i++) {
+          const piece = bars.slice(cuts[i], cuts[i + 1]);
+          lines.push(...announce(song.regionOf(piece[0])), ...grid(sec.name, rowsOf(piece)));
         }
-        lines.push(...grid(sec.name, rows));
       }
     });
     return lines.join("\n") + "\n";
@@ -360,15 +378,21 @@
     const d = data(song);
     const per = d.beats_per_bar;
     const slots = per * SLOTS;
+    // Spelled in the key of the bar's region (spec 012).
+    let region = 0;
     const spelled = (pc) => {
-      const root = song.chordName({ pc, quality: "" }, 0);
+      const root = song.noteName(pc, 0, region);
       return [root[0], { "": 0, "#": 1, b: -1 }[root.slice(1)]];
     };
-    const key = d.key;
-    const major = key.mode === "maj" ? key.pc : (key.pc + 3) % 12;
+    const regions = d.key_regions;
+    const changes = new Set(regions.slice(1).map((r) => r.bar));
     const SHARPS = { 0: 0, 7: 1, 2: 2, 9: 3, 4: 4, 11: 5, 6: 6 };
     const FLATS = { 5: -1, 10: -2, 3: -3, 8: -4, 1: -5 };
-    const fifths = major in FLATS ? FLATS[major] : SHARPS[major];
+    const keyXml = (key) => {
+      const major = key.mode === "maj" ? key.pc : (key.pc + 3) % 12;
+      const fifths = major in FLATS ? FLATS[major] : SHARPS[major];
+      return "<key><fifths>" + fifths + "</fifths><mode>" + (key.mode === "maj" ? "major" : "minor") + "</mode></key>";
+    };
     const TABLE = [[16, "whole", false], [12, "half", true], [8, "half", false], [6, "quarter", true],
       [4, "quarter", false], [3, "eighth", true], [2, "eighth", false], [1, "16th", false]];
     const durations = (n) => {
@@ -398,11 +422,12 @@
           return "<note>" + body + timing + tied + "</note>";
         }).join("");
       }).join("");
-    const attributes = "<attributes><divisions>" + SLOTS + "</divisions><key><fifths>" + fifths + "</fifths><mode>" +
-      (key.mode === "maj" ? "major" : "minor") + "</mode></key><time><beats>" + per + "</beats><beat-type>4</beat-type></time>";
+    const attributes = "<attributes><divisions>" + SLOTS + "</divisions>" + keyXml(regions[0]) + "<time><beats>" + per + "</beats><beat-type>4</beat-type></time>";
     const measures = d.bars.map((bar, u) => {
+      region = song.regionOf(u);
       const xml = ['<measure number="' + (u + 1) + '">'];
       if (u === 0) xml.push(attributes + "<clef><sign>F</sign><line>4</line></clef></attributes>");
+      else if (changes.has(u)) xml.push("<attributes>" + keyXml(regions[region]) + "</attributes>"); // a new key first in the bar
       let offset = 0;
       for (const c of bar.chords) {
         if (c.pc >= 0) {
@@ -419,7 +444,9 @@
         if (!onsets.length || onsets[0] > 0) events.push([onsets.length ? onsets[0] : slots, null]);
         onsets.forEach((i, k) => events.push([(k + 1 < onsets.length ? onsets[k + 1] : slots) - i, line[i][0]]));
       } else events.push([slots, null]);
-      xml.push(notes(events), "</measure>");
+      xml.push(notes(events));
+      if (changes.has(u + 1)) xml.push('<barline location="right"><bar-style>light-light</bar-style></barline>'); // before a new key
+      xml.push("</measure>");
       return xml.join("");
     });
     return (

@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 from functools import cache
 from importlib import resources
+from itertools import pairwise
 from typing import Any
 
 from woodshed import model
 from woodshed.model import Song
 
-SCHEMA_VERSION = 2  # 2: sections, doubt kinds
+SCHEMA_VERSION = 3  # 2: sections, doubt kinds; 3: key regions
 
 
 def _r(x: float, digits: int = 3) -> float:
@@ -29,6 +30,10 @@ def _chord(c: model.Chord) -> dict[str, Any]:
     return out
 
 
+def _regions(song: Song) -> list[model.KeyRegion]:
+    return song.key_regions or [model.KeyRegion(0, song.key)]
+
+
 def to_json(song: Song) -> dict[str, Any]:
     """Plain JSON data for the page (no numpy types)."""
     s = song.structure
@@ -40,6 +45,8 @@ def to_json(song: Song) -> dict[str, Any]:
         "bpm": _r(song.bpm, 1),
         "beats_per_bar": song.beats_per_bar,
         "key": {"pc": song.key.tonic, "mode": song.key.mode, "known": song.key_known},
+        # From each bar on, the song's key (spec 012): one region for most songs.
+        "key_regions": [{"bar": r.bar, "pc": r.key.tonic, "mode": r.key.mode} for r in _regions(song)],
         "capo": song.capo,
         "beats": [_r(t) for t in song.beats],
         "first_beat": s.first_beat,
@@ -144,6 +151,11 @@ def cross_check(data: dict[str, Any]) -> list[str]:
         edge = sec["end"]
     if bars and edge != len(bars):
         problems.append("the sections do not cover every bar")
+    starts = [r["bar"] for r in data["key_regions"]]
+    if not starts or starts[0] != 0 or any(b <= a for a, b in pairwise(starts)):
+        problems.append("key regions do not start at bar 0 in bar order")
+    if bars and starts and starts[-1] >= len(bars):
+        problems.append("a key region starts after the last bar")
     ids = []
     for i, bar in enumerate(bars):
         if bar["end"] <= bar["start"] or (i and bar["start"] < bars[i - 1]["start"]):

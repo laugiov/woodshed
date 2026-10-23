@@ -7,6 +7,7 @@ listener's corrections) can be exported the same way.
 from __future__ import annotations
 
 import bisect
+import itertools
 import json
 import math
 import re
@@ -43,6 +44,25 @@ def half_up(x: float) -> int:
 
 def _key(song: Song) -> theory.Key:
     return theory.Key(song["key"]["pc"], song["key"]["mode"])
+
+
+class Keys:
+    """The key of every bar (spec 012): the song's key regions, the first at bar 0."""
+
+    def __init__(self, song: Song) -> None:
+        regions = song.get("key_regions") or [{"bar": 0, **song["key"]}]
+        self.starts = [int(r["bar"]) for r in regions]
+        self.keys = [theory.Key(r["pc"], r["mode"]) for r in regions]
+
+    def region(self, u: int) -> int:
+        return max(0, bisect.bisect_right(self.starts, u) - 1)
+
+    def at(self, u: int) -> theory.Key:
+        return self.keys[self.region(u)]
+
+
+def key_name(key: theory.Key) -> str:
+    return theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
 
 
 def _name(chord: dict[str, Any], key: theory.Key) -> str:
@@ -89,29 +109,29 @@ def lyric_row(row: str) -> str:
     return " " + row if row.startswith("#") else row
 
 
-def _cells(song: Song, u: int, key: theory.Key) -> str:
+def _cells(song: Song, u: int, keys: Keys) -> str:
     cells: list[str] = []
     for c in song["bars"][u]["chords"]:
-        cells += [_name(c, key)] + ["."] * (c["beats"] - 1)
+        cells += [_name(c, keys.at(u))] + ["."] * (c["beats"] - 1)
     return " ".join(cells)
 
 
-def _grid(song: Song, label: str, rows: list[tuple[list[int], int]], key: theory.Key) -> list[str]:
+def _grid(song: Song, label: str, rows: list[tuple[list[int], int]], keys: Keys) -> list[str]:
     """A grid: rows of bars, each played `times` times."""
     out = ['{start_of_grid: label="' + directive_text(label).replace('"', "'") + '"}']
     for bars, times in rows:
-        text = " | ".join(_cells(song, u, key) for u in bars)
+        text = " | ".join(_cells(song, u, keys) for u in bars)
         out.append("|: " + text + " :|" + (f" x{times}" if times > 2 else "") if times > 1 else "| " + text + " |")
     out.append("{end_of_grid}")
     return out
 
 
-def _rows(song: Song, bars: list[int], key: theory.Key) -> list[tuple[list[int], int]]:
+def _rows(song: Song, bars: list[int], keys: Keys) -> list[tuple[list[int], int]]:
     """Bars four a row; the same row again is a repeat."""
     rows: list[tuple[list[int], int]] = []
     for i in range(0, len(bars), 4):
         row = bars[i : i + 4]
-        if rows and [_cells(song, u, key) for u in rows[-1][0]] == [_cells(song, u, key) for u in row]:
+        if rows and [_cells(song, u, keys) for u in rows[-1][0]] == [_cells(song, u, keys) for u in row]:
             rows[-1] = (rows[-1][0], rows[-1][1] + 1)
         else:
             rows.append((row, 1))
@@ -130,7 +150,7 @@ def bar_list(bars: list[int]) -> str:
     return ("bar " if len(spans) == 1 and spans[0][0] == spans[0][1] else "bars ") + text
 
 
-def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> str:
+def _to_check(song: Song, sections: list[dict[str, Any]], keys: Keys) -> str:
     """The chords to check by ear, by part with its bars ("Chorus 1, bars 18-19 (D#m, C#)"). Without
     parts, by bar."""
     doubtful = [
@@ -150,13 +170,13 @@ def _to_check(song: Song, sections: list[dict[str, Any]], key: theory.Key) -> st
         part = sec["name"] if sec else "outside the parts"
         bars, names = parts.setdefault(part, ([], []))
         bars.append(u + 1)
-        if _name(c, key) not in names:
-            names.append(_name(c, key))
+        if _name(c, keys.at(u)) not in names:
+            names.append(_name(c, keys.at(u)))
     return ", ".join(f"{part}, {bar_list(bars)} ({', '.join(names)})" for part, (bars, names) in parts.items())
 
 
 def _sung(
-    song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any]], key: theory.Key
+    song: Song, words: dict[str, Any] | None, sections: list[dict[str, Any]], keys: Keys
 ) -> dict[int, list[str]]:
     """The rows of each sung section: its lines with the chords on their words, and the chords
     between lines on rows of their own. Placed as the page places them (lyrics.place_chords).
@@ -186,7 +206,7 @@ def _sung(
         return max(0, bisect.bisect_right(first_bars, u) - 1)
 
     def name(p: dict[str, Any]) -> str:
-        return "[" + _name(song["bars"][p["bar"]]["chords"][p["index"]], key) + "]"
+        return "[" + _name(song["bars"][p["bar"]]["chords"][p["index"]], keys.at(p["bar"])) + "]"
 
     def chord_rows(ps: list[dict[str, Any]]) -> list[str]:
         """Chords with no word of their own: bar by bar, four bars a row, never one long row."""
@@ -263,19 +283,20 @@ def transposed(song: Song, semitones: int) -> Song:
         return {**up(c), **({"doubt": doubt} if "doubt" in c else {})}
 
     bars = [{**b, "chords": [chord(c) for c in b["chords"]]} for b in song["bars"]]
-    return {**song, "bars": bars, "key": {**song["key"], "pc": (song["key"]["pc"] + semitones) % 12}}
+    regions = [{**r, "pc": (r["pc"] + semitones) % 12} for r in song.get("key_regions") or []]
+    moved = {**song, "bars": bars, "key": {**song["key"], "pc": (song["key"]["pc"] + semitones) % 12}}
+    return {**moved, "key_regions": regions} if "key_regions" in song else moved
 
 
 def chordpro(song: Song, words: dict[str, Any] | None = None, transpose: int = 0) -> str:
     """The song in ChordPro; with the words placed on it (lyrics.json), each chord on its word. With
     `transpose`, in the key the band plays (the page exports in the key it shows)."""
     song = transposed(song, transpose)
-    key = _key(song)
+    keys = Keys(song)
     per = song["beats_per_bar"]
-    key_name = theory.spell(key.tonic, key) + ("" if key.mode == "maj" else "m")
     lines = [
         "{title: " + directive_text(song["title"]) + "}",
-        "{key: " + key_name + "}",
+        "{key: " + key_name(keys.keys[0]) + "}",
         "{tempo: " + str(half_up(song["bpm"])) + "}",
         "{time: " + f"{per}/4" + "}",
         "{comment: chords found by woodshed from " + directive_text(song["file"]) + "}",
@@ -284,24 +305,39 @@ def chordpro(song: Song, words: dict[str, Any] | None = None, transpose: int = 0
 
     named = lyrics.fitting_sections((words or {}).get("sections"), len(song["bars"]))
     sections = named or list(song.get("sections") or [])
-    check = _to_check(song, sections, key)
+    check = _to_check(song, sections, keys)
     if check:
         lines.append("{comment: check by ear: " + directive_text(check) + "}")
+    # A key change is announced where it happens (spec 012): before the part (or the line of a grid) it starts.
+    said = [0]
+
+    def announce(region: int) -> list[str]:
+        if region == said[0]:
+            return []
+        said[0] = region
+        return ["{key: " + key_name(keys.keys[region]) + "}"]
+
     if not sections:  # no parts named: the chart's lines and their repeats
         for group in song["groups"]:
             rows = [(group["occurrences"][0], len(group["occurrences"]))]
-            lines += ["", *_grid(song, group["label"], rows, key)]
+            lines += ["", *announce(keys.region(group["occurrences"][0][0])), *_grid(song, group["label"], rows, keys)]
         return "\n".join(lines) + "\n"
-    sung = _sung(song, words, sections, key)
+    sung = _sung(song, words, sections, keys)
     for k, sec in enumerate(sections):
         lines.append("")
-        if k in sung:
+        bars = list(range(sec["start"], sec["end"]))
+        if k in sung:  # a change inside sung lines is said before the part
+            lines += announce(keys.region(sec["end"] - 1))
             env = ENVIRONMENT.get(sec["role"], "verse")
             lines.append(f'{{start_of_{env}: label="' + directive_text(sec["name"]).replace('"', "'") + '"}')
             lines += sung[k]
             lines.append(f"{{end_of_{env}}}")
-        else:
-            lines += _grid(song, sec["name"], _rows(song, list(range(sec["start"], sec["end"])), key), key)
+            continue
+        # A grid splits at the bar where the key changes, the same label on both sides.
+        cuts = [u for u in bars[1:] if keys.region(u) != keys.region(u - 1)]
+        for piece in (bars[a:b] for a, b in itertools.pairwise([0, *(u - sec["start"] for u in cuts), len(bars)])):
+            lines += announce(keys.region(piece[0]))
+            lines += _grid(song, sec["name"], _rows(song, piece, keys), keys)
     return "\n".join(lines) + "\n"
 
 
@@ -473,21 +509,28 @@ def _notes(events: list[tuple[int, int | None]], key: theory.Key, voice: int) ->
     return "".join(out)
 
 
+def _key_xml(key: theory.Key) -> str:
+    return f"<key><fifths>{_fifths(key)}</fifths><mode>{'major' if key.mode == 'maj' else 'minor'}</mode></key>"
+
+
 def musicxml(song: Song) -> str:
-    key = _key(song)
+    keys = Keys(song)
     per = song["beats_per_bar"]
     slots = per * STEM_SLOTS
     parts = song["parts"]
     attributes = (
-        f"<attributes><divisions>{STEM_SLOTS}</divisions><key><fifths>{_fifths(key)}</fifths>"
-        f"<mode>{'major' if key.mode == 'maj' else 'minor'}</mode></key>"
+        f"<attributes><divisions>{STEM_SLOTS}</divisions>{_key_xml(keys.keys[0])}"
         f"<time><beats>{per}</beats><beat-type>4</beat-type></time>"
     )
+    changes = set(keys.starts[1:])
     measures = []
     for u, bar in enumerate(song["bars"]):
+        key = keys.at(u)
         xml = [f'<measure number="{u + 1}">']
         if u == 0:
             xml.append(attributes + "<clef><sign>F</sign><line>4</line></clef></attributes>")
+        elif u in changes:  # a new key: its signature first in the bar (spec 012)
+            xml.append(f"<attributes>{_key_xml(key)}</attributes>")
         offset = 0
         for c in bar["chords"]:
             if c["pc"] >= 0:
@@ -510,6 +553,8 @@ def musicxml(song: Song) -> str:
         else:
             events.append((slots, None))
         xml.append(_notes(events, key, 1))
+        if u + 1 in changes:  # a double bar line before a new key
+            xml.append('<barline location="right"><bar-style>light-light</bar-style></barline>')
         xml.append("</measure>")
         measures.append("".join(xml))
     title = xml_text(song["title"])

@@ -20,16 +20,28 @@
     const { song, store } = app;
     const meta = song.song;
 
+    // The song's key, or how it moves (spec 012): "C major → D major", "C major, 2 key changes".
+    function keyNodes(s, cls) {
+      const named = (name) => {
+        const minor = name.endsWith("m");
+        return h("b", null, chordNode(minor ? name.slice(0, -1) : name, cls), " " + (minor ? W.t("minor") : W.t("major")));
+      };
+      const n = song.regionCount;
+      if (n === 1) return named(song.keyName(s.transpose));
+      const first = named(song.keyName(s.transpose, 0));
+      if (n === 2) return [first, " → ", named(song.keyName(s.transpose, 1))];
+      return [first, W.t(", {n} key changes", { n: n - 1 })];
+    }
+    app.keyNodes = keyNodes;
+
     function renderFacts(s) {
       const open = song.doubts().filter((d) => !d.chord.fixed && d.chord.doubt.kind === "chord");
       const spots = new Set(open.map((d) => d.chord.doubt.id)).size;
-      const key = song.keyName(s.transpose);
-      const minor = key.endsWith("m");
       clear(
         $("facts"),
         h("span", null, h("b", null, String(app.songBpm)), " BPM"),
         h("span", null, h("b", null, meta.beats_per_bar + "/4")),
-        h("span", null, W.nodes(W.t("Key {key}"), { key: h("b", null, chordNode(minor ? key.slice(0, -1) : key), " " + (minor ? W.t("minor") : W.t("major"))) })),
+        h("span", { "data-testid": "key-facts" }, W.nodes(W.t("Key {key}"), { key: keyNodes(s) })),
         h("span", null, fmt(Math.round(meta.duration))), // rounded, as the library lists it
         spots
           ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
@@ -148,7 +160,10 @@
       $("stTop").textContent = W.t("bar {n} of {len}", { n: u - sec.start + 1, len }) + " · " + s.bpm + " BPM" + shifted;
       const next = k >= 0 ? list[k + 1] : null;
       const left = sec.end - u;
-      const what = next ? W.partName(next) : k >= 0 && k === list.length - 1 ? W.t("End") : "";
+      // A next part in another key says it: the band hears the lift coming (spec 012).
+      const nextRegion = next ? song.regionOf(next.start) : null;
+      const inKey = next && nextRegion !== song.regionOf(u) && app.keyWords ? " " + W.t("in {key}", { key: app.keyWords(song.keyName(s.transpose, nextRegion)) }) : "";
+      const what = next ? W.partName(next) + inKey : k >= 0 && k === list.length - 1 ? W.t("End") : "";
       // The next part two bars ahead; stopped earlier in a part, what comes next, to be ready for it.
       const soon = left <= 2 ? (left === 1 ? W.t("{part} next bar", { part: what }) : W.t("{part} in {n} bars", { part: what, n: left })) : "";
       $("stComing").textContent = !what ? "" : soon || (!s.playing ? W.t("Next part: {part}", { part: what }) : "");

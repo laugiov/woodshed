@@ -59,7 +59,7 @@
     app.showShapes = (s) => s.inst === "guitar" && s.pos === "open" && s.capo > 0 && s.view === "shapes";
     app.nowHint = function nowHint(c, s) {
       if (c.pc < 0) return W.t("no chord");
-      const tones = () => I.triadOf(c.pc, c.quality).map((pc) => chordNode(song.noteName(pc, s.transpose), "tone"));
+      const tones = () => I.triadOf(c.pc, c.quality).map((pc) => chordNode(song.noteName(pc, s.transpose, c.region), "tone"));
       if (s.inst === "guitar") {
         if (s.pos === "open" && s.capo) {
           return app.showShapes(s)
@@ -411,6 +411,7 @@
         song.bars[u].chords = bar.chords;
         song.bars[u].edited = !!bar.edited;
       });
+      song.markRegions(); // the typed chords spelled in their bar's key
       // The band's parts, and the chart's lines drawn again from them (a part always starts a line).
       editedParts = W.edits.applyParts((app.words && app.words.sections) || meta.sections, typedParts.values(), meta.first_beat, song.per, song.bars.length);
       if (editedParts) {

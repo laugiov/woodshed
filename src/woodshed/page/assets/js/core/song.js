@@ -4,8 +4,8 @@
 (function () {
   "use strict";
   const W = window.Woodshed;
-  const SONG_VERSION = 2;
-  const VIEW_VERSION = 1;
+  const SONG_VERSION = 3;
+  const VIEW_VERSION = 2;
 
   function read() {
     const el = document.getElementById("woodshed-data");
@@ -78,24 +78,50 @@
     }
 
     const t = (transpose) => view.transpositions[((transpose % 12) + 12) % 12];
-    // A pitch class from the recording, named in the transposed key.
-    const noteName = (pc, transpose) => t(transpose).roots[((pc % 12) + 12) % 12];
-    const chordName = (c, transpose) =>
-      c.pc < 0 ? "N.C." : noteName(c.pc, transpose) + c.quality + (bassOf(c) === null ? "" : "/" + noteName(c.bass, transpose));
+    // Key regions (spec 012): from each region's first bar, its key's names and numerals. One for most songs.
+    const regions = view.regions;
+    const regionOf = (u) => {
+      let k = 0;
+      for (let i = 0; i < regions.length; i++) if (regions[i].bar <= u) k = i;
+      return k;
+    };
+    // Each chord of the chart knows its region (set again when the band types bars), so every name of it is
+    // spelled in its own key without the bar being passed around. Not enumerable: never exported or compared.
+    function markRegions() {
+      bars.forEach((b, u) => {
+        const k = regionOf(u);
+        for (const c of b.chords) Object.defineProperty(c, "region", { value: k, writable: true, configurable: true, enumerable: false });
+      });
+    }
+    markRegions();
+    const regionOfChord = (c) => (c && typeof c.region === "number" ? c.region : null);
+    const tableOf = (transpose, region) =>
+      region === null || region === undefined ? t(transpose) : regions[region].transpositions[((transpose % 12) + 12) % 12];
+    // A pitch class from the recording, named in the transposed key (of a region, when given).
+    const noteName = (pc, transpose, region) => tableOf(transpose, region).roots[((pc % 12) + 12) % 12];
+    const chordName = (c, transpose) => {
+      const r = regionOfChord(c);
+      return c.pc < 0 ? "N.C." : noteName(c.pc, transpose, r) + c.quality + (bassOf(c) === null ? "" : "/" + noteName(c.bass, transpose, r));
+    };
     // The analysis's four qualities have their numerals in the view; a typed one takes the root's numeral
     // with its own case and mark. A slash bass is its degree above the root ("I/3"), as in chords.py.
     function roman(c) {
       if (c.pc < 0) return "";
+      const r = regionOfChord(c);
+      const romans = r === null ? view.romans : regions[r].romans;
       let out;
-      if (view.romans[c.quality]) out = view.romans[c.quality][c.pc];
+      if (romans[c.quality]) out = romans[c.quality][c.pc];
       else {
         const form = W.chords.roman(c.quality);
-        const numeral = view.romans[""][c.pc];
+        const numeral = romans[""][c.pc];
         out = (form.lower ? numeral.toLowerCase() : numeral) + form.mark;
       }
       return bassOf(c) === null ? out : out + "/" + W.chords.degree(c.bass - c.pc);
     }
-    const keyName = (transpose) => t(transpose).key;
+    // The song's key, or a region's (`keyName(t, regionOf(u))`).
+    const keyName = (transpose, region) => tableOf(transpose, region).key;
+    // The changes after the first region: [{bar, region}] (empty for most songs).
+    const keyChanges = regions.slice(1).map((r, i) => ({ bar: r.bar, region: i + 1 }));
     // The capo worth suggesting (theory.suggest_capo): the analysis's, in the view, until the band types
     // chords; then counted again on the chart as it is.
     function shapeCost(pc, quality) {
@@ -170,7 +196,7 @@
 
     return {
       data, song, view, per, bars, totalBeats, beatTime, beatAt, chordAtBeat, same, upcoming,
-      noteName, chordName, roman, keyName, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
+      noteName, chordName, roman, keyName, regionOf, markRegions, keyChanges, regionCount: regions.length, capoFor, suggestCapo, occurrenceRange, sectionIndex, barAt, doubts, distinctChords,
       tracks: view.tracks,
       parts: song.parts,
     };

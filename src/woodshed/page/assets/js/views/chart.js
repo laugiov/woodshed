@@ -206,7 +206,19 @@
     }
     app.lyricLine = lyricLine;
 
-    const barLabel = (b, u, s) => W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
+    // A key change (spec 012): its new key before the bar, a double bar line, and said in the bar's label.
+    const changeAt = new Map(song.keyChanges.map((k) => [k.bar, k.region]));
+    const keyWords = (name) => {
+      const minor = name.endsWith("m");
+      return W.prettyText(minor ? name.slice(0, -1) : name) + " " + (minor ? W.t("minor") : W.t("major"));
+    };
+    app.keyWords = keyWords;
+    const keyMark = (u, s) =>
+      changeAt.has(u) ? h("span", { class: "key-change", "aria-hidden": "true", "data-testid": "key-change" }, W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, changeAt.get(u))) })) : null;
+    const barLabel = (b, u, s) => {
+      const said = W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
+      return changeAt.has(u) ? W.t("{bar}, key change: {key}", { bar: said, key: keyWords(song.keyName(s.transpose, changeAt.get(u))) }) : said;
+    };
 
     // Bars no sung line holds (an intro, a solo, an ending), as bars of the grid, four a row.
     function freeRow(list, s, note) {
@@ -221,7 +233,8 @@
         cells.push(
           h(
             "div",
-            { class: "bar", "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
+            { class: "bar" + (changeAt.has(u) ? " key-change-bar" : ""), "data-free": "", "data-bar": u, role: "button", tabindex: 0, "aria-label": barLabel(b, u, s), "data-testid": "bar" },
+            keyMark(u, s),
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
             h("span", { class: "rn", translate: "no" }, b.chords.map((c) => song.roman(c)).join(" ")),
@@ -365,9 +378,10 @@
           h(
             "div",
             {
-              class: "bar" + (b.edited ? " edited" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
+              class: "bar" + (b.edited ? " edited" : "") + (changeAt.has(u) ? " key-change-bar" : ""), "data-col": col, "data-group": g, "data-bar": u, role: "button", tabindex: 0, "data-testid": "bar",
               "aria-label": b.edited ? W.t("{bar}, typed by the band", { bar: barLabel(b, u, s) }) : barLabel(b, u, s),
             },
+            keyMark(u, s),
             barContent(b, u, s),
             h("span", { class: "num" }, String(u + 1)),
             h("span", { class: "rn", translate: "no" }, b.chords.map((c) => song.roman(c)).join(" ")),
@@ -515,9 +529,12 @@
     }
 
     function renderHarmony(s) {
-      const key = song.keyName(s.transpose);
-      const minor = key.endsWith("m");
-      clear($("keyTitle"), chordNode(minor ? key.slice(0, -1) : key, "kn"), " " + (minor ? W.t("minor") : W.t("major")));
+      if (song.regionCount > 1 && app.keyNodes) clear($("keyTitle"), app.keyNodes(s, "kn"));
+      else {
+        const key = song.keyName(s.transpose);
+        const minor = key.endsWith("m");
+        clear($("keyTitle"), chordNode(minor ? key.slice(0, -1) : key, "kn"), " " + (minor ? W.t("minor") : W.t("major")));
+      }
       if (!song.song.key.known) $("keyTitle").append(h("small", { class: "hint" }, " " + W.t("(uncertain)")));
       const sections = song.song.harmony;
       // Harmony is summarised per family of lines (A, B); the page names them after the part

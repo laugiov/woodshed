@@ -42,7 +42,11 @@ def test_stems_add_up_to_the_mix(name: str) -> None:
 
 
 def test_songs_are_short_enough_for_fast_tests() -> None:
-    assert all(synth.render(n).mix.size / synth.SR <= 30.0 for n in synth.SONGS)
+    # A key change needs 8 bars on each side (spec 012): those songs may take a minute.
+    assert all(synth.render(n).mix.size / synth.SR <= (60.0 if n in KEY_SONGS else 30.0) for n in synth.SONGS)
+
+
+KEY_SONGS = {"lift", "lift2", "lift4", "lift8", "bridge", "mixolydian"}
 
 
 def test_write_creates_wav_and_lab(tmp_path: Path) -> None:

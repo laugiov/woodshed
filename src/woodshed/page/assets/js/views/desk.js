@@ -258,7 +258,7 @@
         ];
       }
       const line = (parts.bass[u] || []).filter(Boolean);
-      const heard = [...new Set(line.map((e) => song.noteName(e[0], s.transpose)))];
+      const heard = [...new Set(line.map((e) => song.noteName(e[0], s.transpose, song.regionOf(u))))];
       return [
         h("div", { class: "label", style: { marginBottom: "6px" } }, W.nodes(W.t("Bar {n}, the line as played {tag}", { n: u + 1 }), { tag: h("span", { class: "exp" }, W.t("experimental")) })),
         bassTab(u, s, null),
@@ -309,8 +309,8 @@
           h(
             "div",
             { class: "chips-row" },
-            pcs.map((pc) => h("span", { class: "pc-chip" }, chordNode(song.noteName(pc, s.transpose)))),
-            cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose)))] : null,
+            pcs.map((pc) => h("span", { class: "pc-chip" }, chordNode(song.noteName(pc, s.transpose, song.regionOf(curBar(s)))))),
+            cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose, cur.region)))] : null,
             pcs.length ? h("button", { type: "button", class: "btn", "data-testid": "hear-voicing", style: { marginLeft: "4px" }, onclick: () => app.hearVoicing(curBar(s)) }, W.t("▶ Hear it")) : null,
           ),
           h("p", { class: "src-note" }, app.sharedStem
