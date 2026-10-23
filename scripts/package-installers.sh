@@ -33,6 +33,7 @@ rm -f "$out/woodshed-installer-macos.zip"
 (cd "$build" && zip -qX "$out/woodshed-installer-macos.zip" "$mac")
 cp "$build/$win" "$out/woodshed-installer-windows.cmd"
 
-# Finder runs the file only if it is executable; cmd.exe wants Windows line endings.
-zipinfo "$out/woodshed-installer-macos.zip" | grep -q "^-rwxr-xr-x.*$mac\$"
+# Finder runs the file only if it is executable; cmd.exe wants Windows line endings. grep reads all of
+# zipinfo's output (no -q): an early exit would kill zipinfo with SIGPIPE, and pipefail would fail the run.
+zipinfo "$out/woodshed-installer-macos.zip" | grep "^-rwxr-xr-x.*$mac\$" > /dev/null
 test "$(grep -c $'\r$' "$out/woodshed-installer-windows.cmd")" = "$(wc -l < "$out/woodshed-installer-windows.cmd" | tr -d ' ')"
