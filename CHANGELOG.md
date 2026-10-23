@@ -22,6 +22,11 @@ corrections and set list stay where they are.
 - The library page shows its version, with links to this list and to how to update.
 - Singers on stage: the line you are singing is always on screen, at the top, and stopped, the line
   you sing next comes first, marked "Next:" (also after "Part ⏭").
+- The recording in the singer's key works on a Mac installed with the download, with no extra step:
+  the installers add the Rubber Band program woodshed uses to change the key (on Windows too).
+- Keyboard: Space presses a button you reached with Tab (and still plays or pauses otherwise, so
+  pedals work as before); in the chart the arrows move from bar to bar; in the bar editor Enter
+  saves and Ctrl+Enter (⌘+Enter on a Mac) saves and opens the next bar.
 
 ### Changed
 
@@ -37,6 +42,15 @@ corrections and set list stay where they are.
   third that disagrees with the chart is named ("The record has D♯ here, the chart says Bm: check
   this bar by ear"), and where the keys are often read as a single note it says to play the chart's
   chord there.
+- While the recording is being prepared in another key, the page no longer says it "plays in A" next to
+  a switch that says On: it says the recording catches up in a few seconds.
+- The screen-lock hint on a phone no longer flashes while the screen is kept on, and stays (with the
+  settings to change) when it may really lock.
+- A band note belongs to the set: it goes when its song leaves the set, and it is no longer in warning
+  orange.
+- Step 4 is called "Play with the band", not to be confused with the Play button.
+- A chord to check is no longer a button inside the bar's button: screen readers say "chord to check"
+  on the bar.
 - A long chart with a key change printed a blank last page.
 - Switching key quickly could leave an unused audio track loading in the background.
 
