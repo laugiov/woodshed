@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 276" width="640" height="276" role="img" aria-labelledby="t d" font-family="Atkinson Hyperlegible, sans-serif">
+<title id="t">Mac, step 1: the “Install woodshed” Not Opened box (drawn)</title>
+<desc id="d">A drawn box titled “Install woodshed” Not Opened, saying Apple could not verify it is free of malware, with two buttons, Move to Trash and Done. Done (Terminé) is outlined: click it.</desc>
+<rect width="640" height="276" rx="14" fill="#0d1210"/>
+<rect x="1" y="1" width="638" height="274" rx="13" fill="#151b18" stroke="#3d5049"/>
+<text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Mac, step 1 of 3</text>
+<text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">macOS 15 Sequoia, drawn 2026-10</text>
+<rect x="20" y="58" width="600" height="168" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<text x="42" y="92" font-size="18" fill="#e5ebe7" font-weight="700">“Install woodshed” Not Opened</text>
+<text x="42" y="124" font-size="14" fill="#e5ebe7">Apple could not verify “Install woodshed” is free of malware that may harm your</text>
+<text x="42" y="144" font-size="14" fill="#e5ebe7">Mac or compromise your privacy.</text>
+<rect x="359" y="170" width="153" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<text x="435.5" y="192" font-size="15" fill="#e5ebe7" text-anchor="middle">Move to Trash</text>
+<rect x="526" y="170" width="72" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<text x="562" y="192" font-size="15" fill="#e5ebe7" font-weight="700" text-anchor="middle">Done</text>
+<rect x="521" y="165" width="82" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
+<circle cx="601" cy="167" r="13" fill="#3cc4a9"/>
+<text x="601" y="172" font-size="14" fill="#0a1210" font-weight="700" text-anchor="middle">1</text>
+<text x="20" y="256" font-size="15" fill="#e5ebe7" font-weight="700">Click Done (Terminé)</text>
+</svg>

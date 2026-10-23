@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 361" width="640" height="361" role="img" aria-labelledby="t d" font-family="Atkinson Hyperlegible, sans-serif">
+<title id="t">Windows, step 3: Open File - Security Warning; Run (drawn)</title>
+<desc id="d">A drawn box titled Open File - Security Warning: Do you want to run this file? Name woodshed-installer-windows.cmd, Publisher Unknown Publisher. Run (Exécuter) is outlined: click it. Cancel is left alone.</desc>
+<rect width="640" height="361" rx="14" fill="#0d1210"/>
+<rect x="1" y="1" width="638" height="359" rx="13" fill="#151b18" stroke="#3d5049"/>
+<text x="20" y="34" font-size="15" fill="#3cc4a9" font-weight="700">Windows, step 3 of 4</text>
+<text x="620" y="34" font-size="13" fill="#94a19a" text-anchor="end">Windows 11 with Edge, drawn 2026-10</text>
+<rect x="20" y="58" width="600" height="253" rx="12" fill="#19201d" stroke="#3d5049" stroke-width="1.5"/>
+<text x="42" y="88" font-size="14" fill="#94a19a">Open File - Security Warning</text>
+<text x="42" y="124" font-size="18" fill="#e5ebe7" font-weight="700">Do you want to run this file?</text>
+<text x="42" y="157" font-size="14" fill="#94a19a">Name:</text>
+<text x="134" y="157" font-size="14" fill="#e5ebe7">woodshed-installer-windows.cmd</text>
+<text x="42" y="178" font-size="14" fill="#94a19a">Publisher:</text>
+<text x="134" y="178" font-size="14" fill="#e5ebe7">Unknown Publisher</text>
+<text x="42" y="199" font-size="14" fill="#94a19a">Type:</text>
+<text x="134" y="199" font-size="14" fill="#e5ebe7">Windows Command Script</text>
+<rect x="431" y="225" width="63" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<text x="462.5" y="247" font-size="15" fill="#e5ebe7" font-weight="700" text-anchor="middle">Run</text>
+<rect x="426" y="220" width="73" height="44" rx="10" fill="none" stroke="#3cc4a9" stroke-width="3"/>
+<circle cx="497" cy="222" r="13" fill="#3cc4a9"/>
+<text x="497" y="227" font-size="14" fill="#0a1210" font-weight="700" text-anchor="middle">3</text>
+<rect x="508" y="225" width="90" height="34" rx="7" fill="#222b27" stroke="#3d5049" stroke-width="1"/>
+<text x="553" y="247" font-size="15" fill="#e5ebe7" text-anchor="middle">Cancel</text>
+<rect x="42" y="273" width="14" height="14" rx="3" fill="none" stroke="#94a19a" stroke-width="1.5"/>
+<path d="M45 280l3 3l5-6" fill="none" stroke="#e5ebe7" stroke-width="1.8"/>
+<text x="66" y="285" font-size="14" fill="#e5ebe7">Always ask before opening this file</text>
+<text x="20" y="341" font-size="15" fill="#e5ebe7" font-weight="700">When you double-click the file: click Run (Exécuter)</text>
+</svg>
