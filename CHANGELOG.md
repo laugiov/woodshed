@@ -10,17 +10,17 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
-### Fixed
-
-- A song page's footer says which version runs the page and which one found its chords: "Page:
-  woodshed 0.5.0 · chords and beats found by woodshed 0.4.0 (still current)". After an update it
-  no longer says "Made with woodshed 0.4.0" on a page the library had already brought up to date.
-
 ### Changed
 
 - On a song that changes key, the Key box shows every key, "A → B♭", with the key of the bar you are
   in lit; it no longer says "A" beside B♭ shapes. The toasts, the recording's switch and a screen
   reader name the keys the same way. On a phone, "Capo" stays with its box.
+
+### Fixed
+
+- A song page's footer says which version runs the page and which one found its chords: "Page:
+  woodshed 0.5.0 · chords and beats found by woodshed 0.4.0 (still current)". After an update it
+  no longer says "Made with woodshed 0.4.0" on a page the library had already brought up to date.
 
 ## [0.5.0] - 2026-10-23
 
