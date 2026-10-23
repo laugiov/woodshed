@@ -143,6 +143,24 @@
     return withBass ? [n0 - 12, ...v] : v;
   }
 
+  // What the keys heard on the record in a bar (`pcs`, before transposition) says against the chart (spec 015):
+  // "none" (no upper note), "root" (the chord's root alone), { other } (the third the chart's chord does not
+  // have, without its own), or null (a reading to show as heard). The third is only checked on a bar of one
+  // chord that has exactly one third (no sus, 5 or no chord).
+  function voicingVerdict(cur, chords, pcs) {
+    if (!pcs.length) return "none";
+    if (cur.pc < 0) return null;
+    if (pcs.length === 1 && mod12(pcs[0]) === mod12(cur.pc)) return "root";
+    const quality = CHORDS.qualities[cur.quality];
+    if (chords.length !== 1 || !quality) return null;
+    const tones = quality.intervals.map(mod12);
+    if (tones.includes(3) === tones.includes(4)) return null;
+    const third = tones.includes(3) ? 3 : 4;
+    const heard = pcs.map(mod12);
+    const other = mod12(cur.pc + 7 - third);
+    return heard.includes(other) && !heard.includes(mod12(cur.pc + third)) ? { other } : null;
+  }
+
   // Four-string bass frets for a bar of sixteenths: the lowest comfortable string near the previous fret.
   function bassFrets(notes) {
     const strings = [["G", 43], ["D", 38], ["A", 33], ["E", 28]];
@@ -228,6 +246,6 @@
     // A chord's slash bass moved by t semitones, or null.
     bassOf: (c, t) => (isNone(c.bass) ? null : c.bass + (t || 0)),
     STRINGS, VOICES, tableShape, barreShape, movableShape, openOrBarre, triadOf, triadCandidates, funkVoicings,
-    fingeredMidi, keysMidi, bassFrets, counts, bestTranspose, hitsText, grooveHits, playedText,
+    fingeredMidi, keysMidi, voicingVerdict, bassFrets, counts, bestTranspose, hitsText, grooveHits, playedText,
   };
 })();

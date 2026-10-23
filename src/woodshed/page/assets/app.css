@@ -606,6 +606,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .chips-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin-top: 8px; }
 .pc-chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 6px; padding: 2px 9px; font-family: var(--font-chord); font-weight: 700; font-size: 19px; }
 .pc-chip.bassnote { border-color: var(--accent); color: var(--accent); }
+.voicing-said { margin: 8px 0 0; }
+.voicing-check { font-size: 13px; color: var(--warn); margin: 8px 0 0; }
 .subhead { margin: 14px 0 6px; }
 .voice-types { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .range svg { width: 100%; height: auto; display: block; }

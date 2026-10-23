@@ -203,16 +203,20 @@
       ];
     }
 
-    // The strumming: from the guitar, else from the keys (a six-stem page with no guitar heard).
-    function comping() {
+    // The strumming: from the guitar, else from the keys (a six-stem page with no guitar heard). In the keys
+    // panel, the guitar's strumming is named as such: the keys' own rhythm is not read (spec 015).
+    function comping(panel) {
       if (!parts) return null;
-      const head = h("div", { class: "label subhead" }, W.t("Rhythm: when the chords hit"));
       const from = app.sharedStem ? "shared" : !app.notHeard("guitar") ? "guitar" : !app.notHeard("piano") ? "keys" : "";
+      const borrowed = panel === "keys" && from === "guitar";
+      const head = h("div", { class: "label subhead" }, borrowed ? W.t("Rhythm: the guitar's strumming") : W.t("Rhythm: when the chords hit"));
       if (!from) return [head, h("p", { class: "src-note", "data-testid": "comp-not-heard" }, W.t("No guitar or keys heard in this song."))];
       const hits = I.hitsText(parts.comp, song.per);
       const said = {
         shared: W.t("From the isolated keys and guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
-        guitar: W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
+        guitar: borrowed
+          ? W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars. The keys' own rhythm is not read.", { hits })
+          : W.t("From the isolated guitar track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
         keys: W.t("From the isolated keys track: chords on {hits}. Bigger dot: hit in more bars.", { hits }),
       }[from];
       return [head, rhythmGrid(W.t("Chords"), parts.comp, song.per, "compGrid"), h("p", { class: "src-note" }, said)];
@@ -307,7 +311,7 @@
           h(
             "div",
             { class: "hint" },
-            W.nodes(W.t("Now: {chord} in root position. Orange outline: the next chord, {next}."), {
+            W.nodes(cur.pc < 0 ? W.t("Now: no chord. Orange outline: the next chord, {next}.") : W.t("Now: {chord} in root position. Orange outline: the next chord, {next}."), {
               chord: h("b", null, chordNode(app.nameFor(cur, 0, s))),
               next: up ? chordNode(app.nameFor(up, 0, s)) : W.t("none"),
             }),
@@ -322,22 +326,34 @@
         ),
       ];
       if (parts && app.notHeard("piano")) {
-        out.push(h("div", { class: "label subhead" }, W.t("On the record, this bar")), h("p", { class: "src-note", "data-testid": "voicing-not-heard" }, W.t("No keys heard in this song.")), comping());
+        out.push(h("div", { class: "label subhead" }, W.t("On the record, this bar")), h("p", { class: "src-note", "data-testid": "voicing-not-heard" }, W.t("No keys heard in this song.")), comping("keys"));
       } else if (parts) {
-        const pcs = parts.voicings[curBar(s)] || [];
+        const u = curBar(s);
+        const pcs = parts.voicings[u] || [];
+        // The reading checked against the chart (spec 015): nothing heard, the root alone, or the other third.
+        const verdict = I.voicingVerdict(cur, song.bars[u].chords, pcs);
+        const named = (pc) => chordNode(song.noteName(pc, s.transpose, song.regionOf(u)));
+        const hear = h("button", { type: "button", class: "btn", "data-testid": "hear-voicing", style: { marginLeft: "4px" }, onclick: () => app.hearVoicing(u) }, W.t("▶ Hear it"));
         out.push(
           h("div", { class: "label subhead" }, W.t("On the record, this bar")),
-          h(
-            "div",
-            { class: "chips-row" },
-            pcs.map((pc) => h("span", { class: "pc-chip" }, chordNode(song.noteName(pc, s.transpose, song.regionOf(curBar(s)))))),
-            cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose, cur.region)))] : null,
-            pcs.length ? h("button", { type: "button", class: "btn", "data-testid": "hear-voicing", style: { marginLeft: "4px" }, onclick: () => app.hearVoicing(curBar(s)) }, W.t("▶ Hear it")) : null,
-          ),
+          verdict === "none"
+            ? h("p", { class: "hint voicing-said", "data-testid": "voicing-none" }, W.t("No upper notes heard on the record in this bar."))
+            : verdict === "root"
+              ? h("div", { class: "chips-row" }, h("span", { class: "hint", "data-testid": "voicing-root" }, W.t("Only the root heard on the record here: play the chord above.")), hear)
+              : h(
+                  "div",
+                  { class: "chips-row" },
+                  pcs.map((pc) => h("span", { class: "pc-chip" }, named(pc))),
+                  cur.pc >= 0 ? [h("span", { class: "hint" }, W.t("over")), h("span", { class: "pc-chip bassnote" }, chordNode(song.noteName(cur.pc, s.transpose, cur.region)))] : null,
+                  hear,
+                ),
+          verdict && verdict.other !== undefined
+            ? h("p", { class: "voicing-check", "data-testid": "voicing-check" }, W.nodes(W.t("The record has {note} here, the chart says {chord}: check this bar by ear."), { note: named(verdict.other), chord: chordNode(app.nameFor(cur, 0, s)) }))
+            : null,
           h("p", { class: "src-note" }, app.sharedStem
             ? W.t("Upper notes heard on the isolated keys and guitar track. The keyboard often leaves the root to the bass.")
             : W.t("Upper notes heard on the isolated keys track: the piano, and what is not drums, bass, voice or guitar (synths, organ, strings). The keyboard often leaves the root to the bass.")),
-          comping(),
+          comping("keys"),
         );
       }
       return out;

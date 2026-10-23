@@ -62,7 +62,12 @@
 
     function renderPath(s) {
       const stems = song.tracks.length > 1;
-      const [t2, d2] = stems ? LEARN()[s.inst] : [W.t("Learn the chords"), W.t("The chart and your panel, with the full mix.")];
+      // Keys not heard on a six-stem page: no voicings to learn, the chords of the chart (spec 015).
+      const [t2, d2] = !stems
+        ? [W.t("Learn the chords"), W.t("The chart and your panel, with the full mix.")]
+        : s.inst === "piano" && app.notHeard("piano")
+          ? [W.t("Learn the chords"), W.t("The chords of the chart, with the panel on the right.")]
+          : LEARN()[s.inst];
       const steps = [
         [W.t("Listen"), W.t("Full band, original tempo. Follow the chart.")],
         [t2, d2],

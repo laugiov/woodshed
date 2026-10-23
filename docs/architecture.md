@@ -265,6 +265,8 @@ With stems, `analysis._parts` reads each stem on a **sixteenth-note grid** (`Gri
 
 All thresholds carry their measurements in comments. The bass tab and the drum groove are marked experimental in the page (README).
 
+The keys panel checks the voicing of the current bar against the chart (`instruments.voicingVerdict`, on pitch classes before transposition): no upper note heard and the chord's root heard alone are said in words instead of chips, and a bar of one chord whose reading holds the other third (a major third on a minor chord or the reverse, without its own) gets a line asking to check the bar by ear. Chords with no third (sus, 5, no chord), readings with both thirds and bars of two chords or more are shown as heard. On a six-stem page the keys panel heads the comping grid read from the guitar "the guitar's strumming": the keys' own rhythm is not read.
+
 `vocal_activity` in the same module gives the share of each beat where someone sings. Structure uses it.
 
 **Guitar shapes.** `src/woodshed/shapes.json` holds open shapes and two easy barres. It is the single source for the page's chord diagrams and for capo difficulty in `src/woodshed/theory.py` (`suggest_capo`). `src/woodshed/view.py` ships the shapes to the page.

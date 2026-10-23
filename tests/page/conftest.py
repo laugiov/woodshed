@@ -268,6 +268,27 @@ def _bass_doubts(song: dict[str, Any]) -> None:
     bass[1] = [None for _ in bass[1]]
 
 
+def _keys_readings(song: dict[str, Any]) -> None:
+    """pop's keys as the record can read them (spec 015): bar 1 no upper note, bar 2 its root alone, bar 3 Am
+    with a major third, bar 4 F with a minor third, bar 5 no chord, bar 6 Gsus4 (no third to contradict), bar 7
+    two chords, bar 8 F with both thirds."""
+    bars = song["bars"]
+    heard = song["parts"]["voicings"]
+    heard[0], heard[1], heard[2], heard[3] = [], [7], [1, 4], [8, 0]
+    bars[4]["chords"] = [{"pc": -1, "quality": "", "beats": 4, "doubt": None}]
+    bars[5]["chords"] = [{**bars[5]["chords"][0], "quality": "sus4"}]
+    heard[5] = [10, 2]
+    bars[6]["chords"] = [{**bars[6]["chords"][0], "beats": 2}, {**bars[7]["chords"][0], "beats": 2}]
+    heard[6] = [1, 4]
+    heard[7] = [8, 9, 0]
+
+
+def _keys_after_the_lift(song: dict[str, Any]) -> None:
+    """lift with bar 18 (in D flat) played as E flat over a G flat: the other third, spelled in its region."""
+    song["bars"][17]["chords"] = [{**song["bars"][17]["chords"][0], "pc": 3, "quality": ""}]
+    song["parts"]["voicings"][17] = [6, 10]
+
+
 def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _no_sections(song)
     _with_lyrics(song)
@@ -286,6 +307,8 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "lyrics-opened": _lyrics_opened,
     "lyrics-lift": _lyrics_over_the_lift,
     "lyrics-lift-early": _lyrics_before_the_lift,
+    "keys-readings": _keys_readings,
+    "keys-lift": _keys_after_the_lift,
 }  # fmt: skip
 
 
