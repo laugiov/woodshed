@@ -55,6 +55,7 @@ from woodshed.run import (
     Reporter,
     first_pass,
     media_files,
+    new_page_model,
     second_pass,
     stems_extra_installed,
     update_page_code,
@@ -519,7 +520,7 @@ class Library:
             jobs = [asdict(j) for j in self.jobs.values()]
         separates = self.opts.use_stems and stems_extra_installed()
         # What the library separates new songs with: the home page's "Guitar and keys apart" starts there.
-        separation = self.opts.separation or stems.DEFAULT.key
+        separation = new_page_model(self.opts).key
         return {"songs": self.pages(), "jobs": jobs, "separates": separates, "separation": separation}
 
     def reserve(self, name: str) -> Path:

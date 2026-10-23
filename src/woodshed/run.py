@@ -119,11 +119,19 @@ def _separation(src: Path, page: Path, opts: Options, report: Reporter | None = 
             return stems.model_of(given)
     except (OSError, ValueError, KeyError, TypeError):
         pass
+    model = new_page_model(opts)
+    if model is not stems.DEFAULT and report is not None:
+        report.say(
+            "  note: offline without the six-instrument model: guitars and keys stay together (--separation four)"
+        )
+    return model
+
+
+def new_page_model(opts: Options) -> stems.Model:
+    """The model a new page gets: six, or four offline when only the four-stem weights are on disk."""
+    if opts.separation in stems.MODELS:
+        return stems.MODELS[opts.separation]
     if opts.offline and not stems.downloaded(stems.DEFAULT) and stems.downloaded(stems.FOUR):
-        if report is not None:
-            report.say(
-                "  note: offline without the six-instrument model: guitars and keys stay together (--separation four)"
-            )
         return stems.FOUR
     return stems.DEFAULT
 

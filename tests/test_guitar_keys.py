@@ -278,3 +278,14 @@ def test_the_tracks_that_hold_the_voice_keep_its_formants_in_another_key() -> No
 
     assert {"minus-guitar", "minus-keys"} <= pitch.FORMANTS_KEPT
     assert not {"solo-guitar", "solo-keys"} & pitch.FORMANTS_KEPT
+
+
+def test_the_library_says_what_a_new_song_gets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from woodshed import app
+    from woodshed.run import Options
+
+    monkeypatch.setattr(stems, "downloaded", lambda model: model is stems.FOUR)
+    lib = app.Library(tmp_path / "library", Options(use_stems=False, open_page=False, offline=True))
+    assert lib.state()["separation"] == "four"  # offline with the four-stem model only: the box is not ticked
+    lib.opts = Options(use_stems=False, open_page=False)
+    assert lib.state()["separation"] == "six"

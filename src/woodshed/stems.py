@@ -27,14 +27,11 @@ class Model:
     name: str
     stems: tuple[str, ...]
     signature: str  # the checkpoint's id: a file named after it in the model cache means downloaded
-    hub: str  # its Hugging Face repository
 
 
-FOUR = Model("four", "htdemucs", ("drums", "bass", "other", "vocals"), "955717e8", "adefossez/HTDemucs")
+FOUR = Model("four", "htdemucs", ("drums", "bass", "other", "vocals"), "955717e8")
 # The guitar in its own stem; the piano too, though weak: the keys part is piano + other (spec 010).
-SIX = Model(
-    "six", "htdemucs_6s", ("drums", "bass", "other", "vocals", "guitar", "piano"), "5c90dfd2", "adefossez/HTDemucs-6s"
-)
+SIX = Model("six", "htdemucs_6s", ("drums", "bass", "other", "vocals", "guitar", "piano"), "5c90dfd2")
 MODELS = {m.key: m for m in (FOUR, SIX)}
 DEFAULT = SIX  # for a new page; a page keeps the model it was separated with
 

@@ -79,7 +79,9 @@ def test_offline_works_once_the_models_are_cached(tmp_path: Path) -> None:
     from woodshed.models import torch_models
 
     with torch_models(offline=False):  # make sure both models are in the cache
-        Separator(model=stems.DEFAULT.name, device="cpu", progress=False)
+        for model in (stems.SIX, stems.FOUR):
+            Separator(model=model.name, device="cpu", progress=False)
+    assert stems.downloaded(stems.SIX) and stems.downloaded(stems.FOUR)  # the real file names, for the offline fallback
     beats.track_beat_this(synth.write("pop", tmp_path / "warm").wav)
 
     waltz = synth.write("waltz", tmp_path).wav
