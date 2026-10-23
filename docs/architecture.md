@@ -438,10 +438,12 @@ run in Chromium, Firefox and WebKit (`tests/page/test_keyboard.py`, marked `tabl
 The grid's bars are one tab stop (`views/chart.js`, a roving `tabindex`): the bar playing, or while editing the
 bar in hand; `#sheet` is a `group` named "Chart" whose description says the arrows move. Editing, the arrows move
 the focus (Up and Down by the grid's lines, Home and End the part's first and last bar) and Enter opens the editor;
-playing, they seek as a pedal does and the focus follows the bar playing. A redraw puts the focus back on the same
+playing, Left, Right and the page keys seek in `app.js` as any pedal does (the next song at the end, on stage), Up,
+Down, Home and End seek from the bar playing, and the focus follows it without scrolling the page. A redraw puts the focus back on the same
 place in the grid, and the edit strip (`views/editor.js` `renderStrip`) back on the same control. A chord to check
-in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check", a click on the mark
-opens the check, Enter on the bar seeks and opens it. In the bar editor Enter saves and closes, Ctrl or ⌘ + Enter
+in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check" ("2 chords to check",
+"placement to check" for a timing doubt), a click on the mark opens the check, Enter on the bar seeks and opens its
+first chord still to check, and the pop offers the next one in the bar. In the bar editor Enter saves and closes, Ctrl or ⌘ + Enter
 saves and opens the next bar (`aria-keyshortcuts` on Save, next bar).
 
 ### Editing the chart

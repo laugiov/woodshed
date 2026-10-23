@@ -255,7 +255,7 @@
           return;
         }
         // Walking through bars with Ctrl+Enter types nothing that was not changed (a bar with a chord to check
-        // is the exception: Enter there confirms it).
+        // is the exception: saving there confirms it).
         const onScreen = JSON.stringify(song.bars[u].chords.map((c) => [c.beats, moved(W.edits.label(c), T())]));
         const unchanged = !typed && !doubt && JSON.stringify(parsed.chords) === onScreen;
         let said = null;

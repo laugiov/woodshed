@@ -4,6 +4,7 @@ being typed, the focus never falls to the page after a change."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -274,3 +275,75 @@ def test_in_edit_mode_enter_on_a_bar_to_check_opens_its_editor_with_the_candidat
     o.page.keyboard.press("Enter")
     expect(o.page.get_by_test_id("bar-candidates")).to_be_visible()
     expect(o.page.get_by_test_id("doubt-pop")).to_be_hidden()
+
+
+# Review of PR #32.
+
+
+def test_the_pedal_at_the_end_of_a_song_on_stage_opens_the_next_one_with_a_bar_focused(open_page: Any) -> None:
+    o = open_page("pop")
+    o.js("(() => { Woodshed.app.nextSong = () => { window.__next = (window.__next || 0) + 1; return true; }; })()")
+    o.js("Woodshed.app.seekBar(7)")
+    bar(o, 7).focus()
+    o.js("Woodshed.app.setStage(true, false)")  # no full screen (refused, or a browser without it): keys reach the bar
+    expect(o.page.get_by_test_id("stage")).to_be_visible()
+    assert o.js(FOCUSED_BAR) == 7
+    o.page.keyboard.press("ArrowRight")  # the pedal, at the end of the song
+    assert o.js("window.__next") == 1
+
+
+def test_a_pedal_with_a_bar_focused_does_not_scroll_back_from_reading_ahead(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    o.page.set_viewport_size({"width": 1000, "height": 420})
+    bar(o, 0).focus()
+    o.js("window.scrollTo(0, document.documentElement.scrollHeight)")  # reading ahead
+    y = o.js("window.scrollY")
+    assert y > 0
+    o.page.keyboard.press("ArrowRight")
+    assert o.js(FOCUSED_BAR) == 1
+    o.page.wait_for_timeout(300)
+    assert o.js("window.scrollY") == y
+
+
+def test_enter_opens_the_chord_still_to_check_not_the_correction(open_page: Any) -> None:
+    o = open_page("pop", variant="two-checks")
+    two = bar(o, 1)
+    expect(two).to_have_attribute("aria-label", re.compile(r", 2 chords to check$"))
+    o.page.locator('[data-testid=doubt][data-ref="1_0"]').click()
+    o.page.get_by_test_id("pick").first.click()  # the first chord corrected
+    expect(two).to_have_attribute("aria-label", re.compile(r", chord to check$"))
+    two.focus()
+    o.page.keyboard.press("Enter")
+    expect(o.page.get_by_test_id("doubt-pop")).to_have_attribute("data-ref", "1_1")
+
+
+def test_the_check_offers_the_next_chord_to_check_in_the_bar(open_page: Any) -> None:
+    o = open_page("pop", variant="two-checks")
+    bar(o, 1).focus()
+    o.page.keyboard.press("Enter")
+    pop = o.page.get_by_test_id("doubt-pop")
+    expect(pop).to_have_attribute("data-ref", "1_0")
+    nxt = o.page.get_by_test_id("doubt-next")
+    expect(nxt).to_have_text("Next chord to check in this bar")
+    nxt.focus()
+    o.page.keyboard.press("Enter")
+    expect(pop).to_have_attribute("data-ref", "1_1")
+    expect(o.page.get_by_test_id("doubt-next")).to_be_focused()  # and round again
+    o.page.keyboard.press("Escape")
+    assert o.js(FOCUSED_BAR) == 1  # back on the bar
+
+
+def test_a_placement_to_check_is_said_so(open_page: Any) -> None:
+    o = open_page("pickup")  # a clear chord off the beat: a timing doubt
+    doubtful = o.page.locator("#sheet .bar", has=o.page.get_by_test_id("doubt")).first
+    expect(doubtful).to_have_attribute("aria-label", re.compile(r", placement to check$"))
+
+
+def test_in_play_mode_up_and_down_start_from_the_bar_playing(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    bar(o, 0).focus()
+    o.js("Woodshed.app.seekBar(2)")  # the song moved, the keyboard stayed on bar 1
+    assert o.js(FOCUSED_BAR) == 0
+    o.page.keyboard.press("ArrowDown")
+    assert o.js("Math.floor(Woodshed.app.store.get().beat / Woodshed.current.per)") == 6
+    assert o.js(FOCUSED_BAR) == 6

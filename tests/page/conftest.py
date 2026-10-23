@@ -302,7 +302,25 @@ def _lyrics_no_sections(song: dict[str, Any]) -> None:
     _with_lyrics(song)
 
 
+def _two_checks(song: dict[str, Any]) -> None:
+    """pop with bar 2 split in two chords, each a close call: two chords to check in one bar."""
+    first, other = song["bars"][1]["chords"][0], song["bars"][2]["chords"][0]
+
+    def doubt(n: int, chord: dict[str, Any]) -> dict[str, Any]:
+        alternatives = [
+            {"pc": (chord["pc"] + 7) % 12, "quality": "", "share": 55},
+            {"pc": chord["pc"], "quality": chord["quality"], "share": 45},
+        ]
+        return {"id": n, "why": "Close call between the top candidates.", "kind": "chord", "alternatives": alternatives}
+
+    song["bars"][1]["chords"] = [
+        {**first, "beats": 2, "doubt": doubt(902, first)},
+        {**other, "beats": 2, "doubt": doubt(903, other)},
+    ]
+
+
 VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
+    "two-checks": _two_checks,
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
     "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,
     "lyrics-same-check": _lyrics_same_chord_to_check,

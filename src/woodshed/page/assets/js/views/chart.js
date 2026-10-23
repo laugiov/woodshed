@@ -221,10 +221,14 @@
         : null;
     const barLabel = (b, u, s) => {
       const chords = W.t("Bar {n}: {chords}", { n: u + 1, chords: b.chords.map((c) => W.prettyText(app.nameFor(c, 0, s))).join(", ") });
-      // The mark in the bar is no control of its own: the bar says it.
-      const said = b.chords.some((c) => c.doubt && !c.fixed)
-        ? W.t("{bar}, chord to check", { bar: chords })
-        : b.chords.some((c) => c.doubt && c.fixed) ? W.t("{bar}, your correction", { bar: chords }) : chords;
+      // The marks in the bar are no controls of their own: the bar says them.
+      const open = b.chords.filter((c) => c.doubt && !c.fixed);
+      const checks = open.filter((c) => c.doubt.kind !== "timing").length;
+      const said = checks > 1
+        ? W.t("{bar}, {n} chords to check", { bar: chords, n: checks })
+        : checks ? W.t("{bar}, chord to check", { bar: chords })
+          : open.length ? W.t("{bar}, placement to check", { bar: chords })
+            : b.chords.some((c) => c.doubt && c.fixed) ? W.t("{bar}, your correction", { bar: chords }) : chords;
       if (!changeAt.has(u)) return said;
       const changed = W.t("{bar}, key change: {key}", { bar: said, key: keyWords(song.keyName(s.transpose, changeAt.get(u))) });
       return doubtfulNear(u) ? W.t("{bar}, check by ear around the key change", { bar: changed }) : changed;
@@ -380,11 +384,13 @@
       renderForm(s);
       renderViewControl(s);
       paintBars(s);
-      // The keyboard where it was: the same place in the grid, drawn again.
-      const back = had && gridBars().find((b) => place(b) === had);
-      if (back) {
-        rove(back);
-        back.focus({ preventScroll: true });
+      // The keyboard where it was: the same place in the grid, drawn again, else the chart's tab stop.
+      if (had) {
+        const back = gridBars().find((b) => place(b) === had) || gridBars().find((b) => b.tabIndex === 0);
+        if (back) {
+          rove(back);
+          back.focus({ preventScroll: true });
+        }
       }
     }
 
@@ -436,17 +442,23 @@
         if (to) to.focus();
         return;
       }
-      if (!(key in seeks) && !["ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
+      // Playing: the pedal's keys seek in app.js, one way for every pedal (the next song at the end on
+      // stage); the lines and the part's ends from the bar playing, here.
+      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
       e.preventDefault();
       e.stopPropagation();
-      if (key in seeks) app.seekBar(curBar(s) + seeks[key]); // as a pedal: the bar after the one playing
-      else {
-        const to = moveTo(e.target, key);
-        if (to) app.seekBar(barShown(+to.getAttribute("data-group"), +to.getAttribute("data-col"), s));
-      }
-      const now = barEl(curBar(store.get()), store.get()); // the keyboard follows the song
-      if (now) now.focus();
+      const to = moveTo(barEl(curBar(s), s) || e.target, key);
+      if (to) app.seekBar(barShown(+to.getAttribute("data-group"), +to.getAttribute("data-col"), s));
+      followFocus(e.target);
     });
+    // The keyboard follows the song when it was on a bar of the grid (the page stays where it was read);
+    // `from` may be gone, the grid drawn again for another pass.
+    function followFocus(from) {
+      const s = store.get();
+      if (!(from instanceof Element && from.matches(".bar[data-group]")) || s.editing) return;
+      const now = barEl(curBar(s), s);
+      if (now) now.focus({ preventScroll: true });
+    }
 
     function row(gr, g, s) {
       const n = gr.occurrences.length;
@@ -768,6 +780,7 @@
         renderHarmony(s);
       },
       barEl: (u) => barEl(u, store.get()),
+      followFocus,
       // A bar of the grid shows the pass playing; a free bar or a sung bar (.nb) is one bar.
       barFromEl: (el) => (el.classList.contains("bar") && !el.hasAttribute("data-free") ? barShown(+el.getAttribute("data-group"), +el.getAttribute("data-col"), store.get()) : +el.getAttribute("data-bar")),
     };

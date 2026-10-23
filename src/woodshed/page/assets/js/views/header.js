@@ -301,7 +301,8 @@
     // same part played again); the shares come from this bar heard alone. When they disagree, say so,
     // and keep the analysis's chord in the list: a correction can always go back to it.
     // `from`: the control the keyboard goes back to (the bar holding a mark that is no button itself).
-    function openDoubt(button, from) {
+    // `toNext`: opened by "Next chord to check in this bar", the keyboard stays on that button.
+    function openDoubt(button, from, toNext) {
       const [u, k] = button.getAttribute("data-ref").split("_").map(Number);
       const chord = song.bars[u].chords[k];
       const s = app.store.get();
@@ -322,6 +323,11 @@
         });
       }
       const pop = $("pop");
+      // Another chord to check in the same bar (the bar is one control): one press away, round and round.
+      const chords = song.bars[u].chords;
+      const later = [...chords.keys()].slice(k + 1).concat([...chords.keys()].slice(0, k));
+      const j = later.find((i) => chords[i].doubt && !chords[i].fixed);
+      const nextMark = j === undefined ? null : document.querySelector('.doubt[data-ref="' + u + "_" + j + '"]');
       clear(
         pop,
         h("h3", { id: "popTitle" }, W.t("Bar {n}: which one do you hear?", { n: u + 1 })),
@@ -358,12 +364,17 @@
             }, W.t("Back to the analysis")))
           : null,
         h("p", null, W.t("▶ plays this bar of the recording with the candidate chord over it. Pick what matches your ear.")),
+        nextMark ? h("p", null, h("button", { type: "button", class: "btn", "data-testid": "doubt-next", onclick: (e) => {
+          e.stopPropagation(); // the button is gone with the pop drawn again: not a click outside it
+          openDoubt(nextMark, opener, true);
+        } }, W.t("Next chord to check in this bar"))) : null,
       );
       pop.hidden = false;
+      pop.dataset.ref = u + "_" + k;
       opener = from || (button.matches("button") ? button : button.closest(".bar")) || button;
       button.scrollIntoView({ block: "nearest" }); // a chord half off screen: the pop sits by it, not at the top
       place(pop, button, true);
-      const f = pop.querySelector(".pick:not([disabled])") || pop.querySelector("button");
+      const f = (toNext && pop.querySelector("[data-testid=doubt-next]")) || pop.querySelector(".pick:not([disabled])") || pop.querySelector("button");
       if (f) f.focus();
     }
     // A dialog keeps the keyboard: Tab from its last button comes back to its first, and Shift+Tab

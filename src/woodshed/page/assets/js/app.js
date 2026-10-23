@@ -526,7 +526,8 @@
       // The keyboard back on the chord taken back (the pop that held it is gone).
       const u = original.findIndex((bar) => bar.some((c) => c.doubt && String(c.doubt.id) === String(id)));
       const back = document.querySelector('.doubt[data-ref^="' + u + '_"]:not(.fixed)');
-      if (back && (document.activeElement === document.body || !document.activeElement)) back.focus({ preventScroll: true });
+      const control = back && (back.matches("button") ? back : back.closest(".bar")); // a mark in a bar: the bar
+      if (control && (document.activeElement === document.body || !document.activeElement)) control.focus({ preventScroll: true });
       const where = shared ? W.t("The band sees it on every device.") : W.t("This browser remembers it for this song.");
       app.toast(W.t("Back to the analysis: {chord}. {where}", { chord: analysed ? W.prettyText(app.nameFor(analysed, 0, store.get(), Math.max(0, u))) : "", where }));
     };
@@ -1067,7 +1068,7 @@
         app.seekBar(u);
         // A bar with a chord to check: Enter opens the check, as a click on its mark does.
         const now = chart.barEl(u) || bar;
-        const mark = now.querySelector(".doubt");
+        const mark = now.querySelector(".doubt:not(.fixed)"); // still to check, not a correction made
         if (mark) popups.openDoubt(mark, now);
         return;
       }
@@ -1098,9 +1099,11 @@
         const end = curBar() >= song.bars.length - 1 && !store.get().playing;
         if (store.get().stage && end && app.nextSong && app.nextSong()) return;
         app.seekBar(curBar() + 1);
+        chart.followFocus(e.target);
       } else if (k === "ArrowLeft" || k === "PageUp") {
         e.preventDefault();
         app.seekBar(curBar() - 1);
+        chart.followFocus(e.target);
       } else if (k === "l" || k === "L") $("loopBtn").click();
       else if (k === "[") setBpm(store.get().bpm - 5);
       else if (k === "]") setBpm(store.get().bpm + 5);
