@@ -10,6 +10,8 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-24
+
 ### Changed
 
 - On a song that changes key, the Key box shows every key, "A → B♭", with the key of the bar you are
@@ -201,7 +203,8 @@ corrections and set list stay where they are.
   print for the music stand. A song's folder can be zipped and sent: it opens offline.
 - English or French, dark or light.
 
-[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/laugiov/woodshed/releases/tag/v0.5.1
 [0.5.0]: https://github.com/laugiov/woodshed/releases/tag/v0.5.0
 [0.4.0]: https://github.com/laugiov/woodshed/releases/tag/v0.4.0
 [0.3.0]: https://github.com/laugiov/woodshed/releases/tag/v0.3.0
