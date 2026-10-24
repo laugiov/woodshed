@@ -538,6 +538,16 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .words-dialog textarea { width: 100%; font: 15px/1.5 var(--font-body); background: var(--sheet); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
 .words-dialog .status { min-height: 1.4em; margin: 8px 0; }
 .words-dialog .status.warn { color: var(--warn); }
+.words-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
+.words-path { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--sheet); }
+.words-path .btn { width: 100%; }
+.words-path .hint { margin: 8px 0 0; }
+.tap-along { position: fixed; left: 16px; right: 16px; bottom: calc(var(--dock-h, 96px) + 12px + env(safe-area-inset-bottom, 0px)); z-index: 30; max-width: 760px; margin: 0 auto; background: var(--panel); color: var(--ink); border: 2px solid var(--accent); border-radius: var(--radius); padding: 14px 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+.tap-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.tap-head .hint { flex: 1 1 200px; margin: 0; }
+.tap-line { margin: 10px 0 2px; font-size: 24px; font-weight: 700; overflow-wrap: anywhere; }
+.tap-next { margin: 0 0 10px; color: var(--muted); overflow-wrap: anywhere; }
+.tap-button { display: block; width: 100%; min-height: 72px; font-size: 20px; touch-action: manipulation; }
 .words-dialog .cmd { font-family: var(--font-mono); font-size: 13px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .words-progress { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }

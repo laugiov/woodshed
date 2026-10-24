@@ -241,5 +241,8 @@
       ln.words.every((w) => w && typeof w.text === "string" && num(w.at) && num(w.start) && num(w.end));
   }
 
-  W.typedWords = { KEY, syllables, beatTime, beatAt, barOf, line, span, withTyped, valid };
+  // A tap's beat index snapped to the nearest quarter beat (typed.snap): tapping along (spec 029-2).
+  const snap = (at) => Math.floor(at * 4 + 0.5) / 4;
+
+  W.typedWords = { KEY, syllables, beatTime, beatAt, barOf, line, span, withTyped, valid, snap };
 })();

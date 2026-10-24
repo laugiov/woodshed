@@ -228,8 +228,8 @@
       if (song.words) tags.push(h("span", { class: "tag on" }, W.t("Words")));
       if (song.doubts) tags.push(h("span", { class: "tag warn" }, song.doubts === 1 ? W.t("1 to check") : W.t("{n} to check", { n: song.doubts })));
     }
-    // The words go on the singer's track: offered once the song has its parts.
-    if (canUpload && song && song.complete && song.stems && !song.words && !working)
+    // The one Words dialog (spec 029-2): tapping along needs no singer's track and no model, any device may.
+    if (song && song.complete && !song.words && !working)
       tags.push(h("a", { class: "tag add", href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words")));
     const t = titled(song ? song.title : job.name);
     const band = (song && song.band) || {};

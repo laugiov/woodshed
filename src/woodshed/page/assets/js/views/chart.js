@@ -724,10 +724,8 @@
             h("button", { type: "button", class: mode === "lyrics" ? "on" : "", "aria-pressed": String(mode === "lyrics"), "data-testid": "sheet-lyrics", onclick: () => store.set({ sheet: "lyrics" }) }, W.t("Lyrics")),
           )
         : null;
-      // The words are placed on the singer's track: offered once the page has it.
-      const wordsBtn = song.tracks.some((t) => t.id === "solo-vocals") && !s.wordsElsewhere
-        ? h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? W.t("Edit the words") : W.t("Add the words"))
-        : null;
+      // The one Words dialog (spec 029-2): tapping along needs no singer's track, any device of the band may.
+      const wordsBtn = h("button", { type: "button", class: "btn", "data-testid": "words-open", onclick: () => app.openWords() }, app.words ? W.t("Edit the words") : W.t("Add the words"));
       // The band's own chart: not while the full analysis is still coming (it may change the beats).
       const editBtn = song.view.pending
         ? h("button", { type: "button", class: "btn", disabled: "", "data-testid": "edit-chart", title: W.t("Edit when the parts are ready: the full analysis may move the beats.") }, W.t("Edit the chart"))

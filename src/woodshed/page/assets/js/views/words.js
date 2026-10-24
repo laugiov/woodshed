@@ -1,6 +1,7 @@
-// The words of the song, pasted in the page: served by `woodshed app`, the library places them on
-// the voice in the background (a minute of the speech model) and the page reloads with them.
-// Opened from disk, the page has no app to do it: the dialog gives the command instead.
+// The words of the song, pasted in the page, by one of two paths of equal weight (spec 029-2): laid by tapping
+// along as the song plays (no model, any language, any licence: views/tap.js), or placed on the voice by the
+// library in the background (a minute of the speech model, non-commercial licence) and the page reloads with them.
+// Opened from disk, the page has no app to do either: the dialog gives the model's command instead.
 (function () {
   "use strict";
   const W = window.Woodshed;
@@ -15,7 +16,8 @@
     let dialog = null;
     let polling = null;
     let reloadWhenStopped = false;
-    let elsewhere = false; // this device does not add words (mayAdd)
+    let elsewhere = false; // this device does not run the speech model (mayAdd): a phone of the band
+    let modelOff = false; // the library was started with --no-words-model
     const stopPolling = () => {
       clearInterval(polling);
       polling = null;
@@ -171,6 +173,38 @@
       }
     }
 
+    // Tapping along: the words read by the library (lyrics.read, the model's reader too), then the mode.
+    async function tapAlong() {
+      const text = $("wordsText").value;
+      if (!text.trim()) return say(W.t("Paste the words first."), true);
+      say(W.t("Reading the words…"));
+      try {
+        const r = await fetch("/api/words-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Woodshed-Token": await token() },
+          body: JSON.stringify({ text }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error ? W.t(data.error) : W.t("the library refused them ({status})", { status: r.status }));
+        if (!data.lines.length) return say(W.t("No sung line found: one line per sung line."), true);
+        say("");
+        dialog.close();
+        app.tapAlong.start(text, data.lines);
+      } catch (err) {
+        say(err.message, true);
+      }
+    }
+
+    // Laying again replaces the lines the last layout laid (never a line typed by hand): said before.
+    function replacesNote() {
+      const el = $("wordsReplaces");
+      if (!el) return;
+      const fixes = app.wordFixes();
+      const n = Object.keys(fixes).filter((k) => W.typedWords.KEY.test(k) && fixes[k] && fixes[k].by === "layout").length;
+      el.hidden = !n;
+      el.textContent = n === 1 ? W.t("Replaces the line you laid by tapping along.") : W.t("Replaces the {n} lines you laid by tapping along.", { n });
+    }
+
     const closeRow = () =>
       h("div", { class: "dialog-actions" }, h("button", { type: "button", class: "btn", "data-testid": "words-close", onclick: () => dialog.close() }, W.t("Close")));
 
@@ -181,28 +215,45 @@
         { class: "hint", id: "wordsHow" },
         W.t("One line per sung line. Part names in brackets ([Chorus]) help; rows of chords are ignored. Write numbers as words."),
       );
-      if (!hasVoice) {
-        return [h("p", null, W.t("The words are placed on the singer's track, and this page has none yet. Build the song with its instrument tracks (stems) first.")), closeRow()];
-      }
+      const tapFromLibrary = h("p", { class: "hint", "data-testid": "words-tap-library" }, W.t("To lay them by tapping along (no model), open the song from the library (woodshed app)."));
+      if (!served && !hasVoice) return [tapFromLibrary, closeRow()];
       if (!served) {
         const where = folder ? h("span", { translate: "no" }, folder) : W.t("the page");
         return [
           h("p", null, W.nodes(W.t("This page is opened from the disk: save the words in a text file (words.txt), then run, in the folder that holds {folder}:"), { folder: where })),
           h("pre", { class: "cmd", "data-testid": "words-command", translate: "no" }, 'woodshed lyrics "' + (folder || "Song.woodshed") + '" words.txt'),
           h("p", { class: "hint" }, W.t("Or open the song from the library (woodshed app) to paste them here.")),
+          tapFromLibrary,
           intro,
           closeRow(),
         ];
       }
+      // The model where it may run: the singer's track, this computer, a library that uses it.
+      const model = hasVoice && !elsewhere && !modelOff;
       const text = h("textarea", {
         id: "wordsText", rows: "14", spellcheck: "false", "aria-label": W.t("The words of the song"), "aria-describedby": "wordsHow",
         "data-testid": "words-text", placeholder: W.t("[Verse 1]\nThe first line as it is sung\nThe second line\n\n[Chorus]\n…"), translate: "no",
       });
       text.value = typeof draft === "string" ? draft : old;
+      const tapPath = h(
+        "div",
+        { class: "words-path", "data-testid": "words-path-tap" },
+        h("button", { type: "button", class: "btn" + (model ? "" : " primary"), id: "wordsTap", "data-testid": "words-tap", onclick: tapAlong }, W.t("Lay them by tapping along")),
+        h("p", { class: "hint" }, W.t("No model, any language, free for any use, paid gigs included. Play the song and tap Space at each line's start.")),
+      );
+      const voicePath = model
+        ? h(
+            "div",
+            { class: "words-path", "data-testid": "words-path-voice" },
+            h("button", { type: "button", class: "btn", id: "wordsPlace", "data-testid": "words-place", onclick: place }, old ? W.t("Place them again on the voice") : W.t("Place them on the voice")),
+            h("p", { class: "hint" }, W.t("MMS, a speech model by Meta, downloaded once (1.2 GB), for non-commercial use only (CC BY-NC 4.0). The words stay in your library.")),
+          )
+        : null;
       return [
         intro,
         text,
-        h("p", { class: "hint" }, W.t("Placed on this computer by MMS, a speech model by Meta (CC BY-NC 4.0: non-commercial use), downloaded once (1.2 GB). The words stay in your library.")),
+        modelOff ? h("p", { class: "hint", "data-testid": "words-nomodel" }, W.t("This library does not use the speech model: paste the words, then tap along.")) : null,
+        h("p", { class: "hint", id: "wordsReplaces", "data-testid": "words-replaces", hidden: "" }),
         h("p", { class: "hint", id: "wordsFixed", "data-testid": "words-fixed", hidden: "" }),
         h("p", { id: "wordsStatus", class: "status", role: "status", "data-testid": "words-status" }),
         h(
@@ -212,28 +263,24 @@
           h("progress", { id: "wordsBar", max: "100", "aria-label": W.t("Placing the words") }),
           h("span", { id: "wordsPct", class: "pct", "data-testid": "words-percent" }),
         ),
-        h(
-          "div",
-          { class: "dialog-actions" },
-          h("button", { type: "button", class: "btn", onclick: () => dialog.close() }, W.t("Close")),
-          h("button", { type: "button", class: "btn primary", id: "wordsPlace", "data-testid": "words-place", onclick: place }, old ? W.t("Place them again") : W.t("Place the words")),
-        ),
+        h("div", { class: "words-paths" }, tapPath, voicePath),
+        closeRow(),
       ];
     }
 
-    // A phone of the band reads and plays; the computer that runs the app adds words, as it adds songs.
+    // A phone of the band taps along; the computer that runs the app runs the speech model, as it adds songs. A
+    // library started with --no-words-model never offers it.
     async function mayAdd() {
+      let data;
       try {
-        const data = await (await fetch("/api/songs", { cache: "no-store" })).json();
-        if (data.can_upload !== false) return;
+        data = await (await fetch("/api/songs", { cache: "no-store" })).json();
       } catch (err) {
         return; // sending says what is wrong
       }
-      // Nothing to do here for this device: no button that leads to a refusal.
-      headerBtn.hidden = true;
-      elsewhere = true;
-      app.store.set({ wordsElsewhere: true });
-      if (dialog) fill();
+      modelOff = data.words_model === false;
+      elsewhere = data.can_upload === false;
+      if (elsewhere) app.store.set({ wordsElsewhere: true });
+      if (dialog && (modelOff || elsewhere)) fill();
     }
 
     // The dialog's content, said again in the other language with what it holds kept: the paste,
@@ -244,20 +291,17 @@
       const progress = $("wordsProgress");
       const kept = status && {
         text: status.textContent, warn: status.classList.contains("warn"), busy: !progress.hidden,
-        value: $("wordsBar").getAttribute("value"), pct: $("wordsPct").textContent, disabled: $("wordsPlace").disabled,
+        value: $("wordsBar").getAttribute("value"), pct: $("wordsPct").textContent, disabled: !!$("wordsPlace") && $("wordsPlace").disabled,
       };
-      if (elsewhere) {
-        clear(dialog, h("h2", { id: "wordsTitle" }, W.t("The words")), h("p", { "data-testid": "words-elsewhere" }, W.t("Words are added from the computer that runs the library, like songs.")), closeRow());
-        return;
-      }
       clear(dialog, h("h2", { id: "wordsTitle" }, app.words ? W.t("The words") : W.t("Add the words")), body(area ? area.value : undefined));
       fixedNote();
+      replacesNote();
       if (!kept || !$("wordsStatus")) return;
       say(kept.text, kept.warn);
       $("wordsProgress").hidden = !kept.busy;
       if (kept.value !== null) $("wordsBar").setAttribute("value", kept.value);
       $("wordsPct").textContent = kept.pct;
-      $("wordsPlace").disabled = kept.disabled;
+      if ($("wordsPlace")) $("wordsPlace").disabled = kept.disabled;
     }
 
     function open() {
@@ -267,20 +311,20 @@
         fill();
       } // built once: closed and opened again, it keeps a paste not sent yet, and a placement under way
       fixedNote();
+      replacesNote();
       if (!dialog.open) dialog.showModal();
       const area = $("wordsText");
       if (area) area.focus();
     }
 
     // In the header too, where it is seen: in the accent colour while the song has no words.
+    // Every page: tapping along needs no singer's track.
     const headerBtn = $("wordsBtn");
-    if (hasVoice) {
-      headerBtn.hidden = false;
-      headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
-      headerBtn.classList.toggle("primary", !app.words);
-      headerBtn.addEventListener("click", open);
-      if (served) mayAdd(); // a phone of the band: asked once, when the page opens
-    }
+    headerBtn.hidden = false;
+    headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
+    headerBtn.classList.toggle("primary", !app.words);
+    headerBtn.addEventListener("click", open);
+    if (served) mayAdd(); // a phone of the band, a library without the model: asked once, when the page opens
 
     // The words placed before this load: said once, now that they show.
     try {
@@ -305,7 +349,7 @@
 
     // The other language: the header's button and the dialog, with what the dialog holds.
     function relabel() {
-      if (hasVoice) headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
+      headerBtn.textContent = app.words ? W.t("Words") : W.t("+ Add the words");
       if (dialog) fill();
     }
 

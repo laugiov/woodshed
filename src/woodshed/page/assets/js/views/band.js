@@ -261,8 +261,9 @@
     }
     // Lines of the words fixed, taken back, given another voice (views/lines.js): the library places them and
     // answers with the fixes of this placement. The first fix of a page decodes its voice: 20 s at most.
-    app.shareWords = async (lines, expect) => {
-      const body = { page: folder, key: app.wordsKey, lines, ...(expect ? { expect } : {}) };
+    // `layout`: a whole text laid by tapping along instead (spec 029-2), {text, taps}.
+    app.shareWords = async (lines, expect, layout) => {
+      const body = { page: folder, key: app.wordsKey, ...(layout ? { layout } : { lines }), ...(expect ? { expect } : {}) };
       const r = await api("/api/words", body, true, 20000);
       if (r.ok && typeof r.data.rev === "number") heardRev(r.data.rev);
       return r;

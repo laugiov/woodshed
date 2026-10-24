@@ -630,8 +630,6 @@
     Close: "Fermer",
     "One line per sung line. Part names in brackets ([Chorus]) help; rows of chords are ignored. Write numbers as words.":
       "Une ligne par ligne chantée. Les noms de parties entre crochets ([Refrain]) aident ; les lignes d'accords sont ignorées. Écris les nombres en toutes lettres.",
-    "The words are placed on the singer's track, and this page has none yet. Build the song with its instrument tracks (stems) first.":
-      "Les paroles se placent sur la piste de la voix, et cette page n'en a pas encore. Construis d'abord le morceau avec ses pistes séparées (stems).",
     "the page": "la page",
     "This page is opened from the disk: save the words in a text file (words.txt), then run, in the folder that holds {folder}:":
       "Cette page est ouverte depuis le disque : enregistre les paroles dans un fichier texte (words.txt), puis lance, dans le dossier qui contient {folder} :",
@@ -640,16 +638,39 @@
     "The words of the song": "Les paroles du morceau",
     "[Verse 1]\nThe first line as it is sung\nThe second line\n\n[Chorus]\n…":
       "[Couplet 1]\nLa première ligne comme elle est chantée\nLa deuxième ligne\n\n[Refrain]\n…",
-    "Placed on this computer by MMS, a speech model by Meta (CC BY-NC 4.0: non-commercial use), downloaded once (1.2 GB). The words stay in your library.":
-      "Placées sur cet ordinateur par MMS, un modèle de parole de Meta (CC BY-NC 4.0 : usage non commercial), téléchargé une seule fois (1,2 Go). Les paroles restent dans ta bibliothèque.",
     "Placing the words": "Placement des paroles",
-    "Place them again": "Les placer de nouveau",
-    "Place the words": "Placer les paroles",
     "The words": "Les paroles",
-    "Words are added from the computer that runs the library, like songs.":
-      "Les paroles s'ajoutent depuis l'ordinateur où tourne la bibliothèque, comme les morceaux.",
     Words: "Paroles",
     "+ Add the words": "+ Ajouter les paroles",
+    // Tapping along, the two paths of the words dialog (spec 029-2: views/words.js, views/tap.js)
+    "Lay them by tapping along": "Les poser en tapant la mesure",
+    "Place them on the voice": "Les placer sur la voix",
+    "Place them again on the voice": "Les placer de nouveau sur la voix",
+    "No model, any language, free for any use, paid gigs included. Play the song and tap Space at each line's start.":
+      "Sans modèle, toute langue, libre pour tout usage, concerts payés compris. Lance le morceau et tape Espace au début de chaque ligne.",
+    "MMS, a speech model by Meta, downloaded once (1.2 GB), for non-commercial use only (CC BY-NC 4.0). The words stay in your library.":
+      "MMS, un modèle de parole de Meta, téléchargé une seule fois (1,2 Go), pour un usage non commercial seulement (CC BY-NC 4.0). Les paroles restent dans ta bibliothèque.",
+    "This library does not use the speech model: paste the words, then tap along.":
+      "Cette bibliothèque n'utilise pas le modèle de parole : colle les paroles, puis tape la mesure.",
+    "This library does not use the speech model: type the words instead.":
+      "Cette bibliothèque n'utilise pas le modèle de parole : tape plutôt les paroles toi-même.",
+    "Replaces the line you laid by tapping along.": "Remplace la ligne posée en tapant la mesure.",
+    "Replaces the {n} lines you laid by tapping along.": "Remplace les {n} lignes posées en tapant la mesure.",
+    "To lay them by tapping along (no model), open the song from the library (woodshed app).":
+      "Pour les poser en tapant la mesure (sans modèle), ouvre le morceau depuis la bibliothèque (woodshed app).",
+    "Reading the words…": "Lecture des paroles…",
+    "No sung line found: one line per sung line.": "Aucune ligne chantée trouvée : une ligne par ligne chantée.",
+    "Line {k} of {n}": "Ligne {k} sur {n}",
+    "Tap Space or the pedal as each line starts. Escape stops.":
+      "Tape Espace ou la pédale au début de chaque ligne. Échap arrête.",
+    "Tap: the line starts": "Tape : la ligne commence",
+    "1 line laid by tapping along: move a word to its beat where it falls wrong.":
+      "1 ligne posée en tapant la mesure : déplace un mot sur son temps là où il tombe mal.",
+    "{n} lines laid by tapping along: move a word to its beat where it falls wrong.":
+      "{n} lignes posées en tapant la mesure : déplace un mot sur son temps là où il tombe mal.",
+    "1 line not laid.": "1 ligne non posée.",
+    "{n} lines not laid.": "{n} lignes non posées.",
+    "Tapping along": "Taper la mesure",
 
     // The library's rows, set list and messages (home/home.js)
     "The library was restarted: reload this page.": "La bibliothèque a redémarré : recharge cette page.",

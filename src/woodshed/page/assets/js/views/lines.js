@@ -473,6 +473,31 @@
       });
     }
 
+    // A whole text laid by tapping along (spec 029-2, views/tap.js): one request, one Undo (the lines it laid taken
+    // off, the ones it replaced back). The sheet shows them in the Lyrics view, in edit mode, where words are moved.
+    async function lay(layout, said) {
+      const r = await app.shareWords(null, null, layout);
+      if (!r.ok) {
+        app.toast(refused(r));
+        return r;
+      }
+      app.useWordEdits(r.data.lines, true);
+      store.set({ editing: true, sheet: "lyrics" });
+      const keys = r.data.laid.concat(r.data.gone);
+      const change = {};
+      const expect = {};
+      for (const k of keys) {
+        change[k] = { undo: true };
+        expect[k] = r.data.lines[k] === undefined ? null : r.data.lines[k];
+      }
+      undo = keys.length ? { n: null, change, expect } : null;
+      store.set({ corrections: store.get().corrections + 1 });
+      app.toast(said(r.data), undo ? { label: W.t("Undo"), run: runUndo } : undefined);
+      const first = r.data.laid.length ? lineEl(r.data.laid[0]) : null;
+      if (first) first.scrollIntoView({ block: "center" });
+      return r;
+    }
+
     store.on((s, changed) => {
       if ((changed.has("editing") || changed.has("stage")) && (!s.editing || s.stage)) {
         close(false);
@@ -480,6 +505,6 @@
       }
     });
 
-    return { open: openLine, back, untypeAll, commit, shown, close: () => close(false), isOpen: () => open !== null, render() {} };
+    return { open: openLine, back, untypeAll, commit, lay, shown, close: () => close(false), isOpen: () => open !== null, render() {} };
   };
 })();

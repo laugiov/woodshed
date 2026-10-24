@@ -929,6 +929,8 @@
     const typedLines = W.views.typed(app, chart, editor); // the words typed by hand (spec 029)
     views.push(typedLines);
     app.typedLines = typedLines;
+    const tapAlong = W.views.tap(app); // a whole text laid by tapping along (spec 029-2)
+    app.tapAlong = tapAlong;
     // The instrument on the page itself: a phone's layout follows it (the singer: words first).
     const mark = (s) => {
       document.body.dataset.inst = s.inst;
@@ -1024,6 +1026,7 @@
       $("toast").hidden = true; // said in the other language
       for (const v of views) v.render(store.get());
       words.relabel();
+      tapAlong.relabel();
       renderExports();
       renderMore();
       renderStagePlay(store.get());
