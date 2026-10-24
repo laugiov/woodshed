@@ -16,19 +16,38 @@
     const box = $("lineEd");
     const PHONE = W.popover.PHONE;
     let open = null; // the index of the line being edited, in lyrics.json
+    let openRow = 0; // the row it was opened from: a split line has several (spec 028 B)
     let undo = null; // {n, change, expect}: the line as it was before the last change made here, and as that change left it
 
-    const rowOf = (i) => (app.words ? app.words.rows().rows.find((r) => r.line.index === i) : null) || null;
-    const lineEl = (i) => document.querySelector('#sheet .lline[data-index="' + i + '"]');
+    // A line as one row of the sheet: a split line's rows (spec 028 B) put together, its bars and its time.
+    function rowOf(i) {
+      const rows = app.words ? app.words.rows().rows.filter((r) => r.line.index === i) : [];
+      if (!rows.length) return null;
+      const seen = new Set();
+      const bars = rows.flatMap((r) => r.bars).filter((b) => !seen.has(b.bar) && seen.add(b.bar));
+      const line = { ...rows[0].line, start: Math.min(...rows.map((r) => r.line.start)), end: Math.max(...rows.map((r) => r.line.end)) };
+      return { ...rows[0], line, bars, rows: rows.length };
+    }
+    const lineEl = (i, piece) => document.querySelector('#sheet .lline[data-index="' + i + '"][data-piece="' + (piece || 0) + '"]') ||
+      document.querySelector('#sheet .lline[data-index="' + i + '"]');
     const placedText = (i) => app.placedWords.lines[i].text;
-    // The line as the library has it, as the editor asks for it: its words, another voice, gone, or as placed.
+    // The lines joined into line i (spec 028 B), as the library keeps them.
+    function held(i) {
+      const out = [];
+      for (let j = i + 1; app.wordFixes()[j] && app.wordFixes()[j].gone === "joined"; j++) out.push(j);
+      return out;
+    }
+    // The line as the library has it, as the editor asks for it: its words (a split line's lines, one a row),
+    // another voice, gone, joined into the line before, or as placed.
     function asked(i) {
       const e = app.wordFixes()[i];
       if (!e) return null;
-      if (e.gone) return { gone: "not-sung" };
-      const text = e.lines ? e.lines[0].text : placedText(i);
+      if (e.gone) return { gone: e.gone };
+      const text = e.lines ? e.lines.map((ln) => ln.text).join("\n") : placedText(i);
       return e.voice === "other" ? { text, voice: "other" } : { text };
     }
+    // The words as typed, each line of a split tidied, the empty ones dropped.
+    const tidy = (text) => text.split("\n").map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
     // The words in the field: the line's text, its backing vocals in brackets when the text has none.
     function fieldText(line) {
       const backing = Array.isArray(line.backing) ? line.backing.filter((b) => typeof b === "string" && b) : [];
@@ -37,12 +56,13 @@
 
     function close(restore) {
       const was = open;
+      const row = openRow;
       box.hidden = true;
       $("edScrim").hidden = true;
       document.body.classList.remove("line-open");
       document.querySelectorAll(".ed-tail").forEach((t) => t.remove());
       open = null;
-      const back = was === null ? null : lineEl(was);
+      const back = was === null ? null : lineEl(was, row);
       if (restore && back) back.focus({ preventScroll: true });
     }
 
@@ -64,9 +84,10 @@
     }
 
     // A change made here: sent, then the toast with Undo (kept in the strip until the next change).
+    // The lines joined into a line changed go with it (the library lets them go): its Undo brings them back too.
     async function commit(i, change, said, after, status) {
       const before = {};
-      for (const k of Object.keys(change)) before[k] = asked(+k);
+      for (const k of Object.keys(change)) for (const n of [+k, ...held(+k)]) before[n] = asked(n);
       const r = await send(change);
       if (!r.ok) {
         if (status) status(r);
@@ -74,7 +95,7 @@
         return false;
       }
       const expect = {};
-      for (const k of Object.keys(change)) expect[k] = r.data.lines[k] === undefined ? null : r.data.lines[k];
+      for (const k of Object.keys(before)) expect[k] = r.data.lines[k] === undefined ? null : r.data.lines[k];
       undo = { n: i, change: before, expect };
       store.set({ corrections: store.get().corrections + 1 }); // the strip shows Undo
       if (after) after();
@@ -107,10 +128,10 @@
     function savedText(i, data) {
       const e = data.lines[i];
       const out = [W.t("“{words}” saved.", { words: app.lineWords(i) })];
-      const line = e && e.lines ? e.lines[0] : null;
-      const number = line && line.words.find((w) => w.start === null && /\d/.test(w.text));
+      const pieces = e && e.lines ? e.lines : [];
+      const number = pieces.flatMap((ln) => ln.words).find((w) => w.start === null && /\d/.test(w.text));
       if (number) out.push(W.t("{word} is not heard: write numbers as words.", { word: number.text }));
-      if (line && line.check === SPREAD) out.push(W.t("Spread over the line's time, not heard: listen to it."));
+      if (pieces.some((ln) => ln.check === SPREAD)) out.push(W.t("Spread over the line's time, not heard: listen to it."));
       return out.join(" ");
     }
 
@@ -140,16 +161,33 @@
       });
     }
 
-    function openLine(i, word) {
+    // The next line of the placement that could be joined into line i: sung, on the sheet, in the same part, and
+    // four lines at most once joined.
+    function joinable(i, rows) {
+      const j = i + 1 + held(i).length;
+      const placed = app.placedWords.lines;
+      const next = rowOf(j);
+      if (!next || !placed[j] || placed[j].block !== placed[i].block || placed[j].tag !== placed[i].tag) return null;
+      return held(i).length < 3 && rows + next.rows - 1 <= 4 ? j : null;
+    }
+    // A line's words in the field: one row a line of a split.
+    function wordsOf(i, line) {
+      const e = app.wordFixes()[i];
+      return e && e.lines && e.lines.length > 1 ? e.lines.map(fieldText).join("\n") : fieldText(line);
+    }
+
+    function openLine(i, word, from) {
       if (!app.canFixWords()) return app.toast(W.t("Fixing a line's words needs the library (woodshed app)."));
       const r = rowOf(i);
       if (!r) return close(false);
       if (open !== null) close(false);
       open = i;
+      openRow = from && from.getAttribute ? +(from.getAttribute("data-piece") || 0) : 0;
       const line = r.line;
       const entry = app.wordFixes()[i];
       const other = line.voice === "other";
-      const start = fieldText(line);
+      const start = wordsOf(i, line);
+      const joinTo = joinable(i, r.rows);
       const field = h("textarea", {
         class: "field", id: "lineEdField", rows: PHONE.matches ? "2" : "1", maxlength: "200", spellcheck: "false", translate: "no",
         autocomplete: "off", enterkeyhint: "done", "data-testid": "line-field", "aria-label": W.t("Words of line {n}", { n: i + 1 }), "aria-describedby": "lineEdStatus",
@@ -174,7 +212,9 @@
         const w = res.data && Array.isArray(res.data.window) ? res.data.window : null;
         if (w) {
           field.setAttribute("aria-invalid", "true");
-          say(W.t("Not enough time for these words between {from} and {to}.", { from: fmt(w[0]), to: fmt(w[1]) }), true);
+          const room = { from: fmt(w[0]), to: fmt(w[1]) };
+          say(joinTo === null ? W.t("Not enough time for these words between {from} and {to}.", room)
+            : W.t("Not enough time for these words between {from} and {to}: join it with the next line.", room), true);
         } else say(refused(res), true);
         reload.hidden = !(res.data && res.data.error === STALE); // this page's words are not the library's now
         field.focus();
@@ -193,16 +233,36 @@
         field.style.height = "auto";
         field.style.height = field.scrollHeight + (field.offsetHeight - field.clientHeight) + "px";
       };
+      // Four lines at most: a fifth row pasted goes on the fourth.
       field.addEventListener("input", () => {
-        if (/[\r\n]/.test(field.value)) field.value = field.value.replace(/[\r\n]+/g, " "); // one line (split and join come later)
+        const rows = field.value.replace(/\r\n?/g, "\n").split("\n");
+        const v = rows.length > 4 ? [...rows.slice(0, 3), rows.slice(3).join(" ")].join("\n") : rows.join("\n");
+        if (v !== field.value) field.value = v;
         grow();
         field.removeAttribute("aria-invalid");
       });
+      // A split at the cursor (spec 028 B): Shift+Enter or "Split at the cursor"; Save places the lines together.
+      function splitAt() {
+        const v = field.value;
+        const a = field.selectionStart;
+        const left = v.slice(0, a).replace(/[ \t]+$/, "");
+        const right = v.slice(field.selectionEnd).replace(/^[ \t]+/, "");
+        if (v.split("\n").length >= 4) {
+          say(W.t("A line is split in four at most."), true);
+        } else if (left.trim() && right.trim() && !left.endsWith("\n") && !right.startsWith("\n")) {
+          field.value = left + "\n" + right;
+          field.setSelectionRange(left.length + 1, left.length + 1);
+          field.removeAttribute("aria-invalid");
+          grow();
+        }
+        field.focus();
+      }
       field.addEventListener("keydown", (e) => {
         if (e.isComposing) return;
         if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          if (!e.shiftKey) save(false); // Enter saves; it never breaks the line
+          if (e.shiftKey) splitAt();
+          else save(false); // Enter saves; Shift+Enter breaks the line
         } else if (e.key === "Escape") {
           e.preventDefault();
           close(true);
@@ -220,7 +280,8 @@
       const next = () => {
         const rows = app.words ? app.words.rows().rows : [];
         const k = rows.findIndex((x) => x.line.index === i);
-        return k >= 0 && k + 1 < rows.length ? rows[k + 1].line.index : null;
+        const after = k >= 0 ? rows.slice(k).find((x) => x.line.index !== i) : null; // past a split line's rows
+        return after ? after.line.index : null;
       };
       const go = (more) => () => {
         const after = more ? next() : null;
@@ -228,13 +289,13 @@
         else close(true);
       };
       async function save(more) {
-        const text = field.value.replace(/\s+/g, " ").trim();
+        const text = tidy(field.value);
         if (!text) {
           field.setAttribute("aria-invalid", "true");
           say(W.t("Type the words of the line, or take it out of this recording."), true);
           return field.focus();
         }
-        if (text === start.replace(/\s+/g, " ").trim()) return go(more)(); // nothing changed: nothing sent
+        if (text === tidy(start)) return go(more)(); // nothing changed: nothing sent
         busy(true);
         await commit(i, { [i]: other ? { text, voice: "other" } : { text } }, (data) => savedText(i, data), go(more), failed);
       }
@@ -242,8 +303,17 @@
         busy(true);
         await commit(i, { [i]: change }, said, go(false), failed);
       };
-      const text = () => field.value.replace(/\s+/g, " ").trim() || line.text;
+      const text = () => tidy(field.value) || line.text;
+      // Two lines as one, placed in the window of both (spec 028 B): the next line's words after these.
+      const join = async () => {
+        busy(true);
+        const words = text() + " " + wordsOf(joinTo, rowOf(joinTo).line);
+        const change = { [i]: other ? { text: words, voice: "other" } : { text: words }, [joinTo]: { gone: "joined" } };
+        await commit(i, change, () => W.t("“{words}” joined with the next line.", { words: app.lineWords(i) }), go(false), failed);
+      };
       const tools = h("div", { class: "tools" },
+        h("button", { type: "button", class: "tool", "data-testid": "line-split", onmousedown: (e) => e.preventDefault(), onclick: splitAt }, W.t("Split at the cursor")),
+        joinTo === null ? null : h("button", { type: "button", class: "tool", "data-testid": "line-join", onclick: join }, W.t("Join with the next line")),
         h("button", { type: "button", class: "tool", "data-testid": "line-other", "aria-pressed": String(other),
           onclick: () => (other
             ? act({ text: text() }, () => W.t("“{words}” is the singer's again.", { words: app.lineWords(i) }))()
@@ -255,7 +325,7 @@
         PHONE.matches ? hearLine(r) : null,
         h("div", { class: "bars-of-line" }, h("span", null, W.t("Chords:")), chips(r)),
         tools,
-        PHONE.matches ? null : h("p", { class: "tip", "data-testid": "line-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next line.", { mod: MOD })));
+        PHONE.matches ? null : h("p", { class: "tip", "data-testid": "line-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next line.", { mod: MOD }), " ", W.t("Shift+Enter splits at the cursor.")));
       clear(
         box,
         // Named by its first words (a number would read as a bar's), its number with its part and time.
@@ -281,7 +351,7 @@
       box.hidden = false;
       box.classList.remove("typing");
       document.body.classList.add("line-open");
-      const anchor = lineEl(i);
+      const anchor = lineEl(i, openRow);
       W.popover.place(box, anchor || document.body);
       grow();
       field.focus({ preventScroll: true });
@@ -289,7 +359,10 @@
       const tapped = word && word.querySelector(".wt") ? word.querySelector(".wt").textContent : "";
       let at = -1;
       if (tapped && anchor) {
-        const same = [...anchor.querySelectorAll(".lw .wt")].filter((x) => x.textContent === tapped);
+        // In the words of every row before it too: a split line's rows are one field.
+        const rowsBefore = [...document.querySelectorAll('#sheet .lline[data-index="' + i + '"]')].filter((el) => +el.getAttribute("data-piece") < openRow);
+        const all = [...rowsBefore, anchor].flatMap((el) => [...el.querySelectorAll(".lw .wt")]);
+        const same = all.filter((x) => x.textContent === tapped);
         const nth = same.indexOf(word.querySelector(".wt"));
         for (let k = 0, from = 0; k <= nth; k++, from = at + tapped.length) at = field.value.indexOf(tapped, from);
       }
@@ -318,7 +391,7 @@
         window.visualViewport.addEventListener(ev, () => {
           if (open === null || !PHONE.matches) return;
           W.popover.keepAboveKeyboard(box);
-          if (ev === "resize") requestAnimationFrame(() => open !== null && W.popover.keepInSight(box, lineEl(open)));
+          if (ev === "resize") requestAnimationFrame(() => open !== null && W.popover.keepInSight(box, lineEl(open, openRow)));
         });
       }
     }
@@ -327,16 +400,19 @@
       if (open === null || PHONE.matches || following) return;
       following = requestAnimationFrame(() => {
         following = 0;
-        const el = open === null ? null : lineEl(open);
+        const el = open === null ? null : lineEl(open, openRow);
         if (el) W.popover.place(box, el, true);
       });
     };
     window.addEventListener("scroll", follow, { passive: true });
     window.addEventListener("resize", follow);
 
-    // Back to the placement, from a row taken out of this recording.
+    // Back to the placement, from a row taken out of this recording, or joined into the line before (the whole
+    // join taken back: the line it went to is the placement's again).
     function back(i) {
-      commit(i, { [i]: null }, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) }), () => {
+      let base = i;
+      while (base > 0 && app.wordFixes()[base] && app.wordFixes()[base].gone === "joined") base--;
+      commit(base, { [base]: null }, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) }), () => {
         const el = lineEl(i);
         if (el) el.focus({ preventScroll: true });
       });

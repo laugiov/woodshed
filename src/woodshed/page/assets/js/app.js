@@ -147,8 +147,8 @@
     app.wordFixes = () => ({ ...wordFixes });
     // A line named by its first words, as the band says it ("Je ne fais pourtant…"): a number reads as a bar's.
     app.lineWords = (i) => {
-      const ln = app.wordsData && app.wordsData.lines[i];
-      const words = String((ln && ln.text) || "").split(/\s+/).filter(Boolean);
+      const rows = (app.wordsData ? W.wordEdits.byIndex(app.wordsData)[i] : null) || []; // a split line: its rows
+      const words = rows.map((ln) => String((ln && ln.text) || "")).join(" ").split(/\s+/).filter(Boolean);
       return words.slice(0, 4).join(" ") + (words.length > 4 ? "\u2026" : "");
     };
     app.canFixWords = () => false; // served by the library with its token: views/band.js says so
@@ -1070,7 +1070,7 @@
         if (e.target.closest(".lwords")) {
           e.stopPropagation();
           popups.closeAll();
-          lines.open(+sung.getAttribute("data-index"), e.target.closest(".lw"));
+          lines.open(+sung.getAttribute("data-index"), e.target.closest(".lw"), sung);
           return;
         }
       }
@@ -1161,7 +1161,7 @@
       const sungLine = e.target.closest && e.target.closest("#sheet .lline[role=button]");
       if (sungLine && e.target === sungLine && e.key === "Enter") {
         e.preventDefault();
-        return lines.open(+sungLine.getAttribute("data-index"), null);
+        return lines.open(+sungLine.getAttribute("data-index"), null, sungLine);
       }
       // Undo of a line fixed, away from a text field (the field's own Undo is the browser's).
       const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target.isContentEditable === true);

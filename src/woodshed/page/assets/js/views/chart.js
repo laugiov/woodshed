@@ -372,7 +372,7 @@
             // The check is one of the texts woodshed lyrics writes, in core/i18n-fr.js.
             {
               class: "lline" + (r.line.check ? " check" : "") + (r.line.edited === true ? " edited" : "") + (r.line.voice === "other" ? " other" : ""),
-              "data-line": r.li, "data-index": r.line.index, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null,
+              "data-line": r.li, "data-index": r.line.index, "data-piece": r.line.piece || 0, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null,
             },
             h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) },
               fmt(r.line.start), r.line.edited === true ? h("span", { class: "fixed-mark" }, r.line.voice === "other" && !fixedWords(r.line) ? W.t("✎ other voice") : W.t("✎ fixed")) : null),
@@ -381,7 +381,7 @@
         );
         if (fixing) asControl(out[out.length - 1], r.line);
       }
-      const had = isLine(document.activeElement) ? document.activeElement.getAttribute("data-index") : null;
+      const had = isLine(document.activeElement) ? rowKey(document.activeElement) : null;
       clear($("sheet"), inBlocks(out));
       app.unglueReminders($("sheet"));
       if (document.fonts) document.fonts.ready.then(() => app.unglueReminders($("sheet"))); // measured again in its fonts
@@ -408,40 +408,46 @@
       el.querySelectorAll("button").forEach((b) => b.setAttribute("tabindex", "-1"));
     }
     // The lines taken out of this recording by the band, where they were placed.
+    // And the lines joined into the line before them (spec 028 B): "joined into line 7".
     function goneLines() {
-      const data = app.wordsData;
       const out = [];
-      (data && Array.isArray(data.lines) ? data.lines : []).forEach((ln, i) => {
+      W.wordEdits.byIndex(app.wordsData).forEach(([ln], i) => {
         const placed = app.placedWords && app.placedWords.lines[i];
         const starts = placed && Array.isArray(placed.words) ? placed.words.map((w) => w && w.start).filter((t) => Number.isFinite(t)) : [];
-        if (!ln || ln.edited !== "not-sung" || !starts.length) return;
+        if (!ln || (ln.edited !== "not-sung" && ln.edited !== "joined") || !starts.length) return;
         const t = Math.min(...starts);
-        out.push({ at: song.barAt(t + 0.15), t, gone: { index: i, text: placed.text, t } });
+        let into = i - 1; // the line it went to, past the others joined into it
+        while (into > 0 && app.wordFixes()[into] && app.wordFixes()[into].gone === "joined") into--;
+        out.push({ at: song.barAt(t + 0.15), t, gone: { index: i, text: placed.text, t, joined: ln.edited === "joined" ? into : null } });
       });
       return out;
     }
     function goneRow(gone, fixing) {
-      return h("div", { class: "lline gone", "data-gone": gone.index, "data-testid": "line-gone-row" },
+      const joined = gone.joined !== null;
+      return h("div", { class: "lline gone", "data-gone": gone.index, "data-testid": joined ? "line-joined-row" : "line-gone-row" },
         h("span", { class: "t" }, fmt(gone.t)),
         h("span", { class: "gone-row" },
           h("span", { class: "gone-text", translate: "no" }, gone.text),
-          h("span", { class: "gone-why" }, W.t("not in this recording")),
-          fixing ? h("button", { type: "button", class: "back", "data-testid": "line-gone-back", onclick: () => app.lines.back(gone.index) }, W.t("Back to the placement")) : null));
+          h("span", { class: "gone-why" }, joined ? W.t("joined into line {n}", { n: gone.joined + 1 }) : W.t("not in this recording")),
+          fixing ? h("button", { type: "button", class: "back", "data-testid": joined ? "line-joined-back" : "line-gone-back", onclick: () => app.lines.back(gone.index) }, W.t("Back to the placement")) : null));
     }
     // The sung lines: one tab stop, the line in hand or the first; the arrows walk them (below).
     let lineStop = null;
     const isLine = (el) => !!el && el instanceof Element && el.matches("#sheet .lline[role=button]");
     const sungLines = () => [...$("sheet").querySelectorAll(".lline[role=button]")];
+    // A row by its line and its piece (a split line has several rows, spec 028 B).
+    const rowKey = (el) => el.getAttribute("data-index") + "." + (el.getAttribute("data-piece") || "0");
     function roveLines(had) {
       const all = sungLines();
       const want = had !== null ? had : lineStop;
-      const pick = all.find((el) => el.getAttribute("data-index") === want) || all[0];
+      const line = want === null ? null : want.split(".")[0];
+      const pick = all.find((el) => rowKey(el) === want) || all.find((el) => el.getAttribute("data-index") === line) || all[0];
       for (const el of all) el.setAttribute("tabindex", el === pick ? "0" : "-1");
       if (had !== null && pick) pick.focus({ preventScroll: true });
     }
     $("sheet").addEventListener("focusin", (e) => {
       if (!isLine(e.target)) return;
-      lineStop = e.target.getAttribute("data-index");
+      lineStop = rowKey(e.target);
       for (const el of sungLines()) el.setAttribute("tabindex", el === e.target ? "0" : "-1");
     });
     $("sheet").addEventListener("keydown", (e) => {

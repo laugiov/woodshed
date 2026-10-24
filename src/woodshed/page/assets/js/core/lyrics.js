@@ -16,8 +16,10 @@
 
     // A word the voice did not give a time (null) keeps its place in the line, with no chord.
     const timed = (w) => w && typeof w.start === "number" && typeof w.end === "number";
+    // A line's index in the placement: the rows of a line split on the sheet (spec 028 B, `piece`) share it.
+    let at = -1;
     const lines = data.lines
-      .map((ln, index) => ({ ...ln, index }))
+      .map((ln) => ({ ...ln, index: ln && ln.piece ? at : ++at }))
       .filter((ln) => ln.sung && Array.isArray(ln.words) && ln.words.some(timed));
     for (const ln of lines) {
       const ws = ln.words.filter(timed);
