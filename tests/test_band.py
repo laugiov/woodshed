@@ -909,3 +909,34 @@ def test_a_claim_says_when_its_place_was_true(server: app.AppServer) -> None:
     assert state["at"] == pytest.approx(time.time() - 5, abs=0.3)  # 5 s at most
     assert post(server, "/api/live", live(lead=True, at="soon"))[0] == 400
     assert post(server, "/api/live", live(lead=True, seen=-1))[0] == 400
+
+
+def test_a_claim_slow_on_the_way_is_not_taken_for_a_stale_screen(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stale-view window counts from when the claim left (its `at`), not from its arrival: a phone on
+    crowded Wi-Fi that heard the last word before it claimed is not refused."""
+    monkeypatch.setattr(app, "VIEW_LAG", 0.2)
+    seen = post(server, "/api/live", live(lead=True))[1]["v"]
+    left = time.time()  # the claim leaves now, having heard everything
+    post(server, "/api/live", live(time=13.5))  # the leader speaks while the claim is on its way
+    time.sleep(0.4)
+    status, state = post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=seen, at=left))
+    assert status == 200 and state["leader"] == OTHER
+
+
+def test_a_claim_from_another_run_of_the_app_is_taken_for_a_stale_screen(server: app.AppServer) -> None:
+    """Its `seen` counts states of a run that is gone (the app restarted): it saw nothing of this one."""
+    post(server, "/api/live", live(lead=True))
+    status, answer = post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=0, boot="0123456789ab"))
+    assert status == 409 and answer["error"] == "this device had not heard the band for a while"
+    status, _ = post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=1, boot=server.live.boot))
+    assert status == 200
+    assert post(server, "/api/live", live(lead=True, boot=["x"]))[0] == 400
+
+
+def test_a_release_from_a_device_that_does_not_lead_changes_nothing(server: app.AppServer) -> None:
+    before = post(server, "/api/live", live(lead=True))[1]
+    status, state = post(server, "/api/live", {"id": OTHER, "release": True})
+    assert status == 200 and state == before  # same leader, same number: nothing was sent to the band
+    assert server.live.state["leader"] == LEADER

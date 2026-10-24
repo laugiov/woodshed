@@ -139,6 +139,7 @@
       // and the last state it heard (a screen that stopped hearing the band is refused).
       if (claim) {
         Object.assign(body, { lead: true, over, seen: last && typeof last.v === "number" ? last.v : null });
+        if (last && typeof last.boot === "string") body.boot = last.boot; // the run `seen` counts in
         if (offsets.length) body.at = nowServer();
       }
       sent = { time: body.time, at: Date.now() / 1000, playing: body.playing, rate: body.rate };
@@ -391,11 +392,13 @@
     });
 
     function setMode(next, message) {
+      if (next !== "lead") unanswered = false; // Alone or Follow chosen: a lost claim that lands late is let go
       if (claiming) {
         if (next === "lead") return; // on its way
         // Alone or Follow while the claim waits: at once. A claim already sent lets the lead go when
         // its answer comes (see claim()).
         if (claiming.from === "follow" && app.transport.playing) app.transport.pause();
+        trackBack(claiming);
         claiming = null;
         if (next === mode) {
           if (mode === "follow") follow();
@@ -466,8 +469,11 @@
       const stopped = playing && !app.transport.playing ? (started === null ? "late" : "blocked") : null;
       if (stopped) app.transport.pause();
       // The band hears the leader's sound: the full mix, not a track this device practised on.
-      if (band && store.get().track !== "mix") await app.setTrack("mix");
-      if (claiming !== me) return;
+      if (band && store.get().track !== "mix") {
+        me.track = store.get().track; // given back if the claim fails
+        await app.setTrack("mix");
+      }
+      if (claiming !== me) return trackBack(me);
       if (band && last && last.song === folder && Math.abs(app.transport.time - bandTime()) > 0.1) {
         app.transport.seek(bandTime()); // the old leader kept the band meanwhile
         await seeked(); // the claim says where the sound is, not where it is going
@@ -495,6 +501,7 @@
       } else {
         if (r.status === 0) unanswered = true;
         if (app.transport.playing && me.from === "follow") app.transport.pause();
+        trackBack(me);
         const why = W.t(r.data.error || "the app did not answer"); // the app's fixed reasons are in core/i18n-fr.js
         if (me.from === "alone") app.toast(W.t("Could not lead the band: {why}.", { why }));
         else if (r.data.error === "another device took the lead first") app.toast(W.t("Another device took the lead first: you follow it."));
@@ -509,6 +516,12 @@
       renderBand();
       if (r.ok) leadSaid(stopped, old);
       if (app.awakeCheck) app.awakeCheck();
+    }
+
+    // The follower's own track again, when a claim that switched it to the full mix did not lead.
+    function trackBack(me) {
+      if (me.track && me.track !== "mix") app.setTrack(me.track);
+      me.track = null;
     }
 
     // What a new leader is told: its sound stopped, its sound in another key than the band's, or that

@@ -1242,6 +1242,9 @@ class Live:
                 raise ValueError("seen: the number of the last state the device heard, or null")
             if at is not None and (isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at)):
                 raise ValueError("at: when the place was true, in the library's clock")
+            heard_in = data.get("boot")
+            if heard_in is not None and not (isinstance(heard_in, str) and re.fullmatch(r"[0-9a-f]{1,32}", heard_in)):
+                raise ValueError("boot: the run of the app the device heard, or null")
             song = data.get("song")
             if not isinstance(song, str) or not song.endswith(".woodshed") or "/" in song or song.startswith("."):
                 raise ValueError("song: a page folder of the library")
@@ -1264,13 +1267,14 @@ class Live:
             if claim and "over" in data and leader not in (None, who, over) and not gone:
                 raise NotLeader("another device took the lead first", {**self._numbered(), "now": time.time()})
             # A claim from a screen that stopped hearing the band (a dead stream) would stop and rewind it:
-            # refused when the leader's first word it missed is older than VIEW_LAG.
-            missed = next((when for v, when in self.spoken if v > seen), None) if claim and seen is not None else None
-            if leader not in (None, who) and not gone and missed is not None and time.time() - missed > VIEW_LAG:
-                raise NotLeader(
-                    "this device had not heard the band for a while", {**self._numbered(), "now": time.time()}
-                )
+            # refused when, as it left (its `at`: the trip on a crowded Wi-Fi does not count), the leader's
+            # first word it missed was older than VIEW_LAG. A `seen` from another run of the app saw nothing.
             now = time.time()
+            left = max(now - 5.0, min(now, float(at))) if claim and at is not None else now
+            missed = next((when for v, when in self.spoken if v > seen), None) if claim and seen is not None else None
+            stale = (missed is not None and left - missed > VIEW_LAG) or (claim and heard_in not in (None, self.boot))
+            if leader not in (None, who) and not gone and stale:
+                raise NotLeader("this device had not heard the band for a while", {**self._numbered(), "now": now})
             self.state = {
                 "leader": who,
                 "song": song,
@@ -1280,7 +1284,7 @@ class Live:
                 "loop": loop,
                 # The server clock when `time` was true: a claim says it (it may have waited on the way),
                 # never in the future nor more than 5 s back.
-                "at": max(now - 5.0, min(now, float(at))) if claim and at is not None else now,
+                "at": left,
             }
             self._changed()
             self.spoken.append((self.version, now))

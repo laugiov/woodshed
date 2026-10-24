@@ -731,3 +731,59 @@ def test_a_device_named_leader_without_asking_lets_the_lead_go(browser: Browser,
         b.wait_for_timeout(100)
     assert b.evaluate("Woodshed.band.mode()") == "follow"
     assert problems == []
+
+
+@CHROMIUM_ONLY
+def test_alone_after_a_lost_claim_lets_its_late_arrival_go(browser: Browser, server: app.AppServer) -> None:
+    """The claim got no answer ("You still follow"), the musician then chooses Alone: when the claim reaches
+    the library late after all, the device lets the lead go instead of taking it."""
+    problems: list[str] = []
+    laptop, _a, b = band(browser, server, problems)
+    bodies: list[str] = []
+
+    def lost(route: Any) -> None:
+        if is_claim(route):
+            bodies.append(route.request.post_data or "")
+            route.abort()
+        else:
+            route.continue_()
+
+    b.route("**/api/live", lost)
+    b.get_by_test_id("band-lead").tap()
+    until(b, "window.__toasts.some((t) => t.includes('You still follow'))")
+    b.get_by_test_id("band-alone").tap()
+    until(b, "Woodshed.band.mode() === 'alone'")
+    server.live.update(json.loads(bodies[0]), server.library.root)  # it arrives now
+    me = b.evaluate("Woodshed.band.id()")
+    deadline = time.monotonic() + 5
+    while server.live.state["leader"] == me:
+        assert time.monotonic() < deadline, server.live.state
+        b.wait_for_timeout(100)
+    assert b.evaluate("Woodshed.band.mode()") == "alone"
+    assert server.live.state["leader"] is None  # the late claim had taken it from the laptop: let go
+    assert laptop.evaluate("Woodshed.band.mode()") == "follow"
+    problems[:] = [p for p in problems if not any(x in p for x in ("Failed to fetch", "NetworkError", "ERR_FAILED"))]
+    assert problems == []
+
+
+@CHROMIUM_ONLY
+def test_a_failed_claim_gives_the_follower_its_track_back(browser: Browser, stems_server: app.AppServer) -> None:
+    """The switch to the full mix comes before the claim: refused, the follower is back on its own track."""
+    problems: list[str] = []
+    folder = next(stems_server.library.root.glob("*.woodshed")).name
+    url = stems_server.url + folder + "/index.html"
+    laptop = device(browser, url, problems, touch=False)
+    b = device(browser, url, problems, touch=True)
+    laptop.get_by_test_id("band-lead").click()
+    until(laptop, "Woodshed.band.mode() === 'lead'")
+    b.get_by_test_id("band-follow").tap()
+    until(b, "Woodshed.band.mode() === 'follow'")
+    own = b.evaluate("Woodshed.current.tracks.find((t) => t.id !== 'mix').id")
+    b.evaluate("(id) => Woodshed.app.setTrack(id)", own)
+    until(b, "(id) => Woodshed.app.transport.track === id", arg=own)
+    b.route("**/api/live", lambda route: route.abort() if is_claim(route) else route.continue_())
+    b.get_by_test_id("band-lead").tap()
+    until(b, "window.__toasts.some((t) => t.includes('You still follow'))")
+    until(b, "(id) => Woodshed.app.store.get().track === id && Woodshed.app.transport.track === id", arg=own)
+    problems[:] = [p for p in problems if not any(x in p for x in ("Failed to fetch", "NetworkError", "ERR_FAILED"))]
+    assert problems == []
