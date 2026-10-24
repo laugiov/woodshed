@@ -365,7 +365,7 @@ def library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[app.App
     write_flac(cache / "vocals.flac", [(t[1], t[2]) for t in SUNG])
     write_npz(cache, voice(SUNG, LENGTH))
     srv = app.AppServer(lib)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()  # a quick shutdown
     yield srv
     srv.shutdown()
     srv.server_close()

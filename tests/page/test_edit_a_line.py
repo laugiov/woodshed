@@ -38,7 +38,7 @@ def served(tmp_path: Path, pages_root: str, monkeypatch: pytest.MonkeyPatch) -> 
     heard = voice(sung, duration + 1)
     monkeypatch.setattr(app.Library, "_voice", lambda self, folder: heard)
     srv = app.AppServer(lib)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()  # a quick shutdown
     yield srv
     srv.shutdown()
     srv.server_close()
