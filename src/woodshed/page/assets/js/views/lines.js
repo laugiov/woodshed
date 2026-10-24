@@ -7,6 +7,7 @@
   const { h, $, clear, fmt } = W;
   const MOD = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘" : "Ctrl";
   const SPREAD = "spread over the line's time, not heard: listen to it"; // lyrics.SPREAD_CHECK
+  const STALE = "the words were placed again: reload the page"; // app.py StaleWords
 
   W.views = W.views || {};
 
@@ -15,7 +16,7 @@
     const box = $("lineEd");
     const PHONE = W.popover.PHONE;
     let open = null; // the index of the line being edited, in lyrics.json
-    let undo = null; // {n, change}: the line as it was before the last change made here
+    let undo = null; // {n, change, expect}: the line as it was before the last change made here, and as that change left it
 
     const rowOf = (i) => (app.words ? app.words.rows().rows.find((r) => r.line.index === i) : null) || null;
     const lineEl = (i) => document.querySelector('#sheet .lline[data-index="' + i + '"]');
@@ -46,10 +47,20 @@
     }
 
     // The library's answer to a change: the fixes of this placement, drawn at once.
-    async function send(change) {
-      const r = await app.shareWords(change);
+    async function send(change, expect) {
+      const r = await app.shareWords(change, expect);
       if (r.ok) app.useWordEdits(r.data.lines, true);
       return r;
+    }
+    // A refusal said plainly: no answer, a line another device changed since, the words placed again elsewhere.
+    function refused(r) {
+      if (r.status === 0) return W.t("The library did not answer: the line is not changed.");
+      const data = r.data || {};
+      if (Array.isArray(data.changed) && data.changed.length) {
+        return W.t("“{words}” changed on another device: Undo leaves it as it is.", { words: app.lineWords(+data.changed[0]) });
+      }
+      if (data.error === STALE) return W.t("The words were placed again: reload the page.");
+      return W.t(data.error || "the library refused it");
     }
 
     // A change made here: sent, then the toast with Undo (kept in the strip until the next change).
@@ -59,10 +70,12 @@
       const r = await send(change);
       if (!r.ok) {
         if (status) status(r);
-        else app.toast(r.status === 0 ? W.t("The library did not answer: the line is not changed.") : W.t(r.data.error || "the library refused it"));
+        else app.toast(refused(r));
         return false;
       }
-      undo = { n: i, change: before };
+      const expect = {};
+      for (const k of Object.keys(change)) expect[k] = r.data.lines[k] === undefined ? null : r.data.lines[k];
+      undo = { n: i, change: before, expect };
       store.set({ corrections: store.get().corrections + 1 }); // the strip shows Undo
       if (after) after();
       app.toast(said(r.data), { label: W.t("Undo"), run: runUndo });
@@ -72,10 +85,10 @@
       if (!undo) return false;
       const was = undo;
       undo = null;
-      const r = await send(was.change);
+      const r = await send(was.change, was.expect); // refused when another device changed the line since
       if (!r.ok) {
-        undo = was;
-        app.toast(W.t("The library did not answer: the line is not changed."));
+        if (r.status === 0) undo = was; // offline: it may be tried again
+        app.toast(refused(r));
       }
       store.set({ corrections: store.get().corrections + 1 });
       const el = was.n === null ? null : lineEl(was.n);
@@ -92,7 +105,7 @@
     // What a saved line says: saved, and what to listen to (a number, a line spread over its time).
     function savedText(i, data) {
       const e = data.lines[i];
-      const out = [W.t("Line {n} saved.", { n: i + 1 })];
+      const out = [W.t("“{words}” saved.", { words: app.lineWords(i) })];
       const line = e && e.lines ? e.lines[0] : null;
       const number = line && line.words.find((w) => w.start === null && /\d/.test(w.text));
       if (number) out.push(W.t("{word} is not heard: write numbers as words.", { word: number.text }));
@@ -144,6 +157,7 @@
       const status = h("p", { class: "read", id: "lineEdStatus", "aria-live": "polite", "data-testid": "line-status" },
         W.t("Only this line is placed again, between {from} and {to}. The lines around it do not move.", { from: fmt(line.start), to: fmt(line.end) }));
       const retry = h("button", { type: "button", class: "btn", hidden: "", "data-testid": "line-retry", onclick: () => save(false) }, W.t("Retry"));
+      const reload = h("button", { type: "button", class: "btn", hidden: "", "data-testid": "line-reload", onclick: () => location.reload() }, W.t("Reload"));
       const say = (text, warn) => {
         status.className = "read" + (warn ? " warn" : "");
         clear(status, text);
@@ -160,7 +174,8 @@
         if (w) {
           field.setAttribute("aria-invalid", "true");
           say(W.t("Not enough time for these words between {from} and {to}.", { from: fmt(w[0]), to: fmt(w[1]) }), true);
-        } else say(W.t((res.data && res.data.error) || "the library refused it"), true);
+        } else say(refused(res), true);
+        reload.hidden = !(res.data && res.data.error === STALE); // this page's words are not the library's now
         field.focus();
       };
       const buttons = () => [...box.querySelectorAll("button")];
@@ -168,11 +183,18 @@
         for (const b of buttons()) b.disabled = on && !b.classList.contains("cancel");
         if (on) {
           retry.hidden = true;
+          reload.hidden = true;
           say([h("span", { class: "spin-line", "aria-hidden": "true" }), W.t("Placing…")]);
         }
       };
+      // The field grows with a long line: all of it in sight while it is typed.
+      const grow = () => {
+        field.style.height = "auto";
+        field.style.height = field.scrollHeight + (field.offsetHeight - field.clientHeight) + "px";
+      };
       field.addEventListener("input", () => {
         if (/[\r\n]/.test(field.value)) field.value = field.value.replace(/[\r\n]+/g, " "); // one line (split and join come later)
+        grow();
         field.removeAttribute("aria-invalid");
       });
       field.addEventListener("keydown", (e) => {
@@ -217,14 +239,16 @@
       }
       const act = (change, said) => async () => {
         busy(true);
-        await commit(i, { [i]: change }, () => said, go(false), failed);
+        await commit(i, { [i]: change }, said, go(false), failed);
       };
       const text = () => field.value.replace(/\s+/g, " ").trim() || line.text;
       const tools = h("div", { class: "tools" },
         h("button", { type: "button", class: "tool", "data-testid": "line-other", "aria-pressed": String(other),
-          onclick: () => (other ? act({ text: text() }, W.t("Line {n} is the singer's again.", { n: i + 1 }))() : act({ text: text(), voice: "other" }, W.t("Line {n}: another voice.", { n: i + 1 }))()) },
+          onclick: () => (other
+            ? act({ text: text() }, () => W.t("“{words}” is the singer's again.", { words: app.lineWords(i) }))()
+            : act({ text: text(), voice: "other" }, () => W.t("“{words}”: another voice.", { words: app.lineWords(i) }))()) },
         W.t("Other voice / spoken")),
-        h("button", { type: "button", class: "tool", "data-testid": "line-gone", onclick: act({ gone: "not-sung" }, W.t("Line {n} is not in this recording.", { n: i + 1 })) }, W.t("Not in this recording")));
+        h("button", { type: "button", class: "tool", "data-testid": "line-gone", onclick: act({ gone: "not-sung" }, () => W.t("“{words}” is not in this recording.", { words: app.lineWords(i) })) }, W.t("Not in this recording")));
       const partOf = app.sectionOf(r.firstBar);
       const extra = h("div", { class: "extra", onfocusin: () => box.classList.remove("typing") },
         PHONE.matches ? hearLine(r) : null,
@@ -233,10 +257,11 @@
         PHONE.matches ? null : h("p", { class: "tip", "data-testid": "line-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next line.", { mod: MOD })));
       clear(
         box,
-        h("h3", { id: "lineEdTitle" }, W.t("Line {n}", { n: i + 1 }),
-          h("small", null, partOf ? W.t("{part} · {from} to {to}", { part: W.partName(partOf), from: fmt(line.start), to: fmt(line.end) }) : W.t("{from} to {to}", { from: fmt(line.start), to: fmt(line.end) }))),
+        // Named by its first words (a number would read as a bar's), its number with its part and time.
+        h("h3", { id: "lineEdTitle" }, h("span", { translate: "no" }, app.lineWords(i)),
+          h("small", null, W.t("Line {n}", { n: i + 1 }) + " · " + (partOf ? W.t("{part} · {from} to {to}", { part: W.partName(partOf), from: fmt(line.start), to: fmt(line.end) }) : W.t("{from} to {to}", { from: fmt(line.start), to: fmt(line.end) })))),
         h("div", { class: "row" }, field, PHONE.matches ? null : hearLine(r)),
-        h("div", { class: "state" }, status, retry),
+        h("div", { class: "state" }, status, retry, reload),
         extra,
         h("div", { class: "acts" },
           h("span", { class: "left" },
@@ -245,7 +270,7 @@
               const first = extra.querySelector("button");
               if (first) first.focus();
             } }, W.t("More")),
-            entry ? h("button", { type: "button", class: "back", "data-testid": "line-back", onclick: act(null, W.t("Line {n} is the placement's again.", { n: i + 1 })) }, W.t("Back to the placement")) : null),
+            entry ? h("button", { type: "button", class: "back", "data-testid": "line-back", onclick: act(null, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) })) }, W.t("Back to the placement")) : null),
           h("span", { class: "right" },
             h("button", { type: "button", class: "btn cancel", "data-testid": "line-cancel", onclick: () => close(true) }, W.t("Cancel")),
             h("button", { type: "button", class: "btn", "data-testid": "line-save", title: W.t("Enter"), onclick: () => save(false) }, W.t("Save")),
@@ -257,6 +282,7 @@
       document.body.classList.add("line-open");
       const anchor = lineEl(i);
       W.popover.place(box, anchor || document.body);
+      grow();
       field.focus({ preventScroll: true });
       // The word tapped, selected: ready to be typed over.
       const tapped = word && word.querySelector(".wt") ? word.querySelector(".wt").textContent : "";
@@ -309,7 +335,7 @@
 
     // Back to the placement, from a row taken out of this recording.
     function back(i) {
-      commit(i, { [i]: null }, () => W.t("Line {n} is the placement's again.", { n: i + 1 }), () => {
+      commit(i, { [i]: null }, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) }), () => {
         const el = lineEl(i);
         if (el) el.focus({ preventScroll: true });
       });

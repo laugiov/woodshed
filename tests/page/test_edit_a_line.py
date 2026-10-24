@@ -125,7 +125,7 @@ def test_edit_mode_keeps_the_words_and_a_line_opens_its_editor(browser: Browser,
         "(() => { const f = document.activeElement; return f.value.slice(f.selectionStart, f.selectionEnd); })()"
     )
     assert selected == "comes"  # the word tapped, ready to be typed over
-    expect(ed.locator("h3")).to_contain_text("Line 1")
+    expect(ed.locator("h3")).to_contain_text("Morning comes in on…")  # the line by its words, not a number
     assert problems == []
 
 
@@ -146,7 +146,7 @@ def test_a_fixed_line_shows_and_undo_brings_it_back(browser: Browser, served: ap
     expect(line(page, 0).locator(".fixed-mark")).to_have_text("✎ fixed")
     assert seeks(page) == before  # the other lines did not move
     assert posts.count("words") == 1 and "lyrics" not in posts  # one line, never the whole song
-    expect(page.get_by_test_id("toast")).to_contain_text("Line 1 saved.")
+    expect(page.get_by_test_id("toast")).to_contain_text("\u201cMorning comes in on\u2026\u201d saved.")
     expect(line(page, 0)).to_be_focused()  # the keyboard on the line as drawn again
     page.get_by_test_id("toast-action").click()  # Undo
     expect(line(page, 0)).to_contain_text("harbour")
@@ -271,7 +271,9 @@ def test_the_band_sees_a_fix_and_a_take_back_without_a_reload(browser: Browser, 
     open_line(a, 0)
     save(a, FIXED)
     expect(b.locator('#sheet .lline[data-index="0"]')).to_contain_text("harbor")
-    expect(b.get_by_test_id("toast")).to_contain_text("Line 1 changed on another device.")
+    expect(b.get_by_test_id("toast")).to_contain_text(
+        "\u201cMorning comes in on\u2026\u201d changed on another device."
+    )
     edit(b)
     open_line(b, 0, "harbor")
     b.get_by_test_id("line-back").click()
@@ -370,7 +372,7 @@ def test_the_lines_are_one_tab_stop_and_the_arrows_walk_them(browser: Browser, s
     expect(ed).to_have_attribute("aria-modal", "true")
     assert page.evaluate(
         "document.getElementById(document.querySelector('#lineEd').getAttribute('aria-labelledby')).textContent"
-    ).startswith("Line 1")
+    ).startswith("Morning comes in on")
     expect(page.get_by_test_id("line-status")).to_have_attribute("aria-live", "polite")
     expect(page.get_by_test_id("line-field")).to_be_focused()
     page.keyboard.press("Escape")
@@ -379,7 +381,7 @@ def test_the_lines_are_one_tab_stop_and_the_arrows_walk_them(browser: Browser, s
     page.keyboard.press("Enter")
     page.get_by_test_id("line-field").fill(FIXED)
     page.keyboard.press("Control+Enter")  # saved, and the next line opened
-    expect(ed.locator("h3")).to_contain_text("Line 2", timeout=20000)
+    expect(ed.locator("h3")).to_contain_text("the radio hums", timeout=20000)
     expect(page.get_by_test_id("line-field")).to_have_value("the radio hums (hums)")
     page.keyboard.press("Escape")
     expect(line(page, 1)).to_be_focused()
@@ -528,5 +530,69 @@ def test_the_strip_and_the_editor_in_french(browser: Browser, served: app.AppSer
     page.get_by_test_id("edit-chart").click()
     expect(page.get_by_test_id("edit-strip")).to_contain_text("Clique sur une ligne pour corriger ses paroles")
     open_line(page, 0)
-    expect(page.get_by_test_id("line-editor").locator("h3")).to_contain_text("Ligne 1")
+    expect(page.get_by_test_id("line-editor").locator("h3")).to_contain_text("Morning comes in on")
+    expect(page.get_by_test_id("line-editor").locator("h3 small")).to_contain_text("Ligne 1")
     expect(page.get_by_test_id("line-gone")).to_have_text("Pas dans cet enregistrement")
+
+
+# The review of the first version: Undo and another device, a stale page, touch targets, long lines.
+
+
+def test_undo_leaves_another_devices_fix_as_it_is(browser: Browser, served: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems)
+    edit(page)
+    open_line(page, 0)
+    save(page, FIXED)
+    key = lyrics.words_key(
+        json.loads((served.library.root / "Pop.woodshed" / lyrics.LYRICS).read_text(encoding="utf-8"))
+    )
+    other = "Morning comes in on the harbour roads, yes"
+    saved = served.library.set_words({"page": "Pop.woodshed", "key": key, "lines": {"0": {"text": other}}})
+    served.live.corrected("Pop.woodshed", saved["rev"])  # another device, told on the stream as /api/words does
+    expect(line(page, 0)).to_contain_text("roads")
+    page.get_by_test_id("words-undo").click()  # this device's Undo, kept in the strip
+    expect(page.get_by_test_id("toast")).to_contain_text("changed on another device: Undo leaves it as it is.")
+    expect(line(page, 0)).to_contain_text("roads")
+    assert problems == []
+
+
+def test_a_page_whose_words_were_placed_again_says_to_reload(browser: Browser, served: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems)
+    edit(page)
+    folder = served.library.root / "Pop.woodshed"
+    data = json.loads((folder / lyrics.LYRICS).read_text(encoding="utf-8"))
+    data["lines"][1]["words"][0]["start"] += 0.1  # placed again elsewhere: another placement
+    lyrics.write(folder, data)
+    open_line(page, 0)
+    page.get_by_test_id("line-field").fill(FIXED)
+    page.get_by_test_id("line-field").press("Enter")
+    expect(page.get_by_test_id("line-status")).to_have_text("The words were placed again: reload the page.")
+    expect(page.get_by_test_id("line-reload")).to_be_visible()
+    assert problems == []
+
+
+def test_back_to_the_placement_is_a_finger_wide_on_a_phone(browser: Browser, served: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems, (390, 844), has_touch=True, is_mobile=True)
+    edit(page)
+    open_line(page, 1, "radio")
+    page.get_by_test_id("line-more").click()  # the keyboard up: the tools behind More
+    page.get_by_test_id("line-gone").click()
+    box = page.get_by_test_id("line-gone-back").bounding_box()
+    assert box is not None and box["height"] >= 44
+    assert problems == []
+
+
+def test_a_long_line_shows_whole_in_the_field(browser: Browser, served: app.AppServer) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems)
+    edit(page)
+    open_line(page, 0)
+    field = page.get_by_test_id("line-field")
+    field.fill("Morning comes in on the harbour road, yes, and the gulls are out over the water before the bells ring")
+    assert page.evaluate(
+        "(() => { const f = document.querySelector('#lineEdField'); return f.scrollHeight <= f.clientHeight + 2; })()"
+    )
+    assert problems == []

@@ -145,6 +145,12 @@
     }
     buildWords();
     app.wordFixes = () => ({ ...wordFixes });
+    // A line named by its first words, as the band says it ("Je ne fais pourtant…"): a number reads as a bar's.
+    app.lineWords = (i) => {
+      const ln = app.wordsData && app.wordsData.lines[i];
+      const words = String((ln && ln.text) || "").split(/\s+/).filter(Boolean);
+      return words.slice(0, 4).join(" ") + (words.length > 4 ? "\u2026" : "");
+    };
     app.canFixWords = () => false; // served by the library with its token: views/band.js says so
     app.wordsUndo = () => false; // views/lines.js
     app.undoWords = () => false;
@@ -162,7 +168,7 @@
       buildWords();
       store.set({ corrections: store.get().corrections + 1 });
       if (quiet) return;
-      if (changed.length === 1) app.toast(W.t("Line {n} changed on another device.", { n: changed[0] + 1 }));
+      if (changed.length === 1) app.toast(W.t("“{words}” changed on another device.", { words: app.lineWords(changed[0]) }));
       else app.toast(W.t("{n} lines changed on another device.", { n: changed.length }));
     };
     // What the chart shows: the words for those who sing or play chords, the grid for bass and drums. Editing

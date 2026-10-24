@@ -951,6 +951,8 @@ body.line-open .lline:focus { background: var(--accent-soft); box-shadow: inset 
   .ed.line-ed.typing .acts { flex-wrap: nowrap; }
   .ed.line-ed.typing .acts .right { width: auto; flex: 1; }
 }
+@media (pointer: coarse), (max-width: 600px) { .lline.gone .back { min-height: 44px; display: inline-flex; align-items: center; } }
+.ed.line-ed .field { max-height: 40vh; overflow-y: auto; }
 @media print { .lline.gone { display: none !important; } .lline .fixed-mark { display: none; } }
 
 /* Moving the bar lines (views/barlines.js). */
