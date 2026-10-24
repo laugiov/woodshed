@@ -116,10 +116,18 @@ def test_a_loop_wraps_back_to_its_first_bar(open_page: Any) -> None:
     s = state(o)
     assert s["loopOn"] and s["loop"] == [0, 7]  # the section holding bar 1
     end = o.js("Woodshed.current.bars[7].end")  # the last section: its end is the end of the file
+    first = o.js("Woodshed.current.bars[0].start")
     o.js(f"Woodshed.app.transport.seek({end} - 1.0)")
+    # The wrap itself is watched, not the time at a fixed moment after play: a loaded machine may
+    # read the time seconds later, well after the wrap, when playback is further into the loop.
+    o.js(
+        """() => { const el = Woodshed.app.transport.elements()["mix|" + Woodshed.app.transport.fileOf("mix")];
+        window.wraps = []; el.addEventListener("seeking", () => el.currentTime < %s && wraps.push(el.currentTime)); }"""
+        % (end - 2.0)
+    )
     o.page.get_by_test_id("play").click()
-    o.page.wait_for_timeout(1600)
-    assert state(o)["playing"] and state(o)["audioTime"] < 3.0  # wrapped to bar 1
+    until(o, "window.wraps.length > 0")
+    assert state(o)["playing"] and abs(o.js("window.wraps[0]") - first) < 0.01  # wrapped to bar 1
 
 
 @pytest.mark.parametrize("steps", [2, 5, -1])
