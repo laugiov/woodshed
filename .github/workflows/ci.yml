@@ -85,7 +85,9 @@ jobs:
   page:
     name: Practice page in Chromium and Firefox
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # About 13 minutes on main at 0.5.0; the band's handover tests (three browsers each) brought a slow
+    # runner past 20 with every test passing.
+    timeout-minutes: 30
     env:
       WOODSHED_REQUIRE_PAGE: "1"
     steps:
