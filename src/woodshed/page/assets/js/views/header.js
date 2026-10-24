@@ -248,13 +248,15 @@
       const stopped = at ? null : app.lineStopped(rows, s);
       const from = at ? (at.now >= 0 ? at.now : at.next) : stopped.first;
       const k = at ? at.now : stopped.inside ? from : -1;
-      const shown = rows.slice(from, from + 3);
+      // Another voice's line (an MC, a spoken intro: spec 028) is not the singer's: off the voice stage and "Next:".
+      const sings = (r) => !(s.inst === "voice" && r.line.voice === "other");
+      const shown = rows.slice(from).filter(sings).slice(0, 3);
       const out = keyLine ? [h("div", { class: "st-next-part st-key-words", "data-testid": "stage-key-words" }, keyLine)] : [];
       shown.forEach((r, i) => {
         const sec = app.sectionOf(r.firstBar);
         const before = i > 0 ? app.sectionOf(shown[i - 1].firstBar) : app.sectionOf(Math.floor(s.beat / song.per));
         if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec)));
-        const now = i === 0 && k >= 0;
+        const now = i === 0 && k >= 0 && r === rows[k];
         const ready = i === 0 && stopped && !now;
         // The chord still sounding (spec 027) on every line but the one sung (the big Now chord names it), "Next:"
         // included; never on the singer's stage, which keeps to the words.

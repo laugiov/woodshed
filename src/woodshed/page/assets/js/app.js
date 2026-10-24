@@ -51,6 +51,7 @@
       bandNote: "", // the leader's note on this song
       wordsElsewhere: false, // a phone of the band: words are added from the computer
       editing: false, // the chart's bars open the bar editor (views/editor.js)
+      canFix: false, // served with the library's token: a sung line can be fixed (views/lines.js)
     });
     app.store = store;
 
@@ -131,10 +132,48 @@
       transport.setLoop(on && range ? [barStart(range[0]), barStart(range[1] + 1)] : null);
       store.set({ loop: range, loopOn: !!(on && range) });
     }
-    // The words, when they were placed on the voice (woodshed lyrics): read with the chart as it is.
-    app.words = W.lyrics(song, window.WOODSHED_LYRICS);
-    // What the chart shows: the words for those who sing or play chords, the grid for bass and drums.
-    app.sheetMode = (s) => (!app.words || s.editing ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
+    // The words, when they were placed on the voice (woodshed lyrics), with the band's fixes on them (spec 028,
+    // views/lines.js): read with the chart as it is. Every reader goes through app.words: the sheet, the stage,
+    // the singer's next line, the exports and the chords on the words.
+    const placedWords = window.WOODSHED_LYRICS;
+    app.placedWords = placedWords && Array.isArray(placedWords.lines) ? placedWords : null;
+    app.wordsKey = app.placedWords ? W.wordEdits.key(app.placedWords) : null;
+    let wordFixes = {};
+    function buildWords() {
+      app.wordsData = app.placedWords ? W.wordEdits.apply(app.placedWords, wordFixes) : placedWords;
+      app.words = W.lyrics(song, app.wordsData);
+    }
+    buildWords();
+    app.wordFixes = () => ({ ...wordFixes });
+    // A line named by its first words, as the band says it ("Je ne fais pourtant…"): a number reads as a bar's.
+    app.lineWords = (i) => {
+      const ln = app.wordsData && app.wordsData.lines[i];
+      const words = String((ln && ln.text) || "").split(/\s+/).filter(Boolean);
+      return words.slice(0, 4).join(" ") + (words.length > 4 ? "\u2026" : "");
+    };
+    app.canFixWords = () => false; // served by the library with its token: views/band.js says so
+    app.wordsUndo = () => false; // views/lines.js
+    app.undoWords = () => false;
+    // The library's fixes for this placement (views/band.js, views/lines.js); `quiet`: this device's own, or
+    // the first read when the page opens.
+    app.useWordEdits = (lines, quiet) => {
+      const next = {};
+      for (const [k, v] of Object.entries(lines && typeof lines === "object" ? lines : {})) if (W.wordEdits.valid(k, v)) next[k] = v;
+      const changed = [...new Set([...Object.keys(wordFixes), ...Object.keys(next)])]
+        .filter((k) => JSON.stringify(wordFixes[k]) !== JSON.stringify(next[k]))
+        .map(Number)
+        .sort((a, b) => a - b);
+      wordFixes = next;
+      if (!changed.length) return;
+      buildWords();
+      store.set({ corrections: store.get().corrections + 1 });
+      if (quiet) return;
+      if (changed.length === 1) app.toast(W.t("“{words}” changed on another device.", { words: app.lineWords(changed[0]) }));
+      else app.toast(W.t("{n} lines changed on another device.", { n: changed.length }));
+    };
+    // What the chart shows: the words for those who sing or play chords, the grid for bass and drums. Editing
+    // keeps the words: a line opens its editor, a chord its bar's.
+    app.sheetMode = (s) => (!app.words ? "grid" : s.sheet || (s.inst === "bass" || s.inst === "drums" ? "grid" : "lyrics"));
 
     // The sung line lit now: the last one begun, held a bar after its end for a long note, unless a
     // new part has started since (a jump to the next part does not light the line before it).
@@ -880,6 +919,9 @@
     const editor = W.views.editor(app, chart);
     views.push(editor);
     app.editor = editor;
+    const lines = W.views.lines(app, chart, editor);
+    views.push(lines);
+    app.lines = lines;
     // The instrument on the page itself: a phone's layout follows it (the singer: words first).
     const mark = (s) => {
       document.body.dataset.inst = s.inst;
@@ -1015,6 +1057,23 @@
     });
     document.addEventListener("pointercancel", () => (drag = null)); // a touch that became a scroll
     document.addEventListener("click", (e) => {
+      // Editing in the Lyrics view: a chord name or a bar number opens its bar, the words open the line.
+      const sung = store.get().editing && app.sheetMode(store.get()) === "lyrics" && e.target.closest("#sheet .lline[data-index]");
+      if (sung && !e.target.closest(".t")) {
+        const nb = e.target.closest(".nb");
+        if (nb && e.target.closest(".lc, .bl")) {
+          e.stopPropagation();
+          popups.closeAll();
+          editor.openBar(nb.hasAttribute("data-bar") ? +nb.getAttribute("data-bar") : +sung.getAttribute("data-from"), nb);
+          return;
+        }
+        if (e.target.closest(".lwords")) {
+          e.stopPropagation();
+          popups.closeAll();
+          lines.open(+sung.getAttribute("data-index"), e.target.closest(".lw"));
+          return;
+        }
+      }
       // Editing the chart: a bar, or the chord to check in it, opens the bar editor.
       const typedAt = store.get().editing && e.target.closest("#sheet") && e.target.closest(BARS);
       if (typedAt) {
@@ -1075,11 +1134,12 @@
       const at = !s.playing && !s.editing ? chart.focusedBar() : null;
       return at === null ? curBar() : at;
     };
-    const pressable = (el) => !!el.matches && el.matches("button, [role=button], [role=switch]") && !el.classList.contains("bar");
+    // A bar and a sung line are pressed with Enter: Space stays the music's (a pedal).
+    const pressable = (el) => !!el.matches && el.matches("button, [role=button], [role=switch]") && !el.classList.contains("bar") && !el.classList.contains("lline");
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
       if (e.target.closest && e.target.closest("dialog[open]")) return; // a dialog's keys are its own (Escape closes it)
-      if (e.target.closest && e.target.closest("#barEd")) return; // the bar editor's too (its buttons, its field)
+      if (e.target.closest && e.target.closest("#barEd, #lineEd")) return; // the editors' too (their buttons, their field)
       if (e.key === "Escape") {
         popups.closeAll(true);
         if (store.get().stage) setStage(false);
@@ -1096,6 +1156,18 @@
         // The chord still to check, else the correction made (to change it, or take it back).
         const mark = now.querySelector(".doubt:not(.fixed)") || now.querySelector(".doubt.fixed");
         if (mark) popups.openDoubt(mark, now);
+        return;
+      }
+      const sungLine = e.target.closest && e.target.closest("#sheet .lline[role=button]");
+      if (sungLine && e.target === sungLine && e.key === "Enter") {
+        e.preventDefault();
+        return lines.open(+sungLine.getAttribute("data-index"), null);
+      }
+      // Undo of a line fixed, away from a text field (the field's own Undo is the browser's).
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target.isContentEditable === true);
+      if (!typing && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "z" || e.key === "Z") && store.get().editing && app.wordsUndo()) {
+        e.preventDefault();
+        app.undoWords();
         return;
       }
       if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1311,7 +1383,7 @@
     document.addEventListener("keyup", (e) => {
       if (e.key === " " && spaceToButton) return void (spaceToButton = false); // a button reached with Tab
       const button = e.key === " " && e.target.closest && e.target.closest("button");
-      if (button && !button.closest(".menu, #pop, #barEd, dialog, .prefs")) e.preventDefault();
+      if (button && !button.closest(".menu, #pop, #barEd, #lineEd, dialog, .prefs")) e.preventDefault();
     });
     const nameStage = () => $("stage").setAttribute("aria-label", W.t("Stage mode"));
     nameStage();

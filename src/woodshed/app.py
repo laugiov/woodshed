@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -49,6 +49,7 @@ from woodshed import chords as chord_grammar
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
 from woodshed.errors import WoodshedError
+from woodshed.fnv import fnv1a as _fnv1a
 from woodshed.run import (
     EXTRA_HINT,
     MANIFEST,
@@ -80,6 +81,8 @@ DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a
 QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
+KNOWN_SECTIONS = {"rev", "by_key", "band", "edits", "words"}  # of a corrections file; any other is kept as it is
+LOCK_WAIT = 10.0  # seconds a write waits for another woodshed (the app, `woodshed lyrics`) writing the same file
 NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
 DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 # The band's typed chords and part names (core/edits.js), by the beat they start on.
@@ -91,6 +94,12 @@ PART_NAME_MAX = 40  # code points
 BEAT_INDEX = re.compile(r"0|-?[1-9][0-9]{0,5}")  # one spelling a beat: no 007, no -0
 UNSAFE = re.compile("[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]")  # control and direction overrides
 KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
+# The band's fixes of the words on the sheet (spec 028), by the index of the line in lyrics.json.
+LINE_INDEX = re.compile(r"0|[1-9][0-9]{0,3}")
+WORD_FIXES_MAX = 500  # lines fixed on one placement: more than any song has lines
+WORD_TEXT_MAX = 200  # code points of one line
+LINE_WORDS_MAX = 40
+VOICES_KEPT = 2  # pages whose voice heard before is kept in memory for fixing lines (about a megabyte each)
 TYPES = {
     ".flac": "audio/flac",
     ".woff2": "font/woff2",
@@ -163,6 +172,9 @@ class Library:
         self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
         self.on_band: Callable[[str, int], None] | None = None  # told when band choices changed (Live.corrected)
         self.on_reload: Callable[[str], None] | None = None  # told when a page's data changed (Live.page_updated)
+        # The voice of the pages whose lines were fixed last: folder -> (what it was read from, voice).
+        self.voices: collections.OrderedDict[str, tuple[tuple[str, int, int], lyrics.Voice]] = collections.OrderedDict()
+        self.voices_lock = threading.Lock()
         # The recording in another key (spec 007): rendered one track at a time, never during an analysis.
         self.renders = (
             pitch.Renders(self.root, busy=self.busy, free_margin=FREE_MARGIN)
@@ -419,11 +431,12 @@ class Library:
 
     def _clear_note(self, folder: str) -> int | None:
         """Under the lock: the band's note on a song taken away; its new revision, or None if it had none."""
-        stored = self._stored(folder)
-        if "note" not in stored["band"]:
-            return None
-        stored["band"].pop("note")
-        return self._write(folder, stored)
+        with corrections_lock(self._corrections_file(folder)):  # another woodshed on the library waits
+            stored = self._stored(folder)
+            if "note" not in stored["band"]:
+                return None
+            stored["band"].pop("note")
+            return self._write(folder, stored)
 
     def clear_notes_out_of_the_set(self) -> None:
         """At start, once the port is ours (serve): the notes 0.4.0 left on songs out of the set."""
@@ -454,45 +467,9 @@ class Library:
 
     def _stored(self, folder: str) -> dict[str, Any]:
         """What the library holds for a page; an entry damaged by hand is skipped, the others kept."""
-        out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}, "edits": {}}
-        try:
-            data = json.loads(self._corrections_file(folder).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return out
-        if not isinstance(data, dict):
-            return out
-        rev = data.get("rev")
-        out["rev"] = rev if type(rev) is int and rev >= 0 else 0
-        with contextlib.suppress(ValueError):
-            out["band"] = _checked_band(data.get("band") or {})
-        entries = data.get("by_key")
-        for key, entry in entries.items() if isinstance(entries, dict) else []:
-            try:
-                out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
-                out["at"][key] = float(entry.get("at", 0))
-                gone = entry.get("removed", {})
-                out["removed"][key] = _checked_removed(gone)
-            except (ValueError, KeyError, TypeError, AttributeError):
-                continue
-        kept = data.get("edits")
-        for key, entry in kept.items() if isinstance(kept, dict) else []:
-            try:
-                checked = _checked_edits({"key": key, "bars": entry["bars"], "parts": entry["parts"]})
-                gone = _checked_edits(
-                    {"key": key, "bars": entry["removed_bars"], "parts": entry["removed_parts"]}, removals=True
-                )
-                out["edits"][key] = {
-                    "bars": checked["bars"],
-                    "parts": checked["parts"],
-                    "removed_bars": gone["bars"],
-                    "removed_parts": gone["parts"],
-                    "at": float(entry.get("at", 0)),
-                }
-            except (ValueError, KeyError, TypeError, AttributeError):
-                continue
-        return out
+        return read_corrections(self._corrections_file(folder))
 
-    def corrections(self, folder: Any, key: Any, edits: Any = None) -> dict[str, Any]:
+    def corrections(self, folder: Any, key: Any, edits: Any = None, words: Any = None) -> dict[str, Any]:
         folder = self._page(folder)
         if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
             raise ValueError("key: the analysis the corrections belong to")
@@ -511,6 +488,11 @@ class Library:
                 raise ValueError("edits: the beat grid the edits belong to")
             entry = stored["edits"].get(edits, {})
             answer["edits"] = {k: entry.get(k, {}) for k in ("bars", "parts", "removed_bars", "removed_parts")}
+        if words is not None:  # the band's fixes of the words, for this placement (spec 028)
+            if not isinstance(words, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", words):
+                raise ValueError("words: the placement the fixes belong to")
+            fixed = stored["words"].get(words, {})
+            answer["words"] = {"lines": fixed.get("lines", {}), "removed": fixed.get("removed", {})}
         return answer
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
@@ -519,7 +501,7 @@ class Library:
         folder = self._page(data.get("page"))
         checked = _checked_corrections(data, removals=True)
         key = checked["key"]
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             # Two devices correcting at once: both chords are kept; a later choice for a doubt wins.
             # A choice of null takes the doubt back to the analysis: it is remembered as removed, so a
@@ -550,7 +532,7 @@ class Library:
         folder = self._page(data.get("page"))
         checked = _checked_edits(data, removals=True)
         key = checked["key"]
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             entry = stored["edits"].get(key, {})
             bars, removed_bars = _merge_keyed(entry.get("bars", {}), entry.get("removed_bars", {}), checked["bars"])
@@ -586,7 +568,7 @@ class Library:
         change = _checked_band({k: data[k] for k in ("transpose", "key", "note") if k in data})
         if ("transpose" in change) != ("key" in change):
             raise ValueError("transpose and key go together")
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             band = {**stored["band"], **change}
             if band.get("transpose") == 0:  # the recorded key again: nothing to say
@@ -604,32 +586,128 @@ class Library:
             self.renders.set_band_key(folder, int(band.get("transpose", 0)), voice)
         return {"band": band, "rev": rev}
 
+    # The words fixed on the sheet (spec 028): one line placed again in its own window, on the voice heard
+    # when the words were placed, kept beside the chord corrections and shared with the band the same way.
+
+    def _voice(self, folder: str) -> lyrics.Voice | None:
+        """A page's voice as the speech model heard it, from the cache only (the model is never run for a
+        line): None when the cache lacks it, and the line is spread over its time then. The voice of the
+        pages fixed last is kept in memory: the first fix of a page decodes its vocal track (up to 2 s)."""
+        try:
+            cache = lyrics.stems_folder(self.root / folder)
+            stamp = (str(cache), (cache / lyrics.CACHE).stat().st_mtime_ns, (cache / "vocals.flac").stat().st_mtime_ns)
+        except (WoodshedError, OSError):
+            return None
+        with self.voices_lock:
+            kept = self.voices.get(folder)
+            if kept is not None and kept[0] == stamp:
+                self.voices.move_to_end(folder)
+                return kept[1]
+        voice = lyrics.cached_voice(cache)  # outside every lock: the band goes on meanwhile
+        if voice is None:
+            return None
+        with self.voices_lock:
+            self.voices[folder] = (stamp, voice)
+            self.voices.move_to_end(folder)
+            while len(self.voices) > VOICES_KEPT:
+                self.voices.popitem(last=False)
+        return voice
+
+    def _placement(self, folder: str) -> dict[str, Any]:
+        try:
+            data = json.loads((self.root / folder / lyrics.LYRICS).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError("page: a page with its words placed") from exc
+        if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("lines"), list):
+            raise ValueError("page: a page with its words placed")
+        return data
+
+    def set_words(self, data: Any) -> dict[str, Any]:
+        """{page, key, lines: {"6": {"text"[, "voice": "other"]} | {"gone": "not-sung"} | null}}: lines of
+        the placement `key` fixed, given another voice, taken out of this recording, or taken back. Each
+        fixed line is placed again in its own window (lyrics.place_line); the page never sends a time."""
+        if not isinstance(data, dict):
+            raise ValueError("words: a JSON object")
+        folder = self._page(data.get("page"))
+        checked = _checked_words(data)
+        key = checked["key"]
+        voice = self._voice(folder)  # before the lock: the first fix of a page decodes its voice
+        with self.lock, corrections_lock(self._corrections_file(folder)):
+            placed = self._placement(folder)
+            if lyrics.words_key(placed) != key:
+                raise StaleWords("the words were placed again: reload the page")
+            song = self._page_song(self.root / folder)
+            if song is None:
+                raise ValueError("page: a page with its words placed")
+            stored = self._stored(folder)
+            entry = stored["words"].get(key, {"lines": {}, "removed": {}})
+            # An Undo names the line as this device left it: another device's fix since is not taken back.
+            changed = [k for k, v in checked["expect"].items() if entry["lines"].get(k) != v]
+            if changed:
+                raise LineChanged(sorted(changed, key=int))
+            now = dict(entry["lines"])
+            changes: dict[str, Any] = {}
+            for k in sorted(checked["lines"], key=int):
+                i, want = int(k), checked["lines"][k]
+                if i >= len(placed["lines"]):
+                    raise ValueError("lines: by the index of a placed line")
+                own = placed["lines"][i]
+                if want is None or ("text" in want and want["text"] == own.get("text") and "voice" not in want):
+                    changes[k] = None  # the placement's line again
+                elif "gone" in want:
+                    changes[k] = {"was": own["text"], "gone": "not-sung"}
+                elif want["text"] == own.get("text"):
+                    changes[k] = {"was": own["text"], "voice": "other"}  # the same words, another voice
+                else:
+                    others = {j: v for j, v in now.items() if j != k}
+                    lines = lyrics.apply_edits(placed, others)["lines"]
+                    line = (
+                        lyrics.place_line(voice, lines, i, want["text"], song, own)
+                        if voice is not None
+                        else lyrics.spread_line(own, want["text"])
+                    )
+                    other = {"voice": "other"} if "voice" in want else {}
+                    changes[k] = {"was": own["text"], "lines": [line], **other}
+                if changes[k] is None:
+                    now.pop(k, None)
+                else:
+                    now[k] = changes[k]  # the next line of this change is placed beside it
+            merged, removed = _merge_keyed(entry["lines"], entry["removed"], changes)
+            if max(len(merged), len(removed)) > WORD_FIXES_MAX:
+                raise ValueError("lines: too many lines fixed")
+            stored["words"][key] = {"lines": merged, "removed": removed, "at": time.time()}
+            for old in sorted(stored["words"], key=lambda k: stored["words"][k]["at"])[:-CORRECTIONS_KEYS]:
+                stored["words"].pop(old)  # the placements of long ago
+            rev = self._write(folder, stored)
+            return {"key": key, "lines": merged, "removed": removed, "rev": rev}
+
+    def _commit_words(self, folder: str, notes: list[str]) -> Callable[[dict[str, Any], lyrics.Voice], None]:
+        """The words placed again, written under the lock that fixing a line takes: the band's fixes of the
+        old placement carried over to the new one (lyrics.carry_edits), the ones left out told."""
+
+        def commit(data: dict[str, Any], voice: lyrics.Voice) -> None:
+            page = self.root / folder
+            with self.lock, corrections_lock(self._corrections_file(folder)):
+                try:
+                    old: dict[str, Any] | None = self._placement(folder)
+                except ValueError:
+                    old = None
+                stored = self._stored(folder)
+                song = self._page_song(page) or lyrics.page_song(page)
+                # Carried first: a failure here leaves the words and their fixes as they were.
+                changed = carry_fixes(stored, old, data, voice, song, notes)
+                lyrics.write(page, data)
+                if not changed:
+                    return
+                rev = self._write(folder, stored)
+            if self.on_band is not None:
+                self.on_band(folder, rev)  # the open pages read the fixes of the new placement
+
+        return commit
+
     def _write(self, folder: str, stored: dict[str, Any]) -> int:
         """Under the lock: the page's corrections and band choices, with the next revision."""
-        rev: int = max(stored["rev"], self.revisions.get(folder, 0)) + 1  # kept in the file: grows across restarts
-        body: dict[str, Any] = {
-            "rev": rev,
-            "by_key": {
-                k: {
-                    "fixes": v,
-                    "at": stored["at"][k],
-                    **({"removed": r} if (r := stored["removed"].get(k)) else {}),
-                }
-                for k, v in stored["by_key"].items()
-            },
-        }
-        if stored["band"]:
-            body["band"] = stored["band"]
-        if stored.get("edits"):
-            body["edits"] = stored["edits"]
-        target = self._corrections_file(folder)
-        target.parent.mkdir(exist_ok=True)
-        tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}")
-        try:
-            tmp.write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-            tmp.replace(target)
-        finally:
-            tmp.unlink(missing_ok=True)
+        rev = write_corrections(self._corrections_file(folder), stored, self.revisions.get(folder, 0))
         self.revisions[folder] = rev
         return rev
 
@@ -879,15 +957,17 @@ class Library:
             if self.stopping.is_set():
                 return
             job.status = "placing"
+            carried: list[str] = []
             data = lyrics.add_to_page(
                 page,
                 text,
                 opts.offline,
                 say=lambda line: setattr(job, "message", line),
                 progress=lambda f: setattr(job, "percent", int(f * 100)),
+                commit=self._commit_words(page.name, carried),
             )
             sung = sum(ln["sung"] for ln in data["lines"])
-            job.notes = [str(n) for n in data.get("notes") or []]
+            job.notes = [str(n) for n in data.get("notes") or []] + carried
             job.status, job.message = "done", f"{sung} of {len(data['lines'])} lines placed on the voice"
         except (WoodshedError, OSError) as exc:
             # Read by every phone of the band: the song's folder, never where the library is.
@@ -986,15 +1066,6 @@ def _as_js(value: Any) -> Any:
     if isinstance(value, list):
         return [_as_js(v) for v in value]
     return value
-
-
-def _fnv1a(text: str) -> str:
-    """fnv1a in app.js, over UTF-16 code units as charCodeAt reads them."""
-    h = 0x811C9DC5
-    units = text.encode("utf-16-le")
-    for i in range(0, len(units), 2):
-        h = ((h ^ int.from_bytes(units[i : i + 2], "little")) * 0x01000193) & 0xFFFFFFFF
-    return format(h, "x")
 
 
 def analysis_key(song: dict[str, Any]) -> str:
@@ -1147,6 +1218,297 @@ def _checked_corrections(data: Any, removals: bool = False) -> dict[str, Any]:
         if type(pc) is not int or not 0 <= pc <= 11 or quality not in QUALITIES:
             raise ValueError("fixes: [pitch class, quality] by doubt id")
     return {"key": key, "fixes": {k: None if v is None else list(v) for k, v in fixes.items()}}
+
+
+def read_corrections(path: Path) -> dict[str, Any]:
+    """What the library holds for a page (`.corrections/<page>.json`); an entry damaged by hand is skipped, the
+    others kept, and a section this version does not know (a newer woodshed's) kept as it is for the next write."""
+    out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}, "edits": {}, "words": {}}
+    out["other"] = {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return out
+    if not isinstance(data, dict):
+        return out
+    out["other"] = {k: v for k, v in data.items() if k not in KNOWN_SECTIONS}
+    # A known section in a shape this version cannot read is kept as it is too, not dropped by the next write.
+    out["other"] |= {k: data[k] for k in ("by_key", "edits", "words") if k in data and not isinstance(data[k], dict)}
+    rev = data.get("rev")
+    out["rev"] = rev if type(rev) is int and rev >= 0 else 0
+    try:
+        out["band"] = _checked_band(data.get("band") or {})
+    except ValueError:
+        out["other"]["band"] = data["band"]
+    entries = data.get("by_key")
+    for key, entry in entries.items() if isinstance(entries, dict) else []:
+        try:
+            out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
+            out["at"][key] = float(entry.get("at", 0))
+            gone = entry.get("removed", {})
+            out["removed"][key] = _checked_removed(gone)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    kept = data.get("edits")
+    for key, entry in kept.items() if isinstance(kept, dict) else []:
+        try:
+            checked = _checked_edits({"key": key, "bars": entry["bars"], "parts": entry["parts"]})
+            gone = _checked_edits(
+                {"key": key, "bars": entry["removed_bars"], "parts": entry["removed_parts"]}, removals=True
+            )
+            out["edits"][key] = {
+                "bars": checked["bars"],
+                "parts": checked["parts"],
+                "removed_bars": gone["bars"],
+                "removed_parts": gone["parts"],
+                "at": float(entry.get("at", 0)),
+            }
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    fixed = data.get("words")
+    for key, entry in fixed.items() if isinstance(fixed, dict) else []:
+        if not isinstance(entry, dict) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", str(key)):
+            continue
+        lines: dict[str, Any] = {}
+        removed: dict[str, Any] = {}
+        for k, v in entry.get("lines", {}).items() if isinstance(entry.get("lines"), dict) else []:
+            with contextlib.suppress(ValueError, KeyError, TypeError, AttributeError):
+                lines[k] = _checked_word_entry(k, v)  # one damaged by hand is skipped, the others kept
+        for k, v in entry.get("removed", {}).items() if isinstance(entry.get("removed"), dict) else []:
+            if isinstance(k, str) and LINE_INDEX.fullmatch(k):
+                try:
+                    removed[k] = None if v is None else _checked_word_entry(k, v)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    removed[k] = None
+        at = entry.get("at", 0)
+        out["words"][key] = {"lines": lines, "removed": removed, "at": float(at) if _number(at) else 0.0}
+    return out
+
+
+@contextlib.contextmanager
+def corrections_lock(path: Path) -> Iterator[None]:
+    """One writer at a time for a page's corrections, across processes: the library app and `woodshed lyrics` on
+    the same library read, change and write the file inside it (a lock file beside it, locked by the system and let
+    go if the process dies). A writer that waits LOCK_WAIT seconds in vain is refused with a sentence."""
+    path.parent.mkdir(exist_ok=True)
+    with path.with_name(path.name + ".lock").open("a+b") as fh:
+        deadline = time.monotonic() + LOCK_WAIT
+        while not _lock_file(fh):
+            if time.monotonic() > deadline:
+                raise WoodshedError("another woodshed is writing the corrections of this song: try again")
+            time.sleep(0.05)
+        try:
+            yield
+        finally:
+            _unlock_file(fh)
+
+
+def _lock_file(fh: Any) -> bool:
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock_file(fh: Any) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+def write_corrections(path: Path, stored: dict[str, Any], seen: int = 0) -> int:
+    """A page's corrections and band choices written whole (`stored` as read_corrections gives it), with the next
+    revision (past `seen`, the last one this library told). Every section is written back, a newer woodshed's too."""
+    rev: int = max(stored["rev"], seen) + 1  # kept in the file: grows across restarts
+    body: dict[str, Any] = dict(stored.get("other") or {})
+    body["rev"] = rev
+    if stored["by_key"] or "by_key" not in body:  # one this version could not read is kept until it has its own
+        body["by_key"] = {
+            k: {
+                "fixes": v,
+                "at": stored["at"][k],
+                **({"removed": r} if (r := stored["removed"].get(k)) else {}),
+            }
+            for k, v in stored["by_key"].items()
+        }
+    for name in ("band", "edits", "words"):
+        if stored.get(name):
+            body[name] = stored[name]
+    path.parent.mkdir(exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}")
+    try:
+        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return rev
+
+
+def carry_fixes(
+    stored: dict[str, Any],
+    old: dict[str, Any] | None,
+    new: dict[str, Any],
+    voice: lyrics.Voice | None,
+    song: dict[str, Any],
+    notes: list[str],
+) -> bool:
+    """The band's fixes of the words placed before carried to the words placed now (lyrics.carry_edits), into
+    `stored`; the ones left out told in `notes`. Fixes already made on the new placement win. Returns whether
+    `stored` changed. Shared by the library and `woodshed lyrics`, before the new words are written."""
+    if old is None:
+        return False
+    old_key, new_key = lyrics.words_key(old), lyrics.words_key(new)
+    fixed = stored["words"].get(old_key, {}).get("lines")
+    if not fixed or new_key == old_key:
+        return False
+    carried, left = lyrics.carry_edits(old, new, fixed, voice, song)
+    if left == 1:
+        notes.append("1 line fixed on the sheet was left out: its text changed.")
+    elif left:
+        notes.append(f"{left} lines fixed on the sheet were left out: their text changed.")
+    if not carried:
+        return False
+    there = stored["words"].get(new_key, {"lines": {}, "removed": {}})
+    stored["words"][new_key] = {
+        "lines": {**carried, **there["lines"]},  # fixes made on that placement already win
+        "removed": there["removed"],
+        "at": time.time(),
+    }
+    for gone in sorted(stored["words"], key=lambda k: stored["words"][k]["at"])[:-CORRECTIONS_KEYS]:
+        stored["words"].pop(gone)
+    return True
+
+
+def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyrics.Voice], None]:
+    """`woodshed lyrics` on a page of a library: the band's fixes carried as the app carries them."""
+
+    def commit(data: dict[str, Any], voice: lyrics.Voice) -> None:
+        path = page.parent / CORRECTIONS_DIR / f"{page.name}.json"
+        try:
+            old = json.loads((page / lyrics.LYRICS).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            old = None
+        if not path.exists():  # a page out of a library, or with nothing corrected
+            lyrics.write(page, data)
+            return
+        with corrections_lock(path):  # the app on the same library waits, and reads the file again after
+            stored = read_corrections(path)
+            changed = isinstance(old, dict) and carry_fixes(stored, old, data, voice, lyrics.page_song(page), notes)
+            lyrics.write(page, data)
+            if changed:
+                write_corrections(path, stored)
+
+    return commit
+
+
+def _number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
+    """{"key", "lines"} as the line editor sends them (core/wordedits.js): by line index, new words (with
+    "voice": "other" for another voice), {"gone": "not-sung"}, or null to take a line back. No times:
+    the library places the words."""
+    key = data.get("key")
+    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
+        raise ValueError("key: the placement the fixes belong to")
+    lines = data.get("lines")
+    if not isinstance(lines, dict) or not 0 < len(lines) <= WORD_FIXES_MAX:
+        raise ValueError("lines: fixes by line")
+    out: dict[str, Any] = {}
+    for k, v in lines.items():
+        if not LINE_INDEX.fullmatch(k):
+            raise ValueError("lines: by the index of a placed line")
+        if v is None or v == {"gone": "not-sung"}:
+            out[k] = v
+            continue
+        if not isinstance(v, dict) or not set(v) <= {"text", "voice"} or not isinstance(v.get("text"), str):
+            raise ValueError("lines: new words, another voice, not in this recording, or null")
+        if "voice" in v and v["voice"] != "other":
+            raise ValueError("voice: other")
+        if len(v["text"]) > WORD_TEXT_MAX:
+            raise ValueError(f"text: {WORD_TEXT_MAX} characters at most")
+        if "\n" in v["text"] or "\r" in v["text"]:
+            raise ValueError("text: one line")
+        text = UNSAFE.sub("", v["text"]).strip()
+        words, _ = lyrics.line_words(text)
+        if len(words) > LINE_WORDS_MAX:
+            raise ValueError(f"text: {LINE_WORDS_MAX} words at most")
+        out[k] = {"text": text, **({"voice": "other"} if "voice" in v else {})}
+    expect = data.get("expect", {})
+    if not isinstance(expect, dict) or len(expect) > WORD_FIXES_MAX:
+        raise ValueError("expect: the lines as this device knows them")
+    checked_expect = {}
+    for k, v in expect.items():
+        if not isinstance(k, str) or not LINE_INDEX.fullmatch(k):
+            raise ValueError("expect: by the index of a placed line")
+        checked_expect[k] = None if v is None else _checked_word_entry(k, v)
+    return {"key": key, "lines": out, "expect": checked_expect}
+
+
+def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
+    """A fix of the words as the library keeps it: the placement's text (`was`), then the line's words and
+    times placed by the library, another voice, or not in this recording."""
+    if not isinstance(k, str) or not LINE_INDEX.fullmatch(k) or not isinstance(v, dict):
+        raise ValueError("a line fix by index")
+    was = v.get("was")
+    if not isinstance(was, str) or len(was) > 4 * WORDS_BYTES:
+        raise ValueError("was: the placement's text")
+    if set(v) == {"was", "gone"} and v["gone"] == "not-sung":
+        return {"was": was, "gone": "not-sung"}
+    if not set(v) <= {"was", "lines", "voice"} or len(v) < 2 or v.get("voice", "other") != "other":
+        raise ValueError("a line fix")
+    out: dict[str, Any] = {"was": was}
+    if "lines" in v:
+        fixed = v["lines"]
+        if not isinstance(fixed, list) or len(fixed) != 1:
+            raise ValueError("lines: one line")
+        line = fixed[0]
+        text, words, check, backing = line["text"], line["words"], line.get("check"), line.get("backing", [])
+        if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or not isinstance(words, list):
+            raise ValueError("lines: words")
+        if not 0 < len(words) <= LINE_WORDS_MAX or not (check is None or (isinstance(check, str) and len(check) < 200)):
+            raise ValueError("lines: words")
+        if not isinstance(backing, list) or not all(isinstance(b, str) and len(b) <= WORD_TEXT_MAX for b in backing):
+            raise ValueError("lines: backing vocals")
+        kept = []
+        for w in words:
+            start, end = w["start"], w["end"]
+            timed = _number(start) and _number(end) and 0 <= start <= end < 86400
+            if not isinstance(w["text"], str) or len(w["text"]) > WORD_TEXT_MAX or not (timed or start is end is None):
+                raise ValueError("lines: words in time")
+            kept.append({"text": w["text"], "start": start, "end": end})
+        out["lines"] = [{"text": text, "backing": list(backing), "words": kept, "check": check}]
+    if "voice" in v:
+        out["voice"] = "other"
+    return out
+
+
+class LineChanged(PermissionError):
+    """An Undo of a line another device fixed since: refused, the other device's fix stays."""
+
+    def __init__(self, lines: list[str]) -> None:
+        super().__init__("the line changed on another device")
+        self.lines = lines
+
+
+class StaleWords(PermissionError):
+    """A fix made on a placement that is no longer the page's (its words were placed again)."""
 
 
 class NotLeader(PermissionError):
@@ -1482,7 +1844,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 page, key = query.get("page", [""])[0], query.get("key", [""])[0]
                 grid = query.get("edits", [None])[0]
-                self._json(HTTPStatus.OK, self.server.library.corrections(page, key, grid))
+                words = query.get("words", [None])[0]
+                self._json(HTTPStatus.OK, self.server.library.corrections(page, key, grid, words))
             except ValueError as exc:
                 self._error(HTTPStatus.BAD_REQUEST, str(exc))
         elif path == "/api/live":
@@ -1510,7 +1873,9 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.FORBIDDEN, "missing or wrong token")
             return
         url = urlsplit(self.path)
-        if url.path in ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band", "/api/pitch"):
+        # A line of the words fixed costs milliseconds (never the speech model): any device of the band may.
+        paths = ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band", "/api/pitch", "/api/words")
+        if url.path in paths:
             self._small_json_post(url.path)
             return
         if url.path == "/api/network":
@@ -1581,7 +1946,7 @@ class Handler(BaseHTTPRequestHandler):
         declared = self.headers.get("Content-Length", "")
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
-        limits |= {"/api/edits": CORRECTIONS_BYTES, "/api/bars": 4096}
+        limits |= {"/api/edits": CORRECTIONS_BYTES, "/api/words": CORRECTIONS_BYTES, "/api/bars": 4096}
         limits |= {"/api/band": 4096, "/api/network": 4096, "/api/pitch": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
@@ -1614,6 +1979,10 @@ class Handler(BaseHTTPRequestHandler):
                 saved = self.server.library.set_edits(data)
                 self.server.live.corrected(data["page"], saved["rev"])  # every device draws the chart again
                 self._json(HTTPStatus.OK, saved)
+            elif path == "/api/words":
+                saved = self.server.library.set_words(data)
+                self.server.live.corrected(data["page"], saved["rev"])  # every device reads the words again
+                self._json(HTTPStatus.OK, saved)
             elif path == "/api/band":
                 saved = self.server.library.set_band(data)
                 self.server.live.corrected(data["page"], saved["rev"])  # every device reads the song again
@@ -1636,6 +2005,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
         except NotLeader as exc:
             self._json(HTTPStatus.CONFLICT, {"error": str(exc), "state": exc.state})  # the body was read
+        except LineChanged as exc:  # the page says which line, in its words
+            self._json(HTTPStatus.CONFLICT, {"error": str(exc), "changed": exc.lines})
+        except lyrics.NoRoom as exc:  # the line editor says where: "between 0:17 and 0:21"
+            self._json(HTTPStatus.CONFLICT, {"error": str(exc), "window": [round(exc.start, 2), round(exc.end, 2)]})
         except (PermissionError, WoodshedError) as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (ValueError, OSError) as exc:

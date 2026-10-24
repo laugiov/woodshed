@@ -903,6 +903,58 @@ body.following #playBtn { opacity: 0.45; }
 .bar.edited::after { content: none; }
 .bar.edited { box-shadow: inset 0 3px 0 var(--accent); }
 body.editing .chart-hint { display: none; }
+/* Fixing a line of the words on the sheet (views/lines.js, spec 028): in Edit mode the words open the line
+   editor, a chord name or a bar number its bar. */
+.editing .lline[role="button"] .lwords { outline: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 4px; border-radius: 6px; cursor: text; }
+.editing .lline[role="button"]:hover .lwords { background: var(--accent-soft); }
+.editing .lline[role="button"] .lc, .editing .lline[role="button"] .bl { cursor: pointer; }
+.editing .lline[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.line-open .lline:focus { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+/* A line fixed by the band: the accent edge of a typed bar, and "✎ fixed" under its time. */
+.lline.edited { box-shadow: inset 3px 0 0 var(--accent); }
+.lline .fixed-mark { display: block; font: 600 10.5px var(--font-body); color: var(--accent); letter-spacing: 0.02em; }
+/* Another voice (an MC, a spoken intro): on the sheet with its chords, quieter, off the singer's stage. */
+.lline.other .wt { font-style: italic; color: var(--muted); }
+/* A line not in this recording, in Edit mode only: one quiet row with the way back. */
+.lline.gone { align-items: center; padding-block: 6px; }
+.lline.gone .t { cursor: default; padding: 0; }
+.lline.gone .gone-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.lline.gone .gone-text { font-size: 16px; color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.lline.gone .gone-why { font-size: 12.5px; color: var(--muted); border: 1px solid var(--muted); border-radius: 999px; padding: 1px 9px; }
+.lline.gone .back, .ed .back { color: var(--muted); background: none; border: 0; text-decoration: underline; font-size: 13px; padding: 0; cursor: pointer; }
+/* The line editor: the bar editor's shell, wider for a sung line, the field in the words' font. */
+.ed.line-ed { width: min(560px, calc(100vw - 24px)); }
+.ed.line-ed .field { font-family: var(--font-body); font-weight: 400; font-size: 21px; letter-spacing: 0; line-height: 1.3; resize: none; }
+.ed.line-ed .field:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ed .state { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ed .extra { display: grid; gap: 10px; }
+.ed .tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.ed .tool { font-size: 13px; color: var(--ink); border: 1px dashed var(--muted); background: none; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.ed .tool:hover, .ed .tool[aria-pressed="true"] { border-color: var(--accent); }
+.ed .tool[aria-pressed="true"] { border-style: solid; background: var(--accent-soft); }
+.ed .bars-of-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.ed .bar-chip { display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid var(--muted); background: var(--sheet); color: var(--ink); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 13px; }
+.ed .bar-chip b { font-family: var(--font-chord); font-size: 18px; }
+.ed .bar-chip i { font-style: normal; color: var(--accent); font-size: 12px; }
+.ed .acts .left { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ed .more { display: none; }
+.ed .spin-line { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; margin-right: 6px; vertical-align: -1px; animation: spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ed .spin-line { animation: none; } }
+@media (max-width: 600px) {
+  .ed.line-ed .field { font-size: 20px; min-height: 44px; flex-basis: 100%; }
+  .ed .tool, .ed .bar-chip, .ed .back { min-height: 44px; }
+  .lline.gone { grid-template-columns: 34px minmax(0, 1fr); }
+  /* The keyboard up: the title, the field, the status and Cancel and Save; the rest behind More. */
+  .ed.line-ed.typing .extra, .ed.line-ed.typing [data-testid="line-save-next"], .ed.line-ed.typing .acts .back { display: none; }
+  .ed.line-ed.typing .more { display: inline-flex; }
+  .ed.line-ed.typing { gap: 8px; padding-top: 12px; }
+  .ed.line-ed.typing .acts { flex-wrap: nowrap; }
+  .ed.line-ed.typing .acts .right { width: auto; flex: 1; }
+}
+@media (pointer: coarse), (max-width: 600px) { .lline.gone .back { min-height: 44px; display: inline-flex; align-items: center; } }
+.ed.line-ed .field { max-height: 40vh; overflow-y: auto; }
+@media print { .lline.gone { display: none !important; } .lline .fixed-mark { display: none; } }
+
 /* Moving the bar lines (views/barlines.js). */
 .bars-dialog h2 small { font: 400 14px var(--font-body); color: var(--muted); }
 .bars-dialog .beats-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 8px; margin: 10px 0; }

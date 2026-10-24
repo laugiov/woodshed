@@ -120,54 +120,11 @@
       if (restore && back) back.focus({ preventScroll: true });
     }
 
-    // `still`: placed again where the bar is now (scrolling), without scrolling the page itself.
-    function place(box, anchor, still) {
-      document.querySelectorAll(".ed-tail").forEach((t) => t.remove());
-      if (PHONE.matches) {
-        $("edScrim").hidden = false;
-        box.style.left = "";
-        box.style.top = "";
-        keepAboveKeyboard();
-        // The bar stays in sight, above the sheet.
-        const r = anchor.getBoundingClientRect();
-        const top = box.getBoundingClientRect().top;
-        if (r.bottom > top - 8 || r.top < 0) window.scrollBy({ top: r.bottom - (top - 16) });
-        return;
-      }
-      $("edScrim").hidden = true;
-      box.style.bottom = "";
-      // The bar near the top of the view first, so the editor opens under it with room to spare.
-      const seen = window.innerHeight - ($("dock") ? $("dock").offsetHeight : 0);
-      let r = anchor.getBoundingClientRect();
-      if (!still && r.bottom + 12 + box.offsetHeight > seen - 8) {
-        window.scrollBy({ top: r.top - 140 });
-        r = anchor.getBoundingClientRect();
-      }
-      const w = box.offsetWidth;
-      const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
-      const below = seen - 8 - (r.bottom + 12);
-      const up = below < box.offsetHeight && r.top - 20 > below;
-      box.style.left = left + "px";
-      box.style.top = (up ? Math.max(8, r.top - 12 - box.offsetHeight) : r.bottom + 12) + "px";
-      const tail = h("div", { class: "ed-tail" + (up ? " up" : ""), "aria-hidden": "true" });
-      tail.style.left = r.left + r.width / 2 - 7 + "px";
-      tail.style.top = (up ? r.top - 19 : r.bottom + 5) + "px";
-      document.body.append(tail);
-    }
-    // On a phone the sheet stays above the keyboard, no taller than the screen left to it.
-    function keepAboveKeyboard() {
-      const vv = window.visualViewport;
-      const box = $("barEd");
-      box.style.bottom = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + "px" : "0px";
-      box.style.maxHeight = (vv ? vv.height : window.innerHeight) - 16 + "px";
-    }
+    const place = W.popover.place; // the shell shared with the line editor (views/popover.js)
+    const keepAboveKeyboard = () => W.popover.keepAboveKeyboard($("barEd"));
     // The keyboard rising pushes the sheet up: the bar is kept above it.
     function keepBarInSight() {
-      const el = open === null ? null : chart.barEl(open);
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const top = $("barEd").getBoundingClientRect().top;
-      if (r.bottom > top - 8 || r.top < 0) window.scrollBy({ top: r.bottom - (top - 16) });
+      if (open !== null) W.popover.keepInSight($("barEd"), chart.barEl(open));
     }
     if (window.visualViewport) {
       for (const ev of ["resize", "scroll"]) {
@@ -402,17 +359,7 @@
         saveNext();
         return;
       }
-      if (e.key !== "Tab") return;
-      const list = [...$("barEd").querySelectorAll("button:not([disabled]), input")];
-      const first = list[0];
-      const last = list[list.length - 1];
-      if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      } else if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      }
+      if (e.key === "Tab") W.popover.trap($("barEd"), e);
     });
     $("edScrim").addEventListener("click", () => close(true));
 
@@ -445,7 +392,11 @@
 
     function renderStrip(s) {
       const strip = $("editStrip");
-      const shows = s.editing && !s.stage ? [W.lang(), s.corrections].join("|") : "";
+      const words = app.sheetMode(s) === "lyrics";
+      const fixing = words && app.canFixWords();
+      const fixed = Object.keys(app.wordFixes()).length;
+      const undo = app.wordsUndo();
+      const shows = s.editing && !s.stage ? [W.lang(), s.corrections, words, fixing, fixed, undo].join("|") : "";
       strip.hidden = !shows;
       document.body.classList.toggle("editing", !!shows);
       if (!shows || strip.dataset.shows === shows) return;
@@ -456,8 +407,17 @@
       clear(
         strip,
         h("span", { class: "what" }, W.t("Editing the chart")),
-        h("span", { class: "how" }, PHONE.matches ? W.t("Tap a bar to type its chords.") : W.t("Click a bar to type its chords.")),
+        // In the Lyrics view a line opens the line editor (views/lines.js), with the library that places it.
+        fixing
+          ? h("span", { class: "how" }, PHONE.matches ? W.t("Tap a line to fix its words, a chord to type its bar.") : W.t("Click a line to fix its words, a chord to type its bar."))
+          : words
+            ? h("span", { class: "how", "data-testid": "words-need-library" }, W.t("Fixing a line's words needs the library (woodshed app)."))
+            : h("span", { class: "how" }, PHONE.matches ? W.t("Tap a bar to type its chords.") : W.t("Click a bar to type its chords.")),
         h("span", { class: "acts" },
+          undo ? h("button", { type: "button", class: "btn", "data-testid": "words-undo", "aria-keyshortcuts": "Control+Z Meta+Z", onclick: () => app.undoWords() }, W.t("Undo")) : null,
+          fixed && app.canFixWords()
+            ? h("button", { type: "button", class: "btn ghost-link", "data-testid": "words-untype-all", onclick: () => app.lines.untypeAll() }, W.t("Words back to the placement…"))
+            : null,
           Object.keys(app.typedParts.values()).length
             ? h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-parts", onclick: () => {
                 const n = Object.keys(app.typedParts.values()).length;
@@ -474,7 +434,7 @@
     }
 
     store.on((s, changed) => {
-      if (changed.has("editing") || changed.has("stage") || changed.has("corrections")) {
+      if (["editing", "stage", "corrections", "sheet", "inst", "canFix"].some((k) => changed.has(k))) {
         renderStrip(s);
         if (!s.editing || s.stage) close(false);
       }

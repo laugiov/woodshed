@@ -218,9 +218,11 @@
     let fixesRev = -1;
     let movedSeen = null; // how many times the library moved this page's bar lines, when first heard
     let editsRead = false; // the first answer only fills the page in
+    let wordsRead = false;
     async function loadFixes() {
+      const words = app.wordsKey ? "&words=" + encodeURIComponent(app.wordsKey) : "";
       const r = await api(
-        "/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey) + "&edits=" + encodeURIComponent(app.editsKey),
+        "/api/corrections?page=" + encodeURIComponent(folder) + "&key=" + encodeURIComponent(app.fixesKey) + "&edits=" + encodeURIComponent(app.editsKey) + words,
       );
       if (!r.ok || typeof r.data.rev !== "number" || r.data.rev < fixesRev) return; // an older answer
       fixesRev = Math.max(fixesRev, r.data.rev);
@@ -251,7 +253,21 @@
       const owed = app.useEdits(r.data.edits || {}, !editsRead);
       editsRead = true;
       if (Object.keys(owed.bars).length || Object.keys(owed.parts).length) shareEdits(owed);
+      // The words fixed on the sheet (spec 028): the library's are the band's, times and all (nothing kept here).
+      if (app.wordsKey && r.data.words && typeof r.data.words === "object") {
+        app.useWordEdits(r.data.words.lines, !wordsRead);
+        wordsRead = true;
+      }
     }
+    // Lines of the words fixed, taken back, given another voice (views/lines.js): the library places them and
+    // answers with the fixes of this placement. The first fix of a page decodes its voice: 20 s at most.
+    app.shareWords = async (lines, expect) => {
+      const body = { page: folder, key: app.wordsKey, lines, ...(expect ? { expect } : {}) };
+      const r = await api("/api/words", body, true, 20000);
+      if (r.ok && typeof r.data.rev === "number") heardRev(r.data.rev);
+      return r;
+    };
+    app.canFixWords = () => token !== null && !!app.wordsKey;
     function shareEdits(change) {
       api("/api/edits", { page: folder, key: app.editsKey, bars: change.bars || {}, parts: change.parts || {} }).then((r) => {
         if (!r.ok || typeof r.data.rev !== "number") app.toast(W.t("Saved on this device only: the app did not answer, the band does not see it yet."));
@@ -647,6 +663,7 @@
     async function start() {
       if (!(await fetchToken())) return; // an old app, or none
       await loadFixes();
+      store.set({ canFix: app.canFixWords() }); // the lines of the words can be fixed from here
       const [set, songs] = await Promise.all([api("/api/setlist"), api("/api/songs")]);
       if (set.ok && Array.isArray(set.data.songs)) setlist = set.data.songs;
       if (songs.ok && Array.isArray(songs.data.songs)) for (const x of songs.data.songs) titles[x.folder] = x.title;

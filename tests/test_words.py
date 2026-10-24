@@ -27,7 +27,7 @@ def wait(srv: app.AppServer, job_id: str) -> dict[str, Any]:
 
 def fake_placement(monkeypatch: pytest.MonkeyPatch, calls: list[tuple[Path, str]]) -> None:
     def add_to_page(
-        page: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None
+        page: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None, commit: Any = None
     ) -> dict[str, Any]:
         calls.append((page, text))
         say(lyrics.LISTENING)
@@ -54,7 +54,9 @@ def test_a_failed_placement_says_why_without_the_library_path(
     server: app.AppServer,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def refused(page: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None) -> dict[str, Any]:
+    def refused(
+        page: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None, commit: Any = None
+    ) -> dict[str, Any]:
         raise lyrics.LyricsError(f"{page}: the instrument tracks of this song are not in the cache")
 
     monkeypatch.setattr(lyrics, "add_to_page", refused)

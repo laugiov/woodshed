@@ -275,10 +275,16 @@ def run_lyrics(argv: Sequence[str]) -> int:
             text = raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig")
         except UnicodeDecodeError:
             text = raw.decode("cp1252", errors="replace")  # older Windows text files
-        data = lyrics.add_to_page(page, text, args.offline, say=lambda line: print(line, file=sys.stderr))
+        from woodshed import app
+
+        notes: list[str] = []  # the band's fixes on the sheet, carried as the library carries them
+        say = lambda line: print(line, file=sys.stderr)  # noqa: E731
+        data = lyrics.add_to_page(page, text, args.offline, say=say, commit=app.lyrics_commit(page, notes))
         lines = data["lines"]
         sung = sum(ln["sung"] for ln in lines)
         print(f"{sung} of {len(lines)} lines placed on the voice; lyrics in {page / lyrics.LYRICS}")
+        for note in notes:
+            print("  " + note)
         if data.get("sections"):
             print("  parts named by the words: " + ", ".join(sec["name"] for sec in data["sections"]))
         for k, ln in enumerate(lines):
