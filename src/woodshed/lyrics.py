@@ -165,7 +165,7 @@ def parse(text: str) -> list[Line]:
     return read(text).lines
 
 
-def read(text: str) -> Text:
+def read(text: str, any_script: bool = False) -> Text:
     """The pasted text as sung lines.
 
     Parts start at a blank line or a part's name ("[Chorus]", "Refrain x2", "Couplet 2 :"); a name
@@ -173,7 +173,8 @@ def read(text: str) -> Text:
     the stanza written out most often (at least twice, then "[Chorus]" on lyrics sites); the name of a
     part with no words to repeat ("[Solo]") marks the music between the lines around it. "x2"
     repeats a part or a line. Rows of chords and chords in brackets inside the words ([Am]Rain on
-    the roof) are dropped; words in brackets are backing vocals, kept apart."""
+    the roof) are dropped; words in brackets are backing vocals, kept apart. `any_script`: words in any script
+    count (the speech model reads Latin letters only; tapping along, spec 029-2, reads every script)."""
     lines: list[Line] = []
     blocks: list[tuple[str | None, list[Line]]] = []
     markers: list[tuple[int, str]] = []
@@ -240,7 +241,11 @@ def read(text: str) -> Text:
             repeat, row = int(rep.group(1)), row[: rep.start()].strip()
         backing = re.findall(r"\(([^)]*)\)", row)
         lead = re.sub(r"\([^)]*\)", " ", row)
-        words = [Word(w, letters_of(w)) for w in re.split(r"[\s\-]+", lead) if letters_of(w)]
+        words = [
+            Word(w, letters_of(w) or w.lower())
+            for w in re.split(r"[\s\-]+", lead)
+            if letters_of(w) or (any_script and any(c.isalpha() for c in w))
+        ]
         if not words:  # backing vocals only: with the line before
             if current:
                 current[-1].backing += backing

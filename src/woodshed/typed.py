@@ -13,6 +13,7 @@ time is computed here from the beats: the page never sends one. The page reads a
 
 from __future__ import annotations
 
+import itertools
 import math
 import re
 import unicodedata
@@ -372,3 +373,85 @@ def with_typed(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
         if s is not None and any(s[0] < t[1] and t[0] < s[1] for t in spans if t is not None):
             lines[i] = {**ln, "sung": False, "covered": True}
     return {**data, "lines": lines + typed}
+
+
+# A whole text laid by tapping along (spec 029-2): each line starts where a tap fell.
+
+LAST_BARS = 2  # the last line tapped has no next tap: its words fit in two bars at most
+QUARTER = 4  # taps snap to the nearest quarter beat
+
+
+def snap(at: float) -> float:
+    """A tap's beat index snapped to the nearest quarter beat (halves up), as the page snaps it before sending."""
+    return math.floor(at * QUARTER + 0.5) / QUARTER
+
+
+def _bar_notation(texts: Sequence[str], ats: Sequence[float], song: dict[str, Any]) -> str:
+    """The words of a laid line written in the notation, a `|` at each bar line: the line editor reads it back."""
+    bars = [bar_of(song, a) for a in ats]
+    return " | ".join(
+        " ".join(t for t, b in zip(texts, bars, strict=True) if b == k) for k in range(bars[0], bars[-1] + 1)
+    )
+
+
+def tapped_lines(lines: Sequence[tuple[str, str]], taps: Sequence[float], song: dict[str, Any]) -> list[dict[str, Any]]:
+    """The lines (text, part name) laid from the taps, one tap a line from the first (snapped to a quarter beat): a
+    line starts on its tap and owns the beats up to the next tap (the last one two bars at most). Its syllables take
+    one beat each from the tap, or a half, or a quarter, the coarsest that fits; more than that, evenly in time. A
+    word starts on its first syllable; `_` holds the word before it one syllable more. Lines after the last tap are
+    not laid. Every time computed from the beats."""
+    per = int(song["beats_per_bar"])
+    end = int(song["first_beat"]) + len(song["bars"]) * per
+    ats = [snap(float(t)) for t in taps]
+    if len(ats) > len(lines):
+        raise TypedError("taps")
+    if any(b <= a for a, b in itertools.pairwise(ats)):
+        raise TypedError("taps")
+    if any(a < 0 or a >= end for a in ats):
+        raise TypedError("end")
+    out = []
+    for i, at in enumerate(ats):
+        text, tag = lines[i]
+        clean = _clean(text)
+        until = ats[i + 1] if i + 1 < len(ats) else min(end, at + LAST_BARS * per)
+        span_ = until - at
+        texts: list[str] = []
+        units: list[int] = []
+        for tok in _tokens(clean):
+            if tok == "|":
+                continue
+            if tok == HOLD:
+                units.append(-1)
+                continue
+            texts.append(tok)
+            units.extend([len(texts) - 1] * syllables(tok))
+        while units and units[0] == -1:  # a rest before the first word: the tap is where the words start
+            units.pop(0)
+        if not texts:
+            raise TypedError("empty")
+        if len(texts) > MAX_WORDS:
+            raise TypedError("words")
+        size = len(units)
+        grid = next((g for g in (1.0, 0.5, 0.25) if size * g <= span_ + 1e-9), span_ / size)
+        pos = [at + j * grid for j in range(size + 1)]
+        starts: list[float] = []
+        hold_end: list[float] = []
+        last = -1
+        for j, w in enumerate(units):
+            if w > last:
+                starts.append(pos[j])
+                hold_end.append(pos[j + 1])
+                last = w
+            else:
+                hold_end[last] = pos[j + 1]
+        stop = beat_time(song, until)
+        words: list[dict[str, Any]] = []
+        for k, tok in enumerate(texts):
+            start = beat_time(song, starts[k])
+            nxt = beat_time(song, starts[k + 1]) if k + 1 < len(texts) else min(beat_time(song, hold_end[k]), stop)
+            words.append({"text": tok, "at": starts[k], "start": start, "end": max(start, nxt)})
+        out.append({
+            "text": _joined(texts), "tag": tag, "backing": [b.strip() for b in BACKING.findall(clean) if b.strip()],
+            "notation": _bar_notation(texts, starts, song), "words": words,
+        })  # fmt: skip
+    return out

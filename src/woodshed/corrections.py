@@ -579,8 +579,11 @@ def _without_prev(entry: Any) -> Any:
 def _checked_typed_entry(v: Any) -> dict[str, Any]:
     """A line typed by hand (spec 029) as the library keeps it: its notation, its recording, its words on the beats
     with their times, and the line before its last change (`prev`, for Undo)."""
-    if not isinstance(v, dict) or set(v) - {"prev"} != {"typed", "src", "notation", "lines"} or v["typed"] is not True:
+    keys = set(v) - {"prev", "by"} if isinstance(v, dict) else set()
+    if not isinstance(v, dict) or keys != {"typed", "src", "notation", "lines"} or v["typed"] is not True:
         raise ValueError("a typed line")
+    if "by" in v and v["by"] != "layout":  # laid by tapping along (spec 029-2): laying again replaces it
+        raise ValueError("by: layout")
     src, notation, lines = v["src"], v["notation"], v["lines"]
     if not (src is None or (isinstance(src, str) and len(src) <= 128)):
         raise ValueError("src: the recording")
@@ -606,6 +609,8 @@ def _checked_typed_entry(v: Any) -> dict[str, Any]:
         kept.append({"text": w["text"], "at": at, "start": start, "end": end})
     out_line = {"text": text, "tag": tag, "backing": list(backing), "check": None, "words": kept}
     out: dict[str, Any] = {"typed": True, "src": src, "notation": notation, "lines": [out_line]}
+    if "by" in v:
+        out["by"] = "layout"
     if "prev" in v:  # the line before its last change, for Undo
         out["prev"] = None if v["prev"] is None else _checked_typed_entry(_without_prev(v["prev"]))
     return out

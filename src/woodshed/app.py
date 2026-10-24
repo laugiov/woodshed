@@ -164,6 +164,7 @@ class Library:
         self.songs = self.root / "songs"
         self.songs.mkdir(parents=True, exist_ok=True)
         self.opts = opts
+        self.words_model = True  # False: `woodshed app --no-words-model`, the speech model never offered nor run
         self.jobs: dict[str, Job] = {}
         self.reserved: set[str] = set()
         self.running: Path | None = None
@@ -667,7 +668,20 @@ class Library:
             lines_of = placed["lines"]
             # Lines typed by hand and words moved by hand (spec 029) first: no alignment runs for them.
             src = _source(self.root / folder)
-            for k in sorted(checked["lines"], key=_entry_order):
+            if "layout" in checked:  # a whole text laid by tapping along (spec 029-2): one change, one Undo
+                changes, told = _layout_changes(placed, now, src, checked["layout"], song, entry)
+                return {**self._keep_words(folder, stored, key, entry, changes, song, placed, src), **told}
+
+            def removal_first(k: str) -> tuple[int, tuple[int, int, str]]:
+                """Typed lines taken off before any is typed or brought back (a layout undone: its lines go, the
+                ones it replaced come back where they were)."""
+                want, cur = checked["lines"][k], now.get(k)
+                undo_new = (
+                    isinstance(want, dict) and "undo" in want and isinstance(cur, dict) and cur.get("prev", 0) is None
+                )
+                return (0 if typed.KEY.fullmatch(k) and (want is None or undo_new) else 1, _entry_order(k))
+
+            for k in sorted(checked["lines"], key=removal_first):
                 want = checked["lines"][k]
                 if typed.KEY.fullmatch(k):
                     changes[k] = _typed_change(placed, now, k, want, song, src, entry["removed"].get(k))
@@ -753,22 +767,45 @@ class Library:
                     changes[k]["unjoined"] = (prior or {}).get("unjoined") if joined_before else _unjoined(prior)
                 now[k] = changes[k]  # the next line of this change is placed beside it
             _check_joins(now, lines_of)
-            merged, removed = _merge_keyed(entry["lines"], entry["removed"], changes)
-            if max(len(merged), len(removed)) > WORD_FIXES_MAX:
-                raise ValueError("lines: too many lines fixed")
-            stored["words"][key] = {"lines": merged, "removed": removed, "at": time.time()}
-            for old in sorted(stored["words"], key=lambda k: stored["words"][k]["at"])[:-CORRECTIONS_KEYS]:
-                stored["words"].pop(old)  # the placements of long ago
-            rev = self._write(folder, stored)
-            with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the fix is kept whatever happens
-                lyrics.write_songbook(self.root / folder, song, placed, _this_recording(merged, src))
-            # Lines typed on another recording stay stored, never sent: this page is not their recording.
-            return {
-                "key": key,
-                "lines": _this_recording(merged, src),
-                "removed": _this_recording(removed, src),
-                "rev": rev,
-            }
+            return self._keep_words(folder, stored, key, entry, changes, song, placed, src)
+
+    def _keep_words(
+        self,
+        folder: str,
+        stored: dict[str, Any],
+        key: str,
+        entry: dict[str, Any],
+        changes: dict[str, Any],
+        song: dict[str, Any],
+        placed: dict[str, Any],
+        src: str | None,
+    ) -> dict[str, Any]:
+        """A change of the words merged into the store and written (under the caller's locks)."""
+        merged, removed = _merge_keyed(entry["lines"], entry["removed"], changes)
+        if max(len(merged), len(removed)) > WORD_FIXES_MAX:
+            raise ValueError("lines: too many lines fixed")
+        stored["words"][key] = {"lines": merged, "removed": removed, "at": time.time()}
+        for old in sorted(stored["words"], key=lambda k: stored["words"][k]["at"])[:-CORRECTIONS_KEYS]:
+            stored["words"].pop(old)  # the placements of long ago
+        rev = self._write(folder, stored)
+        with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the fix is kept whatever happens
+            lyrics.write_songbook(self.root / folder, song, placed, _this_recording(merged, src))
+        # Lines typed on another recording stay stored, never sent: this page is not their recording.
+        return {
+            "key": key,
+            "lines": _this_recording(merged, src),
+            "removed": _this_recording(removed, src),
+            "rev": rev,
+        }
+
+    def read_text(self, data: Any) -> dict[str, Any]:
+        """{"text"}: the pasted words as the library reads them (lyrics.read, every script): the lines the page
+        shows while the band taps along (spec 029-2). Nothing is written."""
+        text = data.get("text") if isinstance(data, dict) else None
+        if not isinstance(text, str) or len(text.encode("utf-8")) > WORDS_BYTES:
+            raise ValueError("text: the words of one song, 32 KB at most")
+        read = lyrics.read(text, any_script=True)
+        return {"lines": [{"text": ln.text, "tag": ln.tag or ""} for ln in read.lines], "notes": read.notes}
 
     def _commit_words(self, folder: str, notes: list[str]) -> Callable[[dict[str, Any], lyrics.Voice], None]:
         """The words placed again, written under the lock that fixing a line takes: the band's fixes of the
@@ -818,7 +855,8 @@ class Library:
         separates = self.opts.use_stems and stems_extra_installed()
         # What the library separates new songs with: the home page's "Guitar and keys apart" starts there.
         separation = new_page_model(self.opts).key
-        return {"songs": self.pages(), "jobs": jobs, "separates": separates, "separation": separation}
+        state = {"songs": self.pages(), "jobs": jobs, "separates": separates, "separation": separation}
+        return {**state, "words_model": self.words_model}
 
     def reserve(self, name: str) -> Path:
         """Where an upload goes: a safe name, unique by its stem (one page per stem), reserved
@@ -973,6 +1011,8 @@ class Library:
         """Words pasted on a song page, placed in the background: {"page": folder, "text": words}."""
         if not isinstance(data, dict):
             raise ValueError("an object with page and text")
+        if not self.words_model:
+            raise ModelOff(MODEL_OFF)
         folder = self._page(data.get("page"))
         text = data.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -1268,8 +1308,9 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
     key = data.get("key")
     if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
         raise ValueError("key: the placement the fixes belong to")
-    lines = data.get("lines")
-    if not isinstance(lines, dict) or not 0 < len(lines) <= WORD_FIXES_MAX:
+    layout = _checked_layout(data["layout"]) if "layout" in data else None
+    lines = data.get("lines", {} if layout else None)
+    if not isinstance(lines, dict) or not (0 if layout else 1) <= len(lines) <= WORD_FIXES_MAX or (layout and lines):
         raise ValueError("lines: fixes by line")
     out: dict[str, Any] = {}
     for k, v in lines.items():
@@ -1309,7 +1350,76 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(k, str) or not (LINE_INDEX.fullmatch(k) or typed.KEY.fullmatch(k)):
             raise ValueError("expect: by the index of a placed line")
         checked_expect[k] = None if v is None else _checked_word_entry(k, v)
-    return {"key": key, "lines": out, "expect": checked_expect}
+    return {"key": key, "lines": out, "expect": checked_expect, **({"layout": layout} if layout else {})}
+
+
+def _checked_layout(v: Any) -> dict[str, Any]:
+    """{"text", "taps"}: the pasted words and the beat (an index in song["beats"]) each tapped line starts on."""
+    if not isinstance(v, dict) or set(v) != {"text", "taps"}:
+        raise ValueError("layout: the words and the taps")
+    text, taps = v["text"], v["taps"]
+    if not isinstance(text, str) or len(text.encode("utf-8")) > WORDS_BYTES:
+        raise ValueError("text: the words of one song, 32 KB at most")
+    if not isinstance(taps, list) or not 0 < len(taps) <= WORD_FIXES_MAX // 2:
+        raise ValueError("taps: the beat each line starts on")
+    if not all(_number(t) and abs(t) <= 1_000_000 for t in taps):
+        raise ValueError("taps: the beat each line starts on")
+    return {"text": text, "taps": [float(t) for t in taps]}
+
+
+def _typed_key() -> str:
+    """A new typed line's key in the store (typed.KEY)."""
+    return "t" + secrets.token_hex(4)
+
+
+def _layout_changes(
+    placed: dict[str, Any],
+    now: dict[str, Any],
+    src: str | None,
+    layout: dict[str, Any],
+    song: dict[str, Any],
+    entry: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The change a layout makes: the lines the last layout of this recording laid taken off, the new ones laid
+    from the taps (typed.tapped_lines), each marked `by: "layout"`; a line sung where a line typed by hand is
+    stays off (`left`, with the lines no tap reached)."""
+    mine = _this_recording(now, src)
+    gone = [k for k, e in mine.items() if typed.KEY.fullmatch(k) and isinstance(e, dict) and e.get("by") == "layout"]
+    rest = {k: v for k, v in mine.items() if k not in gone}
+    hand = [
+        sp for ln in lyrics.apply_edits(placed, rest)["lines"]
+        if isinstance(ln, dict) and ln.get("typed") and (sp := typed.span(ln)) is not None
+    ]  # fmt: skip
+    read = lyrics.read(layout["text"], any_script=True)
+    lines = [(ln.text, (ln.tag or "")[:PART_NAME_MAX]) for ln in read.lines]
+    try:
+        laid = typed.tapped_lines(lines, layout["taps"], song)
+    except typed.TypedError as exc:
+        raise ValueError(str(exc)) from exc
+    changes: dict[str, Any] = dict.fromkeys(gone)
+    keys: list[str] = []
+    taken = set(entry["lines"]) | set(entry["removed"])
+    for ln in laid:
+        sp = typed.span(ln)
+        if sp is None or any(a < sp[1] and sp[0] < b for a, b in hand):
+            continue
+        if len(ln["words"]) > LINE_WORDS_MAX or len(ln["text"]) > WORD_TEXT_MAX:
+            raise ValueError(f"text: {LINE_WORDS_MAX} words a line at most")
+        k = _typed_key()
+        while k in taken:
+            k = _typed_key()
+        taken.add(k)
+        out_line = {"text": ln["text"], "tag": ln["tag"], "backing": ln["backing"], "check": None, "words": ln["words"]}
+        changes[k] = {
+            "typed": True,
+            "src": src,
+            "notation": ln["notation"],
+            "lines": [out_line],
+            "by": "layout",  # after "lines", as the store reads it back (the page compares the entries as JSON)
+            "prev": None,
+        }
+        keys.append(k)
+    return changes, {"laid": keys, "gone": gone, "left": len(lines) - len(keys)}
 
 
 def _unjoined(entry: Any) -> Any:
@@ -1540,6 +1650,13 @@ class LineChanged(PermissionError):
     def __init__(self, lines: list[str]) -> None:
         super().__init__("the line changed on another device")
         self.lines = lines
+
+
+MODEL_OFF = "This library does not use the speech model: type the words instead."
+
+
+class ModelOff(PermissionError):
+    """The speech model asked of a library started with --no-words-model: its own 403 (code "no-words-model")."""
 
 
 class StaleWords(PermissionError):
@@ -1909,8 +2026,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         # A line of the words fixed costs milliseconds (never the speech model): any device of the band may.
+        # /api/words-text: the pasted words read, nothing written (spec 029-2).
         paths = ("/api/live", "/api/setlist", "/api/corrections", "/api/edits", "/api/band", "/api/pitch", "/api/words")
-        if url.path in paths:
+        if url.path in paths or url.path == "/api/words-text":
             self._small_json_post(url.path)
             return
         if url.path == "/api/network":
@@ -1982,6 +2100,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(declared) if declared.isdigit() and len(declared) < 8 else -1
         limits = {"/api/live": LIVE_MAX, "/api/corrections": CORRECTIONS_BYTES, "/api/lyrics": 2 * WORDS_BYTES}
         limits |= {"/api/edits": CORRECTIONS_BYTES, "/api/words": CORRECTIONS_BYTES, "/api/bars": 4096}
+        limits |= {"/api/words-text": 2 * WORDS_BYTES}
         limits |= {"/api/band": 4096, "/api/network": 4096, "/api/pitch": 4096}
         limit = limits.get(path, SETLIST_BYTES)
         chunked = "chunked" in self.headers.get("Transfer-Encoding", "").lower()
@@ -2018,6 +2137,8 @@ class Handler(BaseHTTPRequestHandler):
                 saved = self.server.library.set_words(data)
                 self.server.live.corrected(data["page"], saved["rev"])  # every device reads the words again
                 self._json(HTTPStatus.OK, saved)
+            elif path == "/api/words-text":
+                self._json(HTTPStatus.OK, self.server.library.read_text(data))
             elif path == "/api/band":
                 saved = self.server.library.set_band(data)
                 self.server.live.corrected(data["page"], saved["rev"])  # every device reads the song again
@@ -2038,6 +2159,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, self.server.main.network_state())
             else:
                 self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
+        except ModelOff as exc:  # not the 409 of the PermissionErrors below, nor the token's 403
+            self._json(HTTPStatus.FORBIDDEN, {"error": str(exc), "code": "no-words-model"})
         except NotLeader as exc:
             self._json(HTTPStatus.CONFLICT, {"error": str(exc), "state": exc.state})  # the body was read
         except LineChanged as exc:  # the page says which line, in its words
@@ -2395,6 +2518,7 @@ def serve(
     open_browser: bool = True,
     uploads_from_network: bool = False,
     tls: tuple[Path, Path] | None = None,
+    words_model: bool = True,
 ) -> None:
     import webbrowser
 
@@ -2429,6 +2553,7 @@ def serve(
     server: AppServer | None = None
     try:  # a stop at any point, start included, leaves the songs in progress to resume
         library = Library(root, opts)
+        library.words_model = words_model
         try:
             server = AppServer(library, host, port, uploads_from_network, tls=secure)
         except OSError as exc:

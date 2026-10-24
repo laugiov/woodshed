@@ -127,6 +127,13 @@ def app_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--offline", action="store_true", help="never download models")
     parser.add_argument(
+        "--no-words-model",
+        action="store_true",
+        default=os.environ.get("WOODSHED_NO_WORDS_MODEL") == "1",
+        help="never offer the speech model that places the words (non-commercial licence): the band types or taps "
+        "them in (also WOODSHED_NO_WORDS_MODEL=1)",
+    )
+    parser.add_argument(
         "--allow-network", action="store_true",
         help="needed with a --host other than this computer: anyone who reaches the port can use the library",
     )  # fmt: skip
@@ -164,6 +171,7 @@ def run_app(argv: Sequence[str]) -> int:
         serve(
             args.library, opts, args.host, args.port, open_browser=not args.no_open,
             uploads_from_network=args.uploads_from_network, tls=(args.cert, args.key) if args.cert else None,
+            words_model=not args.no_words_model,
         )  # fmt: skip
     except KeyboardInterrupt:
         print("woodshed app: stopped", file=sys.stderr)
