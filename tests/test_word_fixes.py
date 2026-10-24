@@ -19,7 +19,7 @@ import pytest
 from tests.test_app import request
 from tests.test_band import post
 from tests.test_lyrics import LABELS, song, voice
-from woodshed import app, build, cli, lyrics, stems
+from woodshed import app, build, cli, corrections, lyrics, stems
 from woodshed.fnv import fnv1a
 from woodshed.run import Options
 
@@ -746,7 +746,7 @@ def test_the_app_waits_for_the_command_line_and_keeps_its_write(
 def test_a_write_that_cannot_get_the_corrections_says_so(
     library: app.AppServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(app, "LOCK_WAIT", 0.3)
+    monkeypatch.setattr(corrections, "LOCK_WAIT", 0.3)
     path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
     held, done = threading.Event(), threading.Event()
 

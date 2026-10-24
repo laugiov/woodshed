@@ -17,7 +17,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from woodshed import __version__, exports, theory
+from woodshed import __version__, corrections, exports, theory
 from woodshed import song as song_json
 from woodshed import tracks as track_files
 from woodshed.analysis import REVISION as ANALYSIS_REVISION
@@ -144,10 +144,8 @@ def _keep_lyrics(old: Path, new: Path, song_data: dict[str, Any], source: Path) 
         return
     # The songbook file with the words and the band's fixes of them (a library's page keeps its placement,
     # so its fixes); the words are kept whatever happens to it.
-    with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError):
-        from woodshed.app import page_fixes
-
-        exports.write_chordpro(song_data, new / "exports", lyrics.apply_edits(data, page_fixes(old, data)))
+    with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, WoodshedError):
+        corrections.songbook_of(old, song_data, data, new / "exports")
 
 
 def upgraded(data: dict[str, Any]) -> dict[str, Any]:

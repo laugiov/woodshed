@@ -7,6 +7,7 @@ window and Undo names a line by its index in the placement. The speech model is 
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from tests.test_word_fixes import (
     fix,
     hand,
     library,  # noqa: F401  (the fixture)
+    placement,
     read,
     starts_sung,
     stored,
@@ -384,3 +386,184 @@ def test_a_rebuild_keeps_the_fixes_in_the_songbook_file(
         if "radio" in r or "forgot" in r
     ]
     assert len(rows) == 2
+
+
+# An older woodshed on the same library (0.5.1, PR A): it reads one-line fixes only and writes back what it read,
+# keeping a section it does not know as it is. A split or a join must survive it, and never show words twice.
+
+
+def older_entry(k: str, v: Any) -> dict[str, Any]:
+    """How woodshed 0.5.1 reads a fix of the words (app._checked_word_entry there): one line, or not sung."""
+    if not isinstance(v, dict) or not isinstance(v.get("was"), str):
+        raise ValueError("a line fix")
+    if set(v) == {"was", "gone"} and v["gone"] == "not-sung":
+        return {"was": v["was"], "gone": "not-sung"}
+    if not set(v) <= {"was", "lines", "voice"} or len(v) < 2 or v.get("voice", "other") != "other":
+        raise ValueError("a line fix")
+    out: dict[str, Any] = {"was": v["was"]}
+    if "lines" in v:
+        if not isinstance(v["lines"], list) or len(v["lines"]) != 1:
+            raise ValueError("lines: one line")
+        line = v["lines"][0]
+        out["lines"] = [
+            {
+                "text": line["text"],
+                "backing": list(line.get("backing", [])),
+                "words": [{"text": w["text"], "start": w["start"], "end": w["end"]} for w in line["words"]],
+                "check": line.get("check"),
+            }
+        ]
+    if "voice" in v:
+        out["voice"] = "other"
+    return out
+
+
+def older_read(path: Path) -> dict[str, Any]:
+    """The words section as woodshed 0.5.1 reads it: an entry it cannot read is skipped (a removed one, None)."""
+    out: dict[str, Any] = {}
+    for key, entry in json.loads(path.read_text(encoding="utf-8")).get("words", {}).items():
+        lines, removed = {}, {}
+        for k, v in entry.get("lines", {}).items():
+            with contextlib.suppress(ValueError, KeyError, TypeError, AttributeError):
+                lines[k] = older_entry(k, v)
+        for k, v in entry.get("removed", {}).items():
+            try:
+                removed[k] = None if v is None else older_entry(k, v)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                removed[k] = None
+        out[key] = {"lines": lines, "removed": removed, "at": entry.get("at", 0)}
+    return out
+
+
+def older_write(path: Path, words: dict[str, Any]) -> None:
+    """woodshed 0.5.1 saving anything (a chord pick): every section it does not know kept as it is, `words` as it
+    read it."""
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["rev"] = body.get("rev", 0) + 1
+    body["words"] = words
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+
+def sung_words(data: dict[str, Any], entries: dict[str, Any]) -> list[str]:
+    return [w["text"] for ln in lyrics.apply_edits(data, entries)["lines"] if ln["sung"] for w in ln["words"]]
+
+
+def test_a_split_and_a_join_survive_an_older_woodshed_and_it_never_shows_words_twice(
+    library: app.AppServer,  # noqa: F811
+) -> None:
+    fix(library, {"0": {"text": "morning comes in\non the harbour road"}})
+    _, answer = fix(library, {"1": {"text": LINES[1] + " " + LINES[2]}, "2": {"gone": "joined"}})
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    old = older_read(path)
+    seen = old[key]["lines"]
+    # The older woodshed shows the split line's first row, and the joined line once (the line it took in, not sung).
+    assert seen["0"]["lines"][0]["text"] == "morning comes in" and seen["2"]["gone"] == "not-sung"
+    shown = sung_words(placement(library), seen)
+    assert shown.count("hold") == 2 and shown.count("radio") == 1  # LINES[2] sings "hold" twice, once here
+    older_write(path, old)  # it saves a chord: words written back as it read them
+    assert read(library)["words"]["lines"] == answer["lines"]  # this version reads the split and the join again
+
+
+def test_what_an_older_woodshed_changed_wins_over_the_split_it_could_not_read(
+    library: app.AppServer,  # noqa: F811
+) -> None:
+    fix(library, {"0": {"text": "morning comes in\non the harbour road"}})
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    old = older_read(path)
+    old[key]["lines"]["0"]["lines"][0]["text"] = "morning comes in on the harbor road"  # fixed on the older one
+    older_write(path, old)
+    got = read(library)["words"]["lines"]["0"]
+    assert [ln["text"] for ln in got["lines"]] == ["morning comes in on the harbor road"]  # its fix, not the rows
+
+
+def test_an_entry_this_version_cannot_read_is_kept_for_the_next_one(library: app.AppServer) -> None:  # noqa: F811
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    future = {"was": LINES[3], "lines": [], "sung_by": "the drummer"}  # a newer woodshed's shape
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"rev": 1, "words": {key: {"lines": {"3": future}, "removed": {}, "at": 1}}}))
+    assert read(library)["words"]["lines"] == {}  # not shown
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    assert stored(library)["words"][key]["lines"]["3"] == future  # nor dropped
+    fix(library, {"3": {"text": "We are only halfway through the night!"}})  # a fix of that line here replaces it
+    assert stored(library)["words"][key]["lines"]["3"]["lines"][0]["text"] == "We are only halfway through the night!"
+
+
+# A re-paste that puts a line between a joined pair: the join cannot stand, and never hides the wrong line.
+
+
+def test_a_line_pasted_between_a_joined_pair_leaves_the_join_out_whole() -> None:
+    old, v_old = place_on(LINES)
+    own = lyrics.joined(old["lines"], 1, 1)
+    lines = lyrics.edited_lines(old, {"2": {"was": LINES[2], "gone": "joined"}})
+    (line,) = lyrics.place_pieces(v_old, lines, 1, [LINES[1] + " " + LINES[2]], CHART, own)
+    entries = {"1": {"was": LINES[1], "lines": [line]}, "2": {"was": LINES[2], "gone": "joined"}}
+    new, v_new = place_on([LINES[0], LINES[1], "a line pasted in between", LINES[2], LINES[3]])
+    carried, left = lyrics.carry_edits(old, new, entries, v_new, CHART)
+    assert carried == {} and left == 2  # "a line pasted in between" is never taken as the joined line
+
+
+# Back to the placement on a joined row: the line it went to gets back the fix it had before the join.
+
+
+def test_taking_back_a_join_from_its_row_gives_the_line_its_fix_from_before(library: app.AppServer) -> None:  # noqa: F811
+    _, before = fix(library, {"1": {"text": "The radio hums what the night forgot!"}})
+    fix(library, {"1": {"text": "The radio hums what the night forgot! " + LINES[2]}, "2": {"gone": "joined"}})
+    status, answer = fix(library, {"2": None})  # Back to the placement, from the joined row
+    assert status == 200, answer
+    assert answer["lines"] == {"1": before["lines"]["1"]}  # the join gone, the earlier fix of line 2 back
+    fix(library, {"1": None})
+    fix(library, {"1": {"text": LINES[1] + " " + LINES[2]}, "3": {"text": LINES[3] + "!"}, "2": {"gone": "joined"}})
+    _, answer = fix(library, {"2": None})
+    assert set(answer["lines"]) == {"3"}  # line 2 had no fix before its join: the placement's
+
+
+# The layers: the corrections file is read and written by its own module, and a rebuild writes the songbook
+# holding its lock.
+
+
+def test_the_build_reads_the_corrections_without_the_app() -> None:
+    build_source = (Path(lyrics.__file__).parent / "build.py").read_text(encoding="utf-8")
+    assert "woodshed.app" not in build_source and "import app" not in build_source
+    from woodshed import corrections
+
+    assert app.read_corrections is corrections.read_corrections and app.corrections_lock is corrections.corrections_lock
+
+
+def test_a_rebuild_writes_the_songbook_holding_the_corrections_lock(
+    songbook: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import threading
+    import time
+
+    from woodshed import build
+
+    lib, cho, chart, _ = songbook
+    monkeypatch.setattr(stems, "fingerprint", lambda path: "abc")
+    old = lib.root / PAGE
+    key = lyrics.words_key(json.loads((old / lyrics.LYRICS).read_text(encoding="utf-8")))
+    lib.set_words({"page": PAGE, "key": key, "lines": {"1": {"text": "the radio hums\nwhat the night forgot"}}})
+    path = lib.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    holding = threading.Event()
+
+    def phone() -> None:  # the app saves a fix meanwhile: the rebuild waits for it, then writes it too
+        with app.corrections_lock(path):
+            holding.set()
+            time.sleep(1.0)
+            stored_now = app.read_corrections(path)
+            stored_now["words"][key]["lines"].pop("1")
+            app.write_corrections(path, stored_now)
+
+    t = threading.Thread(target=phone)
+    t.start()
+    assert holding.wait(5)
+    new = tmp_path / "rebuilt"
+    (new / "exports").mkdir(parents=True)
+    started = time.monotonic()
+    build._keep_lyrics(old, new, chart, old / "index.html")
+    t.join(5)
+    assert time.monotonic() - started > 0.5
+    rows = [r for r in (new / "exports" / cho.name).read_text(encoding="utf-8").splitlines() if "forgot" in r]
+    assert len(rows) == 1 and "radio" in rows[0]  # the fix taken back while it waited: one row again

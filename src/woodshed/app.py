@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -44,10 +44,25 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import __version__, audio, build, lyrics, pitch, stems
-from woodshed import chords as chord_grammar
+from woodshed import __version__, audio, build, corrections, lyrics, pitch, stems
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
+from woodshed.corrections import (
+    CORRECTIONS_KEYS,
+    EDITS_BARS_MAX,
+    EDITS_PARTS_MAX,
+    LINE_INDEX,
+    LINE_PIECES_MAX,
+    LINE_WORDS_MAX,
+    UNSAFE,
+    WORD_FIXES_MAX,
+    WORD_TEXT_MAX,
+    WORDS_BYTES,
+    _checked_band,
+    _checked_corrections,
+    _checked_edits,
+    _checked_word_entry,
+)
 from woodshed.errors import WoodshedError
 from woodshed.fnv import fnv1a as _fnv1a
 from woodshed.run import (
@@ -64,6 +79,13 @@ from woodshed.run import (
 )
 from woodshed.tls import Tls
 
+# The corrections file, read and written by its own module (woodshed.corrections), named here as before.
+CORRECTIONS_DIR = corrections.CORRECTIONS_DIR
+CORRECTIONS_MAX = corrections.CORRECTIONS_MAX
+corrections_lock = corrections.corrections_lock
+read_corrections = corrections.read_corrections
+write_corrections = corrections.write_corrections
+
 MAX_UPLOAD = 2 * 1024**3  # 2 GB: a long video
 FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
 CHUNK = 1024 * 1024
@@ -74,32 +96,8 @@ LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
 SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
-CORRECTIONS_MAX = 2000  # chords picked by ear on one page: more than any song has doubts
 CORRECTIONS_BYTES = 64 * 1024
-WORDS_BYTES = 32 * 1024  # the pasted words of one song: a long song is 3 KB
 DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a huge one is not
-QUALITIES = ("", "m", "7", "m7")
-CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
-CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
-KNOWN_SECTIONS = {"rev", "by_key", "band", "edits", "words"}  # of a corrections file; any other is kept as it is
-LOCK_WAIT = 10.0  # seconds a write waits for another woodshed (the app, `woodshed lyrics`) writing the same file
-NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
-DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
-# The band's typed chords and part names (core/edits.js), by the beat they start on.
-EDITS_BARS_MAX = 1000
-EDITS_PARTS_MAX = 200
-EDIT_CHORDS_MAX = 64  # chords in one typed bar
-LABEL_MAX = 24
-PART_NAME_MAX = 40  # code points
-BEAT_INDEX = re.compile(r"0|-?[1-9][0-9]{0,5}")  # one spelling a beat: no 007, no -0
-UNSAFE = re.compile("[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]")  # control and direction overrides
-KEY_NAME = re.compile(r"[A-G][#b]?m?")  # a key as the page names it, written by the device that chose it
-# The band's fixes of the words on the sheet (spec 028), by the index of the line in lyrics.json.
-LINE_INDEX = re.compile(r"0|[1-9][0-9]{0,3}")
-WORD_FIXES_MAX = 500  # lines fixed on one placement: more than any song has lines
-WORD_TEXT_MAX = 200  # code points of one line
-LINE_WORDS_MAX = 40
-LINE_PIECES_MAX = 4  # a line split on the sheet: four lines at most, and as many lines joined into one
 VOICES_KEPT = 2  # pages whose voice heard before is kept in memory for fixing lines (about a megabyte each)
 TYPES = {
     ".flac": "audio/flac",
@@ -652,9 +650,30 @@ class Library:
             asked = sorted(checked["lines"], key=int)
             if any(int(k) >= len(lines_of) for k in asked):
                 raise ValueError("lines: by the index of a placed line")
+            # A joined line taken back (from its row) takes back the whole join: the line it went to gets the fix it
+            # had before (spec 028 B), the other lines joined into it are the placement's again.
+            for k in asked:
+                was = entry["lines"].get(k)
+                if checked["lines"][k] is None and isinstance(was, dict) and was.get("gone") == "joined":
+                    base = int(k) - 1
+                    while (entry["lines"].get(str(base)) or {}).get("gone") == "joined":
+                        base -= 1
+                    if str(base) in checked["lines"]:
+                        continue
+                    before = (entry["lines"].get(str(base)) or {}).get("unjoined")
+                    changes[str(base)] = before
+                    for j in _held_by(entry["lines"], base):
+                        changes[str(j)] = None
+            for k, v in changes.items():
+                if v is None:
+                    now.pop(k, None)
+                else:
+                    now[k] = v
             # First what holds no words to place (taken back, out of this recording, another voice, joined into
             # the line before): the new words are then placed with every line around them as it will be.
             for k in asked:
+                if k in changes:
+                    continue
                 i, want = int(k), checked["lines"][k]
                 own = lines_of[i]
                 if want is None or ("text" in want and want["text"] == own.get("text") and "voice" not in want):
@@ -692,6 +711,10 @@ class Library:
                 )
                 other = {"voice": "other"} if "voice" in want else {}
                 changes[k] = {"was": own["text"], "lines": pieces, **other}
+                if held:  # lines joined into it: the fix it had before the first of them, for taking the join back
+                    prior = entry["lines"].get(k)
+                    joined_before = bool(_held_by(entry["lines"], i))
+                    changes[k]["unjoined"] = (prior or {}).get("unjoined") if joined_before else _unjoined(prior)
                 now[k] = changes[k]  # the next line of this change is placed beside it
             _check_joins(now, lines_of)
             merged, removed = _merge_keyed(entry["lines"], entry["removed"], changes)
@@ -1127,265 +1150,6 @@ def _merge_keyed(
     return merged, gone
 
 
-def _checked_edits(data: Any, removals: bool = False) -> dict[str, Any]:
-    """{"key", "bars", "parts"} as core/edits.js writes them; with `removals`, null takes an entry back."""
-    key = data.get("key")
-    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
-        raise ValueError("key: the beat grid the edits belong to")
-    bars, parts = data.get("bars", {}), data.get("parts", {})
-    if (
-        not isinstance(bars, dict)
-        or len(bars) > EDITS_BARS_MAX
-        or not isinstance(parts, dict)
-        or len(parts) > EDITS_PARTS_MAX
-    ):
-        raise ValueError("edits: typed bars and parts by beat")
-    out: dict[str, Any] = {"key": key, "bars": {}, "parts": {}}
-    for at, bar in bars.items():
-        if not BEAT_INDEX.fullmatch(at):
-            raise ValueError("bars: by the beat they start on")
-        if bar is None and removals:
-            out["bars"][at] = None
-            continue
-        chords = bar.get("chords") if isinstance(bar, dict) else None
-        t = bar.get("t") if isinstance(bar, dict) else None
-        if not isinstance(chords, list) or not 0 < len(chords) <= EDIT_CHORDS_MAX:
-            raise ValueError("bars: chords as [beats, label]")
-        if not isinstance(t, (int, float)) or isinstance(t, bool) or not 0 <= t < 86400:
-            raise ValueError("bars: the time of the bar")
-        kept: list[list[Any]] = []
-        total = 0
-        for chord in chords:
-            n, label = chord if isinstance(chord, list) and len(chord) == 2 else (None, None)
-            if type(n) is not int or not 0 < n <= EDIT_CHORDS_MAX:
-                raise ValueError("bars: chords as [beats, label]")
-            if (
-                not isinstance(label, str)
-                or len(label) > LABEL_MAX
-                or isinstance(chord_grammar.parse(label), chord_grammar.Refusal)
-            ):
-                raise ValueError("bars: chords as written on a chart")
-            kept.append([n, label])
-            total += n
-        if total > EDIT_CHORDS_MAX:
-            raise ValueError("bars: one bar's beats at most")
-        out["bars"][at] = {"chords": kept, "t": float(t)}
-    for at, part in parts.items():
-        if not BEAT_INDEX.fullmatch(at):
-            raise ValueError("parts: by the beat they start on")
-        if part is None and removals:
-            out["parts"][at] = None
-        elif part == {"join": True}:
-            out["parts"][at] = {"join": True}
-        elif isinstance(part, dict) and set(part) == {"name"} and isinstance(part["name"], str):
-            name = UNSAFE.sub("", part["name"]).strip()
-            if not name or len(part["name"]) > PART_NAME_MAX:
-                raise ValueError("parts: a name of 1 to 40 characters")
-            out["parts"][at] = {"name": name}
-        else:
-            raise ValueError("parts: a name or a join")
-    return out
-
-
-def _checked_band(data: Any) -> dict[str, Any]:
-    """{"transpose", "key", "note"}, each optional: the band's key for a song and the leader's note."""
-    if not isinstance(data, dict):
-        raise ValueError("band: a JSON object")
-    out: dict[str, Any] = {}
-    if "transpose" in data:
-        t = data["transpose"]
-        if type(t) is not int or not -6 <= t <= 6:
-            raise ValueError("transpose: -6 to 6 semitones")
-        out["transpose"] = t
-    if "key" in data:
-        if not isinstance(data["key"], str) or not KEY_NAME.fullmatch(data["key"]):
-            raise ValueError("key: a key name such as Eb or F#m")
-        out["key"] = data["key"]
-    if "note" in data:
-        note = data["note"]
-        if not isinstance(note, str) or len(note) > NOTE_MAX:
-            raise ValueError(f"note: text, {NOTE_MAX} characters at most")
-        out["note"] = " ".join(note.split())  # one line in the set list
-    return out
-
-
-def _checked_removed(data: Any) -> dict[str, list[Any] | None]:
-    """Removals as kept in the file: the fix each doubt had when it went back to the analysis."""
-    out: dict[str, list[Any] | None] = {}
-    if isinstance(data, list):  # an early form: ids only
-        data = dict.fromkeys(data)
-    for doubt, fix in data.items() if isinstance(data, dict) else []:
-        if not isinstance(doubt, str) or not DOUBT_ID.fullmatch(doubt):
-            continue
-        valid = (
-            isinstance(fix, list)
-            and len(fix) == 2
-            and type(fix[0]) is int
-            and 0 <= fix[0] <= 11
-            and fix[1] in QUALITIES
-        )
-        out[doubt] = list(fix) if valid else None
-    return out
-
-
-def _checked_corrections(data: Any, removals: bool = False) -> dict[str, Any]:
-    """{"key", "fixes"} as a page writes them: chords (pitch class, quality) by doubt id; with
-    `removals`, null for a doubt taken back to the analysis."""
-    key, fixes = data.get("key"), data.get("fixes")
-    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", key):
-        raise ValueError("key: the analysis the corrections belong to")
-    if not isinstance(fixes, dict) or len(fixes) > CORRECTIONS_MAX:
-        raise ValueError("fixes: chords by doubt id")
-    for doubt, fix in fixes.items():
-        if removals and fix is None and DOUBT_ID.fullmatch(doubt):
-            continue
-        if not DOUBT_ID.fullmatch(doubt) or not isinstance(fix, list) or len(fix) != 2:
-            raise ValueError("fixes: [pitch class, quality] by doubt id")
-        pc, quality = fix
-        if type(pc) is not int or not 0 <= pc <= 11 or quality not in QUALITIES:
-            raise ValueError("fixes: [pitch class, quality] by doubt id")
-    return {"key": key, "fixes": {k: None if v is None else list(v) for k, v in fixes.items()}}
-
-
-def read_corrections(path: Path) -> dict[str, Any]:
-    """What the library holds for a page (`.corrections/<page>.json`); an entry damaged by hand is skipped, the
-    others kept, and a section this version does not know (a newer woodshed's) kept as it is for the next write."""
-    out: dict[str, Any] = {"rev": 0, "by_key": {}, "at": {}, "band": {}, "removed": {}, "edits": {}, "words": {}}
-    out["other"] = {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return out
-    if not isinstance(data, dict):
-        return out
-    out["other"] = {k: v for k, v in data.items() if k not in KNOWN_SECTIONS}
-    # A known section in a shape this version cannot read is kept as it is too, not dropped by the next write.
-    out["other"] |= {k: data[k] for k in ("by_key", "edits", "words") if k in data and not isinstance(data[k], dict)}
-    rev = data.get("rev")
-    out["rev"] = rev if type(rev) is int and rev >= 0 else 0
-    try:
-        out["band"] = _checked_band(data.get("band") or {})
-    except ValueError:
-        out["other"]["band"] = data["band"]
-    entries = data.get("by_key")
-    for key, entry in entries.items() if isinstance(entries, dict) else []:
-        try:
-            out["by_key"][key] = _checked_corrections({"key": key, "fixes": entry["fixes"]})["fixes"]
-            out["at"][key] = float(entry.get("at", 0))
-            gone = entry.get("removed", {})
-            out["removed"][key] = _checked_removed(gone)
-        except (ValueError, KeyError, TypeError, AttributeError):
-            continue
-    kept = data.get("edits")
-    for key, entry in kept.items() if isinstance(kept, dict) else []:
-        try:
-            checked = _checked_edits({"key": key, "bars": entry["bars"], "parts": entry["parts"]})
-            gone = _checked_edits(
-                {"key": key, "bars": entry["removed_bars"], "parts": entry["removed_parts"]}, removals=True
-            )
-            out["edits"][key] = {
-                "bars": checked["bars"],
-                "parts": checked["parts"],
-                "removed_bars": gone["bars"],
-                "removed_parts": gone["parts"],
-                "at": float(entry.get("at", 0)),
-            }
-        except (ValueError, KeyError, TypeError, AttributeError):
-            continue
-    fixed = data.get("words")
-    for key, entry in fixed.items() if isinstance(fixed, dict) else []:
-        if not isinstance(entry, dict) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", str(key)):
-            continue
-        lines: dict[str, Any] = {}
-        removed: dict[str, Any] = {}
-        for k, v in entry.get("lines", {}).items() if isinstance(entry.get("lines"), dict) else []:
-            with contextlib.suppress(ValueError, KeyError, TypeError, AttributeError):
-                lines[k] = _checked_word_entry(k, v)  # one damaged by hand is skipped, the others kept
-        for k, v in entry.get("removed", {}).items() if isinstance(entry.get("removed"), dict) else []:
-            if isinstance(k, str) and LINE_INDEX.fullmatch(k):
-                try:
-                    removed[k] = None if v is None else _checked_word_entry(k, v)
-                except (ValueError, KeyError, TypeError, AttributeError):
-                    removed[k] = None
-        at = entry.get("at", 0)
-        out["words"][key] = {"lines": lines, "removed": removed, "at": float(at) if _number(at) else 0.0}
-    return out
-
-
-@contextlib.contextmanager
-def corrections_lock(path: Path) -> Iterator[None]:
-    """One writer at a time for a page's corrections, across processes: the library app and `woodshed lyrics` on
-    the same library read, change and write the file inside it (a lock file beside it, locked by the system and let
-    go if the process dies). A writer that waits LOCK_WAIT seconds in vain is refused with a sentence."""
-    path.parent.mkdir(exist_ok=True)
-    with path.with_name(path.name + ".lock").open("a+b") as fh:
-        deadline = time.monotonic() + LOCK_WAIT
-        while not _lock_file(fh):
-            if time.monotonic() > deadline:
-                raise WoodshedError("another woodshed is writing the corrections of this song: try again")
-            time.sleep(0.05)
-        try:
-            yield
-        finally:
-            _unlock_file(fh)
-
-
-def _lock_file(fh: Any) -> bool:
-    try:
-        if sys.platform == "win32":
-            import msvcrt
-
-            fh.seek(0)
-            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        return False
-    return True
-
-
-def _unlock_file(fh: Any) -> None:
-    if sys.platform == "win32":
-        import msvcrt
-
-        fh.seek(0)
-        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-
-
-def write_corrections(path: Path, stored: dict[str, Any], seen: int = 0) -> int:
-    """A page's corrections and band choices written whole (`stored` as read_corrections gives it), with the next
-    revision (past `seen`, the last one this library told). Every section is written back, a newer woodshed's too."""
-    rev: int = max(stored["rev"], seen) + 1  # kept in the file: grows across restarts
-    body: dict[str, Any] = dict(stored.get("other") or {})
-    body["rev"] = rev
-    if stored["by_key"] or "by_key" not in body:  # one this version could not read is kept until it has its own
-        body["by_key"] = {
-            k: {
-                "fixes": v,
-                "at": stored["at"][k],
-                **({"removed": r} if (r := stored["removed"].get(k)) else {}),
-            }
-            for k, v in stored["by_key"].items()
-        }
-    for name in ("band", "edits", "words"):
-        if stored.get(name):
-            body[name] = stored[name]
-    path.parent.mkdir(exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}")
-    try:
-        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        tmp.replace(path)
-    finally:
-        tmp.unlink(missing_ok=True)
-    return rev
-
-
 def carry_fixes(
     stored: dict[str, Any],
     old: dict[str, Any] | None,
@@ -1448,20 +1212,6 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
     return commit
 
 
-def page_fixes(page: Path, data: dict[str, Any]) -> dict[str, Any]:
-    """The band's fixes of the words of a page of a library (its corrections file), for the placement `data`:
-    a rebuild writes the songbook file with them (build._keep_lyrics)."""
-    path = page.parent / CORRECTIONS_DIR / f"{page.name}.json"
-    if not path.is_file():
-        return {}
-    fixed: dict[str, Any] = read_corrections(path)["words"].get(lyrics.words_key(data), {}).get("lines", {})
-    return fixed
-
-
-def _number(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-
-
 def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
     """{"key", "lines"} as the line editor sends them (core/wordedits.js): by line index, new words (with
     "voice": "other" for another voice), {"gone": "not-sung"}, or null to take a line back. No times:
@@ -1504,48 +1254,11 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
     return {"key": key, "lines": out, "expect": checked_expect}
 
 
-def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
-    """A fix of the words as the library keeps it: the placement's text (`was`), then the line's words and
-    times placed by the library, another voice, or not in this recording."""
-    if not isinstance(k, str) or not LINE_INDEX.fullmatch(k) or not isinstance(v, dict):
-        raise ValueError("a line fix by index")
-    was = v.get("was")
-    if not isinstance(was, str) or len(was) > 4 * WORDS_BYTES:
-        raise ValueError("was: the placement's text")
-    if set(v) == {"was", "gone"} and v["gone"] in ("not-sung", "joined"):
-        return {"was": was, "gone": v["gone"]}
-    if not set(v) <= {"was", "lines", "voice"} or len(v) < 2 or v.get("voice", "other") != "other":
-        raise ValueError("a line fix")
-    out: dict[str, Any] = {"was": was}
-    if "lines" in v:
-        fixed = v["lines"]
-        if not isinstance(fixed, list) or not 0 < len(fixed) <= LINE_PIECES_MAX:  # more than one: a split
-            raise ValueError("lines: one to four lines")
-        out["lines"] = []
-        for line in fixed:
-            text, words, check, backing = line["text"], line["words"], line.get("check"), line.get("backing", [])
-            if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or not isinstance(words, list):
-                raise ValueError("lines: words")
-            if not 0 < len(words) <= LINE_WORDS_MAX or not (
-                check is None or (isinstance(check, str) and len(check) < 200)
-            ):
-                raise ValueError("lines: words")
-            if not isinstance(backing, list) or not all(
-                isinstance(b, str) and len(b) <= WORD_TEXT_MAX for b in backing
-            ):
-                raise ValueError("lines: backing vocals")
-            kept = []
-            for w in words:
-                start, end = w["start"], w["end"]
-                timed = _number(start) and _number(end) and 0 <= start <= end < 86400
-                text_ok = isinstance(w["text"], str) and len(w["text"]) <= WORD_TEXT_MAX
-                if not text_ok or not (timed or start is end is None):
-                    raise ValueError("lines: words in time")
-                kept.append({"text": w["text"], "start": start, "end": end})
-            out["lines"].append({"text": text, "backing": list(backing), "words": kept, "check": check})
-    if "voice" in v:
-        out["voice"] = "other"
-    return out
+def _unjoined(entry: Any) -> Any:
+    """A line's fix as it was before lines were joined into it: its own words (none of another join)."""
+    if not isinstance(entry, dict) or "lines" not in entry:
+        return entry if isinstance(entry, dict) else None
+    return {k: v for k, v in entry.items() if k != "unjoined"}
 
 
 def _held_by(entries: dict[str, Any], i: int) -> list[int]:
