@@ -88,7 +88,8 @@
       const r = await send(was.change, was.expect); // refused when another device changed the line since
       if (!r.ok) {
         if (r.status === 0) undo = was; // offline: it may be tried again
-        app.toast(refused(r));
+        // Refused (another device changed the line, the words placed again): the page as the band has it, one tap.
+        app.toast(refused(r), r.status === 0 ? undefined : { label: W.t("Reload"), run: () => location.reload() });
       }
       store.set({ corrections: store.get().corrections + 1 });
       const el = was.n === null ? null : lineEl(was.n);

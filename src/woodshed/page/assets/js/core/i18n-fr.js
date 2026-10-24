@@ -875,6 +875,7 @@
     "The words were placed again: reload the page.": "Les paroles ont été placées de nouveau : recharge la page.",
     "the words were placed again: reload the page": "les paroles ont été placées de nouveau : recharge la page",
     "the line changed on another device": "la ligne a été modifiée sur un autre appareil",
+    "another woodshed is writing the corrections of this song: try again": "un autre woodshed écrit les corrections de ce morceau : réessaie",
     "Reload": "Recharger",
     "Edit chords and words": "Modifier accords et paroles",
     "Click a line to fix its words, a chord to type its bar.": "Clique sur une ligne pour corriger ses paroles, sur un accord pour taper sa mesure.",

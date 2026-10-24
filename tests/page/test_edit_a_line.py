@@ -553,6 +553,7 @@ def test_undo_leaves_another_devices_fix_as_it_is(browser: Browser, served: app.
     expect(line(page, 0)).to_contain_text("roads")
     page.get_by_test_id("words-undo").click()  # this device's Undo, kept in the strip
     expect(page.get_by_test_id("toast")).to_contain_text("changed on another device: Undo leaves it as it is.")
+    expect(page.get_by_test_id("toast-action")).to_have_text("Reload")  # the page as the band has it, in one tap
     expect(line(page, 0)).to_contain_text("roads")
     assert problems == []
 
