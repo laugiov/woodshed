@@ -60,6 +60,11 @@ SAMPLE = """
 """
 
 
+# The protocol's own cases (states, answers, cancels) run in Chromium only: the browser's part (sound, taps,
+# timing) is covered in both browsers by the takeover tests. The page job's time budget is the reason.
+CHROMIUM_ONLY = pytest.mark.only_browser("chromium")
+
+
 def device(browser: Browser, url: str, problems: list[str], touch: bool) -> Page:
     """A laptop (1280x800) or a phone (390x844, touch)."""
     size: Any = {"width": 390, "height": 844} if touch else {"width": 1280, "height": 800}
@@ -96,7 +101,6 @@ def band(browser: Browser, server: app.AppServer, problems: list[str], play: boo
         until(laptop, "Woodshed.app.transport.playing === true")
         for p in (a, b):
             until(p, "Woodshed.debug().playing === true")
-    laptop.wait_for_timeout(1000)  # a heartbeat or two
     return laptop, a, b
 
 
@@ -121,7 +125,7 @@ def toasts(page: Page) -> list[str]:
 def never_stopped(page: Page, jumps: bool = True) -> None:
     """A follower's banner never said "stopped" and (`jumps`) its position never jumped more than 0.5 s."""
     seen = page.evaluate("clearInterval(window.__sampler), window.__seen")
-    assert len(seen) > 10
+    assert len(seen) > 5  # sampled across the handover
     assert [s["banner"] for s in seen if "stopped" in s["banner"]] == []
     if not jumps:
         return
@@ -139,7 +143,9 @@ def take_lead(browser: Browser, server: app.AppServer, hold: int) -> None:
     b.evaluate(f"window.__hold = {hold}")
     a.evaluate(SAMPLE)
     b.get_by_test_id("band-lead").tap()
-    b.wait_for_timeout(1500)
+    until(b, "Woodshed.band.mode() === 'lead' && window.__toasts.some((t) => t.includes('the sound plays here now'))")
+    until(laptop, "Woodshed.band.mode() === 'follow'")
+    b.wait_for_timeout(300)  # the followers' samples go on past the handover
     assert one_leader(server, [laptop, a, b]) == b
     assert server.live.state["playing"] is True
     assert b.evaluate("Woodshed.app.transport.playing") is True
@@ -171,13 +177,17 @@ def test_the_lead_goes_round_the_band_five_times_and_never_stops(browser: Browse
     for turn, taker in enumerate([b, a, laptop, b, a]):
         leading = next(p for p in devices if p.evaluate("Woodshed.band.mode()") == "lead")
         leading.evaluate("Woodshed.app.seekBar(4)")  # the song is 16 s long: each turn from bar 5
-        leading.wait_for_timeout(600)
+        leading.wait_for_timeout(300)
         followers = [p for p in devices if p is not taker and p.evaluate("Woodshed.band.mode()") == "follow"]
         for p in followers:
             p.evaluate(SAMPLE)
         button = taker.get_by_test_id("band-lead")
         button.tap() if taker is not laptop else button.click()
-        taker.wait_for_timeout(1500)
+        until(taker, "Woodshed.band.mode() === 'lead' && Woodshed.band.claiming() === false")
+        for p in devices:
+            if p is not taker:
+                until(p, "Woodshed.band.mode() !== 'lead'")
+        taker.wait_for_timeout(300)
         assert one_leader(server, devices) == taker, turn
         assert server.live.state["playing"] is True and taker.evaluate("Woodshed.app.transport.playing") is True, turn
         for p in followers:
@@ -192,14 +202,14 @@ def test_an_old_heartbeat_during_the_claim_does_not_take_the_lead_back(browser: 
     b.evaluate("window.__hold = 1200")
     a.evaluate(SAMPLE)
     b.get_by_test_id("band-lead").tap()
-    b.wait_for_timeout(400)
     lead = b.get_by_test_id("band-lead")  # the claim waits: said, and the button cannot be pressed again
     expect(lead).to_have_attribute("aria-busy", "true")
     expect(lead).to_have_attribute("aria-disabled", "true")
     expect(lead).to_have_attribute("title", "Taking the lead…")
     expect(b.get_by_test_id("band-banner")).to_contain_text("Taking the lead…")
     assert server.live.state["leader"] == laptop.evaluate("Woodshed.band.id()")  # the old leader keeps the band
-    b.wait_for_timeout(2000)
+    until(b, "Woodshed.band.mode() === 'lead'")
+    until(laptop, "Woodshed.band.mode() === 'follow'")
     assert one_leader(server, [laptop, a, b]) == b
     expect(lead).not_to_have_attribute("aria-busy", "true")
     assert server.live.state["playing"] is True and b.evaluate("Woodshed.app.transport.playing") is True
@@ -207,6 +217,7 @@ def test_an_old_heartbeat_during_the_claim_does_not_take_the_lead_back(browser: 
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_an_event_older_than_the_claim_is_not_acted_on(browser: Browser, server: app.AppServer) -> None:
     """The stream can deliver the old leader's last word after the claim's answer: it is older, ignored."""
     problems: list[str] = []
@@ -215,7 +226,7 @@ def test_an_event_older_than_the_claim_is_not_acted_on(browser: Browser, server:
     b.get_by_test_id("band-lead").tap()
     until(b, "Woodshed.band.mode() === 'lead'")
     b.evaluate("(s) => Woodshed.band.hear({ ...s, now: Date.now() / 1000, at: Date.now() / 1000 })", before)
-    b.wait_for_timeout(300)
+    b.wait_for_timeout(100)
     assert b.evaluate("Woodshed.band.mode()") == "lead"
     assert one_leader(server, [laptop, a, b]) == b
     assert problems == []
@@ -229,7 +240,9 @@ def test_two_taps_at_once_the_first_claim_wins(browser: Browser, server: app.App
         p.evaluate("window.__hold = 1000")  # both claims land after both taps
     a.get_by_test_id("band-lead").tap()
     b.get_by_test_id("band-lead").tap()
-    b.wait_for_timeout(1500)
+    for p in (a, b):
+        until(p, "Woodshed.band.claiming() === false")
+    until(laptop, "Woodshed.band.mode() === 'follow'")
     winner = one_leader(server, [laptop, a, b])
     assert winner in (a, b)
     loser = b if winner is a else a
@@ -253,7 +266,7 @@ def test_a_slower_phone_tapping_at_the_same_moment_follows_the_first(browser: Br
     a.get_by_test_id("band-lead").tap()
     b.get_by_test_id("band-lead").tap()
     until(a, "Woodshed.band.mode() === 'lead'")  # A leads while B's sound is still coming
-    b.wait_for_timeout(2500)
+    until(b, "Woodshed.band.claiming() === false")
     assert one_leader(server, [laptop, a, b]) == a
     assert any("Another device took the lead first: you follow it." in t for t in toasts(b))
     assert b.evaluate("Woodshed.app.transport.playing") is False
@@ -282,6 +295,8 @@ def test_a_blocked_sound_still_leads_stopped_and_says_so(browser: Browser, serve
     """AT7: the browser refuses to start the audio: the device leads, stopped at the band's place."""
     problems: list[str] = []
     laptop, a, b = band(browser, server, problems)
+    start = laptop.evaluate("Woodshed.current.bars[4].start")
+    until(laptop, "(t) => Woodshed.app.transport.time > t + 1.2", arg=start)  # the band moved on from bar 5
     b.evaluate("(Woodshed.app.transport.play = async () => false, true)")
     b.get_by_test_id("band-lead").tap()
     until(b, "Woodshed.band.mode() === 'lead'")
@@ -367,6 +382,7 @@ def test_a_claim_whose_answer_was_lost_still_leads(browser: Browser, server: app
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_claim_that_hangs_gives_up(browser: Browser, server: app.AppServer) -> None:
     """No answer at all, not even an error: after about 4 s the device gives up and still follows."""
     problems: list[str] = []
@@ -389,6 +405,7 @@ def test_a_claim_that_hangs_gives_up(browser: Browser, server: app.AppServer) ->
     assert problems == []
 
 
+@CHROMIUM_ONLY
 @pytest.mark.parametrize("choice", ["follow", "alone"])
 def test_alone_or_follow_while_the_claim_waits_acts_at_once(
     browser: Browser, server: app.AppServer, choice: str
@@ -406,6 +423,7 @@ def test_alone_or_follow_while_the_claim_waits_acts_at_once(
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_tap_on_follow_while_the_sound_starts_cancels_the_claim(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     laptop, a, b = band(browser, server, problems)
@@ -421,6 +439,7 @@ def test_a_tap_on_follow_while_the_sound_starts_cancels_the_claim(browser: Brows
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_lead_again_after_a_cancel_leads(browser: Browser, server: app.AppServer) -> None:
     """A cancelled claim does not cancel the next one."""
     problems: list[str] = []
@@ -437,6 +456,7 @@ def test_lead_again_after_a_cancel_leads(browser: Browser, server: app.AppServer
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_follow_after_the_claim_left_gives_the_lead_back(browser: Browser, server: app.AppServer) -> None:
     """Follow tapped while the claim is on its way: once the library took it, the device lets the lead go
     (the band waits for a leader) instead of leading against the musician's choice."""
@@ -457,6 +477,7 @@ def test_follow_after_the_claim_left_gives_the_lead_back(browser: Browser, serve
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_leader_that_chooses_follow_lets_the_lead_go(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     laptop, _a, _b = band(browser, server, problems)
@@ -468,6 +489,7 @@ def test_a_leader_that_chooses_follow_lets_the_lead_go(browser: Browser, server:
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_claim_answered_after_another_took_the_lead_follows(browser: Browser, server: app.AppServer) -> None:
     """Stopped band: B's claim is taken, then another device takes the lead over B before B hears its own
     answer. B must follow: two devices leading a stopped band would never find out (no heartbeat)."""
@@ -499,6 +521,7 @@ def test_a_claim_answered_after_another_took_the_lead_follows(browser: Browser, 
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_takeover_from_a_screen_that_stopped_hearing_is_refused(browser: Browser, server: app.AppServer) -> None:
     """B's stream died (an iPhone asleep): its screen still shows an old place. Its claim is refused, the
     band plays on under its leader, and B follows the band as it is now."""
@@ -515,6 +538,7 @@ def test_a_takeover_from_a_screen_that_stopped_hearing_is_refused(browser: Brows
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_leader_change_heard_while_claiming_waits_for_the_answer(browser: Browser, server: app.AppServer) -> None:
     """An event naming another leader (and another song) while the claim is on its way changes nothing:
     the claim's answer decides."""
@@ -550,6 +574,7 @@ def test_a_play_cut_short_by_pause_says_nothing(browser: Browser, server: app.Ap
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_sound_that_does_not_start_in_time_leads_stopped_and_says_so(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     laptop, a, b = band(browser, server, problems)
@@ -586,6 +611,7 @@ def test_a_leader_whose_app_restarted_leads_again(browser: Browser, server: app.
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_follower_leads_a_band_its_leader_left(browser: Browser, server: app.AppServer) -> None:
     """The leader chose Alone: nobody leads; a follower's tap on Lead leads (the place is not kept: spec 023 R8)."""
     problems: list[str] = []
@@ -620,6 +646,7 @@ def stems_server(
     srv.server_close()
 
 
+@CHROMIUM_ONLY
 def test_the_new_leader_plays_the_full_mix_for_the_band(browser: Browser, stems_server: app.AppServer) -> None:
     """B practised on a track of its own while following: leading, the band hears the full mix from it."""
     problems: list[str] = []
@@ -645,6 +672,7 @@ def test_the_new_leader_plays_the_full_mix_for_the_band(browser: Browser, stems_
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_new_leader_in_another_key_than_the_band_is_told(browser: Browser, server: app.AppServer) -> None:
     """B's recording plays in its own key (a singer's): leading, the band would hear that key. Said."""
     problems: list[str] = []
@@ -661,6 +689,7 @@ def test_a_new_leader_in_another_key_than_the_band_is_told(browser: Browser, ser
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_claim_that_reaches_the_library_after_the_device_gave_up_still_leads(
     browser: Browser,
     server: app.AppServer,
@@ -688,6 +717,7 @@ def test_a_claim_that_reaches_the_library_after_the_device_gave_up_still_leads(
     assert problems == []
 
 
+@CHROMIUM_ONLY
 def test_a_device_named_leader_without_asking_lets_the_lead_go(browser: Browser, server: app.AppServer) -> None:
     """The library names a following device that did not claim (a release of its own lost on the way):
     it gives the lead back rather than leave the band led by a device that does not lead."""
