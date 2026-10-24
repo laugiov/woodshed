@@ -1243,14 +1243,19 @@
     // S on), else to Stage mode; the page stays on the song.
     let stageReturn = null;
     let leftFor = null; // the stage left, the keyboard's place to give back once out of full screen
+    let fullAsked = false; // a full screen asked for and not answered yet
     const shown = (el) => !!el && el.isConnected && el.getClientRects().length > 0;
     // Out of the stage: the keyboard back where it was, unless the musician put it elsewhere meanwhile.
     // Full screen makes the rest of the page inert in Chromium: given again once it is left.
     function giveBack(r) {
       const now = document.activeElement;
       if (now && now !== document.body && !$("stage").contains(now)) return;
-      const again = r && r.group !== undefined ? document.querySelector('#sheet .bar[data-group="' + r.group + '"][data-col="' + r.col + '"]') : null;
-      const to = [r && r.el, again, $("stageBtn")].find(shown);
+      const grid = r && r.group !== undefined;
+      // A bar of the grid: the bar where the song is now, not the one left behind on entry (the music moved on
+      // the stage, and the pedal steps from the focused bar). Editing, the bar in hand.
+      const playing = grid && !store.get().editing ? chart.barEl(curBar()) : null;
+      const again = grid ? document.querySelector('#sheet .bar[data-group="' + r.group + '"][data-col="' + r.col + '"]') : null;
+      const to = [playing, r && r.el, again, $("stageBtn")].find(shown);
       if (to) to.focus({ preventScroll: true });
     }
     function setStage(on, full = true) {
@@ -1267,14 +1272,24 @@
       if (on && !was) leftFor = null;
       if (!on && was) {
         stageReturn = null;
-        leftFor = r; // given again when full screen is left (below), even one granted after the stage closed
+        // Given again when full screen is left (below), even one granted after the stage closed.
+        leftFor = document.fullscreenElement || fullAsked ? r : null;
         giveBack(r);
       }
       if (on && full) {
         try {
           const p = $("stage").requestFullscreen && $("stage").requestFullscreen();
           // Granted after the stage was left already (Escape pressed quickly): left again.
-          if (p && p.then) p.then(() => !store.get().stage && document.exitFullscreen().catch(() => {}), () => {});
+          if (p && p.then) {
+            fullAsked = true;
+            p.then(() => {
+              fullAsked = false;
+              if (!store.get().stage) document.exitFullscreen().catch(() => {});
+            }, () => {
+              fullAsked = false;
+              leftFor = store.get().stage ? leftFor : null;
+            });
+          }
         } catch (err) {
           /* full screen refused: the stage still covers the page */
         }

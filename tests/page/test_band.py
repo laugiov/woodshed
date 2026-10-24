@@ -351,6 +351,30 @@ def test_stop_following_plays_on_from_where_the_band_was(browser: Browser, serve
     assert problems == []
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="band.js draws the banner again on every stream event (its Stop following button with it): moves to "
+    "the band lot (spec 025 addendum, PR #45)",
+)
+def test_stop_following_keeps_the_focus_across_stream_events(browser: Browser, server: app.AppServer) -> None:
+    problems: list[str] = []
+    leader, follower = lead_and_follow(browser, server, problems)
+    stop = follower.get_by_text("Stop following")
+    stop.focus()
+    follower.evaluate(
+        "(() => { window.__btn = document.activeElement; window.__fi = 0;"
+        " document.getElementById('bandBanner').addEventListener('focusin', () => window.__fi++); })()"
+    )
+    leader.evaluate("Woodshed.app.seekBar(5)")
+    until(follower, "Woodshed.debug().beat >= 20")
+    leader.get_by_test_id("play").click()
+    until(follower, "Woodshed.debug().playing === true")
+    follower.wait_for_timeout(600)
+    assert follower.evaluate("document.activeElement === window.__btn")  # the same button: not drawn again
+    assert follower.evaluate("window.__fi") == 0  # nor focused again (no re-announcement)
+    assert problems == []
+
+
 def test_a_reload_does_not_take_the_lead_back(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     first, second = lead_and_follow(browser, server, problems)

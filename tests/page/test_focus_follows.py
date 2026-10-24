@@ -120,10 +120,11 @@ def test_a3_in_edit_mode_a_bar_brought_into_view_keeps_a_margin(open_page: Any) 
 
 
 @pytest.mark.tablet
-def test_a4_a_pedal_after_a_click_on_a_bar_never_scrolls_back_from_reading_ahead(open_page: Any) -> None:
+@pytest.mark.parametrize("how", ["click", "focus"])  # focus: the page put it there (the check, on an iPad)
+def test_a4_a_pedal_after_a_click_on_a_bar_never_scrolls_back_from_reading_ahead(open_page: Any, how: str) -> None:
     o = open_page("pop", variant="sections")
     short_window(o)
-    bar(o, 0).click()
+    getattr(bar(o, 0), how)()
     o.js("window.scrollTo(0, document.documentElement.scrollHeight)")  # reading ahead
     y = o.js("window.scrollY")
     assert y > 0
@@ -224,6 +225,7 @@ def test_a9_the_stage_takes_the_keyboard_and_gives_it_back(open_page: Any) -> No
     o.page.keyboard.press("Escape")
     expect(o.page.get_by_test_id("stage")).to_be_hidden()
     until(o, f"{FOCUSED} === 'stage-open'")  # once out of full screen
+    o.js("Woodshed.app.seekBar(3)")
     bar(o, 3).focus()
     o.page.keyboard.press("s")
     expect(o.page.get_by_test_id("stage")).to_be_visible()
@@ -321,9 +323,10 @@ def test_a13_after_a_chord_picked_in_the_check_the_arrows_go_on_from_that_bar(op
 
 
 @pytest.mark.tablet
-def test_a15_a_pedal_after_play_and_pause_goes_on_from_where_the_music_stopped(open_page: Any) -> None:
+@pytest.mark.parametrize("how", ["click", "focus"])  # focus: a bar focused by the page, as on an iPad
+def test_a15_a_pedal_after_play_and_pause_goes_on_from_where_the_music_stopped(open_page: Any, how: str) -> None:
     o = open_page("pop", variant="sections")  # two parts: bar 1 stays drawn while the second one plays
-    bar(o, 1).click()
+    getattr(bar(o, 1), how)()
     o.page.keyboard.press(" ")  # the pedal plays
     until(o, "Woodshed.debug().playing === true")
     o.js("Woodshed.app.seekBar(4)")  # the music moves on, into the second part
@@ -344,3 +347,47 @@ def test_a16_while_the_song_plays_the_focus_stays_put(open_page: Any) -> None:
     until(o, f"{CUR} >= 5")
     o.page.wait_for_timeout(200)
     assert o.js(FOCUSED_BAR) == 0  # a screen reader would read every bar over the music
+
+
+@pytest.mark.tablet
+def test_a15_out_of_the_stage_the_pedal_goes_on_from_where_the_music_stopped(open_page: Any) -> None:
+    o = open_page("pop", variant="sections")
+    bar(o, 2).focus()  # the page put it there (the check); a tap on Stage mode takes no focus on an iPad
+    o.page.keyboard.press("s")
+    expect(o.page.get_by_test_id("stage")).to_be_visible()
+    o.page.keyboard.press(" ")  # the pedal plays
+    until(o, "Woodshed.debug().playing === true")
+    o.js("Woodshed.app.seekBar(4)")  # the music moves on, into the second part
+    o.page.keyboard.press(" ")  # and pauses
+    until(o, "Woodshed.app.store.get().playing === false")
+    stopped = o.js(CUR)
+    assert 4 <= stopped < 7
+    o.page.keyboard.press("Escape")
+    expect(o.page.get_by_test_id("stage")).to_be_hidden()
+    until(o, f"{FOCUSED_BAR} === {stopped}")  # the keyboard back on the bar where the music stopped, not bar 3
+    o.page.keyboard.press("ArrowRight")
+    until(o, f"{CUR} === {stopped + 1}")
+
+
+# Review of PR #45: a view control with the focus is not drawn again, nor focused again, as the passes go by
+# while the song plays (a screen reader would announce it over the music).
+
+
+@pytest.mark.parametrize("song", ["pop", "lift"])
+def test_the_focused_view_control_is_left_alone_while_the_song_plays(open_page: Any, song: str) -> None:
+    o = open_page(song)
+    tab_to(o, "edit-chart", "words-open")
+    o.js(
+        "(() => { window.__fi = 0; window.__mut = 0; const v = document.getElementById('viewCtl');"
+        " v.addEventListener('focusin', () => window.__fi++);"
+        " new MutationObserver(() => window.__mut++).observe(v, { childList: true, subtree: true });"
+        " window.__btn = document.querySelector('[data-testid=edit-chart]'); })()"
+    )
+    o.js("Woodshed.app.togglePlay()")
+    until(o, "Woodshed.debug().playing === true")
+    for u in (4, 9, 17, 25):  # other passes, and past the key change on lift
+        o.js(f"Woodshed.app.seekBar(Math.min({u}, Woodshed.current.bars.length - 1))")
+        o.page.wait_for_timeout(150)
+    assert o.js("window.__fi") == 0
+    assert o.js("window.__mut") == 0
+    assert o.js("document.activeElement === window.__btn")

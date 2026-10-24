@@ -458,7 +458,7 @@ guitar voicings while stopped) are drawn through `W.keepFocus` (`core/woodshed.j
 new element with the same `data-testid`, without counting as a Tab (a clicked button still leaves Space to the
 music). `W.clear` itself never moves the focus. Done gives the focus to Edit the chart. Entering the stage moves the
 focus to `#stage` itself (named "Stage mode", never a stage button, so a pedal's Space plays there); leaving gives
-it back to where it was (the button, the bar pressed S on), else to Stage mode, once out of full screen (Chromium
+it back to where it was (a button; for a bar of the grid, the bar where the song is now, so a pedal goes on from where the music stopped), else to Stage mode, once out of full screen (Chromium
 makes the page outside a full-screen element inert). Every button of a segmented group says `aria-pressed` with its
 `on` class. A chord to check
 in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check" ("2 chords to check",
