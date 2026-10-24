@@ -40,6 +40,8 @@ gives the line back as it was placed.
 - Placing all the words again, from the app or with `woodshed lyrics`, keeps each fix whose line still
   reads the same, and says which ones it left out.
 - Undo never takes back a fix another device made since: it says so and leaves it.
+- The library app and `woodshed lyrics` can work on the same library at the same time: a fix saved
+  from a phone while the command line places the words again is kept.
 
 A line is fixed through the library (woodshed app), on any device of the band; a page opened from
 disk cannot place it. Without the voice heard before (the cache was cleared), the words are spread
