@@ -306,6 +306,11 @@
     function renderLyrics(s, sections) {
       const { rows, owner } = app.words.rows();
       const blocks = rows.map((r) => ({ at: r.firstBar, t: r.line.start, row: r }));
+      // Editing: the sung lines open the line editor (views/lines.js) when the library can place them, and a line
+      // the band took out of this recording stays as one quiet row with the way back (spec 028).
+      const editing = s.editing && !s.stage;
+      const fixing = editing && app.canFixWords();
+      if (editing) blocks.push(...goneLines());
       let run = null;
       owner.forEach((li, u) => {
         const head = sections.some((sec) => sec.start === u);
@@ -345,6 +350,10 @@
           out.push(freeRow(x.free, s, freeNote(x)));
           continue;
         }
+        if (x.gone) {
+          out.push(goneRow(x.gone, fixing));
+          continue;
+        }
         const r = x.row;
         const last = r.bars[r.bars.length - 1].bar;
         for (const [u, region] of changeAt) {
@@ -361,17 +370,90 @@
           h(
             "div",
             // The check is one of the texts woodshed lyrics writes, in core/i18n-fr.js.
-            { class: "lline" + (r.line.check ? " check" : ""), "data-line": r.li, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null },
-            h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) }, fmt(r.line.start)),
+            {
+              class: "lline" + (r.line.check ? " check" : "") + (r.line.edited === true ? " edited" : "") + (r.line.voice === "other" ? " other" : ""),
+              "data-line": r.li, "data-index": r.line.index, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null,
+            },
+            h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) },
+              fmt(r.line.start), r.line.edited === true ? h("span", { class: "fixed-mark" }, r.line.voice === "other" && !fixedWords(r.line) ? W.t("✎ other voice") : W.t("✎ fixed")) : null),
             lyricLine(r, s, { stage: false, remind: true }),
           ),
         );
+        if (fixing) asControl(out[out.length - 1], r.line);
       }
+      const had = isLine(document.activeElement) ? document.activeElement.getAttribute("data-index") : null;
       clear($("sheet"), inBlocks(out));
       app.unglueReminders($("sheet"));
       if (document.fonts) document.fonts.ready.then(() => app.unglueReminders($("sheet"))); // measured again in its fonts
       paintLyrics(s);
+      if (fixing) roveLines(had);
     }
+
+    // A line whose words the band changed (not only given to another voice).
+    const fixedWords = (line) => {
+      const e = app.wordFixes()[line.index];
+      return !!(e && e.lines);
+    };
+    // Editing: a sung line is one control, named with its time, its words and what the band did to it; the
+    // buttons inside it (its time, its checks) are reached through it, not with Tab (spec 021, 025).
+    function asControl(el, line) {
+      const said = W.t("Line {n}, {time}: {words}", { n: line.index + 1, time: fmt(line.start), words: line.text });
+      const name = fixedWords(line) ? W.t("{line}, fixed", { line: said })
+        : line.voice === "other" ? W.t("{line}, other voice", { line: said })
+          : line.check ? W.t("{line}, to check", { line: said }) : said;
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "-1");
+      el.setAttribute("aria-label", name);
+      el.removeAttribute("title");
+      el.querySelectorAll("button").forEach((b) => b.setAttribute("tabindex", "-1"));
+    }
+    // The lines taken out of this recording by the band, where they were placed.
+    function goneLines() {
+      const data = app.wordsData;
+      const out = [];
+      (data && Array.isArray(data.lines) ? data.lines : []).forEach((ln, i) => {
+        const placed = app.placedWords && app.placedWords.lines[i];
+        const starts = placed && Array.isArray(placed.words) ? placed.words.map((w) => w && w.start).filter((t) => Number.isFinite(t)) : [];
+        if (!ln || ln.edited !== "not-sung" || !starts.length) return;
+        const t = Math.min(...starts);
+        out.push({ at: song.barAt(t + 0.15), t, gone: { index: i, text: placed.text, t } });
+      });
+      return out;
+    }
+    function goneRow(gone, fixing) {
+      return h("div", { class: "lline gone", "data-gone": gone.index, "data-testid": "line-gone-row" },
+        h("span", { class: "t" }, fmt(gone.t)),
+        h("span", { class: "gone-row" },
+          h("span", { class: "gone-text", translate: "no" }, gone.text),
+          h("span", { class: "gone-why" }, W.t("not in this recording")),
+          fixing ? h("button", { type: "button", class: "back", "data-testid": "line-gone-back", onclick: () => app.lines.back(gone.index) }, W.t("Back to the placement")) : null));
+    }
+    // The sung lines: one tab stop, the line in hand or the first; the arrows walk them (below).
+    let lineStop = null;
+    const isLine = (el) => !!el && el instanceof Element && el.matches("#sheet .lline[role=button]");
+    const sungLines = () => [...$("sheet").querySelectorAll(".lline[role=button]")];
+    function roveLines(had) {
+      const all = sungLines();
+      const want = had !== null ? had : lineStop;
+      const pick = all.find((el) => el.getAttribute("data-index") === want) || all[0];
+      for (const el of all) el.setAttribute("tabindex", el === pick ? "0" : "-1");
+      if (had !== null && pick) pick.focus({ preventScroll: true });
+    }
+    $("sheet").addEventListener("focusin", (e) => {
+      if (!isLine(e.target)) return;
+      lineStop = e.target.getAttribute("data-index");
+      for (const el of sungLines()) el.setAttribute("tabindex", el === e.target ? "0" : "-1");
+    });
+    $("sheet").addEventListener("keydown", (e) => {
+      if (!isLine(e.target) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+      e.preventDefault();
+      e.stopPropagation(); // the arrows move the keyboard from line to line, not the song
+      const all = sungLines();
+      const to = all[all.indexOf(e.target) + (e.key === "ArrowDown" ? 1 : -1)];
+      if (!to) return;
+      to.focus({ preventScroll: true });
+      bringIntoView(to, e);
+    });
 
     // Each part with its lines in one block: on paper a part stays on one page when it fits.
     function inBlocks(items) {
@@ -570,10 +652,10 @@
       const mode = app.sheetMode(s);
       // Drawn again only when what it shows changes: a redraw under a click (the band's corrections
       // arriving) would swallow it.
-      const shows = [mode, !!app.words, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, s.editing, W.lang()].join("|");
+      const shows = [mode, !!app.words, s.canFix, s.inst, s.pos, s.capo, s.view, s.transpose, s.bandKey, s.wordsElsewhere, s.editing, W.lang()].join("|");
       if (el.dataset.shows === shows) return;
       el.dataset.shows = shows;
-      const sheetCtl = app.words && !s.editing // editing: the grid only
+      const sheetCtl = app.words // editing too: the words or the grid
         ? h(
             "div",
             { class: "seg-ctl", role: "group", "aria-label": W.t("Chart with") },
@@ -591,7 +673,7 @@
         : h("button", {
             type: "button", class: "btn" + (s.editing ? " on" : ""), "aria-pressed": String(!!s.editing), "data-testid": "edit-chart",
             onclick: () => store.set({ editing: !store.get().editing }),
-          }, W.t("Edit the chart"));
+          }, app.words ? W.t("Edit chords and words") : W.t("Edit the chart"));
       // A button pressed here is drawn again: the keyboard stays on it (spec 025).
       W.keepFocus(el, () => {
         if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
@@ -772,7 +854,7 @@
     store.on((s, changed) => {
       const u = curBar(s);
       const pass = bar(u).group + ":" + bar(u).occurrence;
-      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere", "editing"].some((k) => changed.has(k));
+      const full = ["transpose", "capo", "inst", "pos", "view", "corrections", "sheet", "bandKey", "wordsElsewhere", "editing", "canFix"].some((k) => changed.has(k));
       if (!full && changed.has("pitchStatus")) {
         const note = document.querySelector("[data-testid=key-note]"); // in place: the chart keeps its scroll
         if (note) note.textContent = recordingNote(s, (t) => song.keyPathText(t));

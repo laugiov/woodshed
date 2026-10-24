@@ -67,7 +67,7 @@
     const DONE = "woodshed:words-placed:" + folder; // one origin serves every song of the library
     function placed(message, notes) {
       stopPolling();
-      const said = [message].concat((notes || []).map((n) => W.t(n))).join(". ");
+      const said = [message].concat((notes || []).map(note)).join(". ");
       try {
         sessionStorage.setItem(DONE, said);
       } catch (err) {
@@ -80,6 +80,23 @@
         say(W.t("{message}. Loading them…", { message }));
         location.reload();
       }
+    }
+
+    // A note of the library on the words placed; the fixes of the sheet it left out, counted (app.py _commit_words).
+    function note(text) {
+      const m = /^(\d+) lines fixed on the sheet were left out: their text changed\.$/.exec(text);
+      return m ? W.t("{n} lines fixed on the sheet were left out: their text changed.", { n: m[1] }) : W.t(text);
+    }
+
+    // The lines fixed on the sheet (spec 028): placing the words again keeps the fixes whose line reads the same.
+    function fixedNote() {
+      const el = $("wordsFixed");
+      if (!el) return;
+      const n = Object.keys(app.wordFixes()).length;
+      el.hidden = !n;
+      el.textContent = n === 1
+        ? W.t("1 line is fixed on the sheet: placing the words again keeps each fix whose line still reads the same here.")
+        : W.t("{n} lines are fixed on the sheet: placing the words again keeps each fix whose line still reads the same here.", { n });
     }
 
     // How long is left, from how fast the share grew since it started moving.
@@ -186,6 +203,7 @@
         intro,
         text,
         h("p", { class: "hint" }, W.t("Placed on this computer by MMS, a speech model by Meta (CC BY-NC 4.0: non-commercial use), downloaded once (1.2 GB). The words stay in your library.")),
+        h("p", { class: "hint", id: "wordsFixed", "data-testid": "words-fixed", hidden: "" }),
         h("p", { id: "wordsStatus", class: "status", role: "status", "data-testid": "words-status" }),
         h(
           "div",
@@ -233,6 +251,7 @@
         return;
       }
       clear(dialog, h("h2", { id: "wordsTitle" }, app.words ? W.t("The words") : W.t("Add the words")), body(area ? area.value : undefined));
+      fixedNote();
       if (!kept || !$("wordsStatus")) return;
       say(kept.text, kept.warn);
       $("wordsProgress").hidden = !kept.busy;
@@ -247,6 +266,7 @@
         document.body.appendChild(dialog);
         fill();
       } // built once: closed and opened again, it keeps a paste not sent yet, and a placement under way
+      fixedNote();
       if (!dialog.open) dialog.showModal();
       const area = $("wordsText");
       if (area) area.focus();
