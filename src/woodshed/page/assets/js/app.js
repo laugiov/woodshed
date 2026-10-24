@@ -1068,6 +1068,13 @@
       keyFocus = false;
     }, true);
     app.keyFocus = () => keyFocus; // the arrows on a bar seek a line only for a keyboard (views/chart.js)
+    // The bar the arrows step from (spec 025): stopped, the bar of the grid the keyboard is on (the check put it
+    // back there, or the musician walked there); playing, the bar playing (a pedal follows the music).
+    const fromBar = () => {
+      const s = store.get();
+      const at = !s.playing && !s.editing ? chart.focusedBar() : null;
+      return at === null ? curBar() : at;
+    };
     const pressable = (el) => !!el.matches && el.matches("button, [role=button], [role=switch]") && !el.classList.contains("bar");
     document.addEventListener("keydown", (e) => {
       const tag = e.target.tagName;
@@ -1114,15 +1121,16 @@
         app.togglePlay();
       } else if (k === "ArrowRight" || k === "PageDown") {
         e.preventDefault();
+        const at = fromBar();
         // The pedal at the end of a song, in stage mode: on to the next song of the set.
-        const end = curBar() >= song.bars.length - 1 && !store.get().playing;
+        const end = at >= song.bars.length - 1 && !store.get().playing;
         if (store.get().stage && end && app.nextSong && app.nextSong()) return;
-        app.seekBar(curBar() + 1);
-        chart.followFocus(e.target);
+        app.seekBar(at + 1);
+        chart.followFocus(e.target, e);
       } else if (k === "ArrowLeft" || k === "PageUp") {
         e.preventDefault();
-        app.seekBar(curBar() - 1);
-        chart.followFocus(e.target);
+        app.seekBar(fromBar() - 1);
+        chart.followFocus(e.target, e);
       } else if (k === "l" || k === "L") $("loopBtn").click();
       else if (k === "[") setBpm(store.get().bpm - 5);
       else if (k === "]") setBpm(store.get().bpm + 5);
@@ -1230,8 +1238,35 @@
     });
 
     // Full screen needs a gesture: a stage carried over from the previous song shows without it.
+    // The keyboard goes into the stage itself (spec 025), never onto one of its buttons: a pedal's Space there
+    // plays, its ArrowRight seeks. Leaving, it comes back where it was (the Stage mode button, the bar pressed
+    // S on), else to Stage mode; the page stays on the song.
+    let stageReturn = null;
+    const shown = (el) => !!el && el.isConnected && el.getClientRects().length > 0;
+    // Out of the stage: the keyboard back where it was, unless the musician put it elsewhere meanwhile.
+    // Full screen makes the rest of the page inert in Chromium: given again once it is left.
+    function giveBack(r) {
+      const now = document.activeElement;
+      if (now && now !== document.body && !$("stage").contains(now)) return;
+      const again = r && r.group !== undefined ? document.querySelector('#sheet .bar[data-group="' + r.group + '"][data-col="' + r.col + '"]') : null;
+      const to = [r && r.el, again, $("stageBtn")].find(shown);
+      if (to) to.focus({ preventScroll: true });
+    }
     function setStage(on, full = true) {
+      const was = !!store.get().stage;
+      if (on && !was) {
+        const had = document.activeElement;
+        const back = had && had !== document.body && !$("stage").contains(had) ? had : null;
+        // A bar of the grid may be drawn again while on stage: found again by its place.
+        stageReturn = back && back.matches("#sheet .bar[data-group]") ? { group: back.getAttribute("data-group"), col: back.getAttribute("data-col"), el: back } : back && { el: back };
+      }
       store.set({ stage: on });
+      if (on && !was) $("stage").focus({ preventScroll: true });
+      const r = !on && was ? stageReturn : null;
+      if (!on && was) {
+        stageReturn = null;
+        giveBack(r);
+      }
       if (on && full) {
         try {
           const p = $("stage").requestFullscreen && $("stage").requestFullscreen();
@@ -1239,7 +1274,9 @@
         } catch (err) {
           /* full screen refused: the stage still covers the page */
         }
-      } else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      } else if (document.fullscreenElement) {
+        document.exitFullscreen().then(() => r && giveBack(r), () => {});
+      }
     }
     $("stageBtn").addEventListener("click", () => setStage(true));
     $("stageExit").addEventListener("click", () => setStage(false));
@@ -1259,6 +1296,9 @@
       const button = e.key === " " && e.target.closest && e.target.closest("button");
       if (button && !button.closest(".menu, #pop, #barEd, dialog, .prefs")) e.preventDefault();
     });
+    const nameStage = () => $("stage").setAttribute("aria-label", W.t("Stage mode"));
+    nameStage();
+    W.onLang.push(nameStage);
     function renderStagePlay(s) {
       $("stPlay").textContent = s.playing ? "❚❚" : "▶\ufe0e"; // text, not an emoji, on phones
       $("stPlay").setAttribute("aria-label", s.playing ? W.t("Pause") : W.t("Play"));
@@ -1280,6 +1320,8 @@
         $("wrap").style.paddingBottom = $("dock").offsetHeight + 24 + "px";
         document.documentElement.style.setProperty("--dock-h", $("dock").offsetHeight + "px");
       }).observe($("dock"));
+      // The band's banner sticks at the top: a bar brought into view stays below it (app.css, spec 025).
+      new ResizeObserver(() => document.documentElement.style.setProperty("--banner-h", $("bandBanner").offsetHeight + "px")).observe($("bandBanner"));
     }
 
     // A read-only view of the state, for tests and for curious users.

@@ -779,6 +779,9 @@ body.following #playBtn { opacity: 0.45; }
 .band-hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { .band-hint { display: none; } } /* a mouse has the buttons' titles; a finger reads this */
 .doubt { scroll-margin-bottom: calc(var(--dock-h, 96px) + 16px); } /* brought into sight above the player */
+/* A bar the keyboard moved to (spec 025): never under the band's banner or the player, never flush with an edge. */
+#sheet .bar[data-group] { scroll-margin-top: calc(var(--banner-h, 0px) + 12px); scroll-margin-bottom: calc(var(--dock-h, 96px) + 16px); }
+.stage:focus { outline: none; } /* the whole screen is the stage: no ring around it */
 .free-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.25; color: var(--muted); font-style: italic; }
 .sec-block:first-child > .sec-head:first-child { margin-top: 0; padding-top: 0; }
 .print-shapes { display: none; }

@@ -51,11 +51,15 @@
       );
     }
 
+    // Drawn again under the button pressed: the keyboard stays on it (spec 025), and it says it is pressed.
     function renderInstruments(s) {
-      clear(
-        $("instruments"),
-        INSTRUMENTS().map(([id, label]) =>
-          h("button", { type: "button", class: s.inst === id ? "on" : "", "data-inst": id, "data-testid": "inst-" + id, onclick: () => app.setInstrument(id) }, label),
+      const el = $("instruments");
+      W.keepFocus(el, () =>
+        clear(
+          el,
+          INSTRUMENTS().map(([id, label]) =>
+            h("button", { type: "button", class: s.inst === id ? "on" : "", "aria-pressed": String(s.inst === id), "data-inst": id, "data-testid": "inst-" + id, onclick: () => app.setInstrument(id) }, label),
+          ),
         ),
       );
     }
@@ -74,7 +78,7 @@
         [W.t("Loop it slow"), W.t("From 70% tempo, 5 BPM faster each pass.")],
         [W.t("Play with the band"), stems ? W.t("Your part is muted. The band is yours.") : W.t("The full mix, with a count-in.")],
       ];
-      clear(
+      W.keepFocus($("path"), () => clear(
         $("path"),
         steps.map(([title, detail], i) =>
           h(
@@ -85,7 +89,7 @@
             h("span", { class: "d" }, detail),
           ),
         ),
-      );
+      ));
     }
 
     // Which woodshed wrote the page's code and which found its chords (spec 026): `woodshed app` gives an

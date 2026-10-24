@@ -105,6 +105,10 @@ The keyboard does what it says.
 - **In the bar editor**, **Enter** saves, and **Ctrl+Enter** (**⌘+Enter** on a Mac) saves and opens
   the next bar.
 - **N** takes the band to the next song of the set.
+- **The page follows you**: with the song stopped, the page scrolls to the bar you move to with the
+  arrows, and the arrows go on from that bar. The keyboard stays on a button you press (an
+  instrument, a step, **Edit the chart**), and comes back to **Stage mode** when you leave the stage.
+  A screen reader says which instrument is pressed.
 
 ## English or French, dark or light
 

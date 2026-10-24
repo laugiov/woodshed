@@ -439,7 +439,10 @@
         e.preventDefault();
         e.stopPropagation(); // editing: the arrows move the keyboard, not the song
         const to = moveTo(e.target, key);
-        if (to) to.focus();
+        if (to) {
+          to.focus({ preventScroll: true });
+          bringIntoView(to, e); // editing: the focus is all that moves, the page comes with it
+        }
         return;
       }
       // Playing: the pedal's keys seek in app.js, one way for every pedal (the next song at the end on
@@ -448,17 +451,31 @@
       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(key) || !(app.keyFocus && app.keyFocus())) return;
       e.preventDefault();
       e.stopPropagation();
-      const to = moveTo(barEl(curBar(s), s) || e.target, key);
+      // Stopped, from the bar the keyboard is on (spec 025); playing, from the bar playing.
+      const to = moveTo(s.playing ? barEl(curBar(s), s) || e.target : e.target, key);
       if (to) app.seekBar(barShown(+to.getAttribute("data-group"), +to.getAttribute("data-col"), s));
-      followFocus(e.target);
+      followFocus(e.target, e);
     });
-    // The keyboard follows the song when it was on a bar of the grid (the page stays where it was read);
-    // `from` may be gone, the grid drawn again for another pass.
-    function followFocus(from) {
+    // The keyboard follows the song when it was on a bar of the grid; `from` may be gone, the grid drawn again
+    // for another pass. The page comes to that bar only for a keyboard's focus with the song stopped (spec 025):
+    // while it plays the page follows the song (keepInView), and after a click or a tap (a pedal) the musician
+    // may be reading ahead.
+    function followFocus(from, e) {
       const s = store.get();
       if (!(from instanceof Element && from.matches(".bar[data-group]")) || s.editing) return;
       const now = barEl(curBar(s), s);
-      if (now) now.focus({ preventScroll: true });
+      if (!now) return;
+      now.focus({ preventScroll: true });
+      if (e && !s.playing && app.keyFocus && app.keyFocus()) bringIntoView(now, e);
+    }
+    // The least move that shows the bar (none when it is in sight); no smooth scroll for a held key or a
+    // musician who asked for less motion. The bars' scroll margins keep it off the banner and the player.
+    function bringIntoView(el, e) {
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches || !!(e && e.repeat);
+      // The player's height as it is now: the ResizeObserver behind --dock-h waits for a frame (seen late in
+      // WebKit under load, the bar then brought under the player).
+      document.documentElement.style.setProperty("--dock-h", $("dock").offsetHeight + "px");
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: still ? "auto" : "smooth" });
     }
 
     function row(gr, g, s) {
@@ -527,21 +544,24 @@
             type: "button", class: "btn" + (s.editing ? " on" : ""), "aria-pressed": String(!!s.editing), "data-testid": "edit-chart",
             onclick: () => store.set({ editing: !store.get().editing }),
           }, W.t("Edit the chart"));
-      if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
-        clear(
-          el,
-          sheetCtl,
-          wordsBtn,
-          editBtn,
-          h(
-            "div",
-            { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
-            h("button", { type: "button", class: s.view === "concert" ? "on" : "", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
-            h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })),
-          ),
-          keyNote(s).slice(s.transpose ? 0 : 1), // the capo says where the chords sound already
-        );
-      } else clear(el, sheetCtl, wordsBtn, editBtn, keyNote(s));
+      // A button pressed here is drawn again: the keyboard stays on it (spec 025).
+      W.keepFocus(el, () => {
+        if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
+          clear(
+            el,
+            sheetCtl,
+            wordsBtn,
+            editBtn,
+            h(
+              "div",
+              { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
+              h("button", { type: "button", class: s.view === "concert" ? "on" : "", "aria-pressed": String(s.view === "concert"), "data-testid": "show-concert", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
+              h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "aria-pressed": String(s.view === "shapes"), "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })),
+            ),
+            keyNote(s).slice(s.transpose ? 0 : 1), // the capo says where the chords sound already
+          );
+        } else clear(el, sheetCtl, wordsBtn, editBtn, keyNote(s));
+      });
     }
 
     // In another key than the recording, the page says so while it lasts; served by woodshed app,
@@ -720,6 +740,13 @@
       if (full) renderHarmony(s);
       lastPass = pass;
       if (s.playing && (full || changed.has("beat"))) keepInView(s);
+      // Stopped (or stopping), the keyboard on a bar of the grid moves with the song (a shortcut, a pedal's
+      // seek, the pause): the arrows go on from there (spec 025). Not while it plays: a screen reader would
+      // read every bar over the music. No scroll: the musician may be reading ahead.
+      if (!s.playing && !s.editing && (changed.has("beat") || changed.has("playing")) && isGridBar(document.activeElement)) {
+        const now = barEl(u, s);
+        if (now && now !== document.activeElement) now.focus({ preventScroll: true });
+      }
       if (changed.has("playing")) {
         if (s.playing) paused = false; // a new play: the page follows again
         else back.hidden = true;
@@ -790,6 +817,8 @@
       },
       barEl: (u) => barEl(u, store.get()),
       followFocus,
+      // The bar shown by the grid's bar the keyboard is on, else null.
+      focusedBar: () => (isGridBar(document.activeElement) ? barShown(+document.activeElement.getAttribute("data-group"), +document.activeElement.getAttribute("data-col"), store.get()) : null),
       // A bar of the grid shows the pass playing; a free bar or a sung bar (.nb) is one bar.
       barFromEl: (el) => (el.classList.contains("bar") && !el.hasAttribute("data-free") ? barShown(+el.getAttribute("data-group"), +el.getAttribute("data-col"), store.get()) : +el.getAttribute("data-bar")),
     };

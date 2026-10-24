@@ -444,9 +444,23 @@ The grid's bars are one tab stop (`views/chart.js`, a roving `tabindex`): the ba
 bar in hand; `#sheet` is a `group` named "Chart" whose description says the arrows move. Editing, the arrows move
 the focus (Up and Down by the grid's lines, Home and End the part's first and last bar) and Enter opens the editor;
 playing, Left, Right and the page keys seek in `app.js` as any pedal does (the next song at the end, on stage), Up,
-Down, Home and End seek from the bar playing when the focus came from the keyboard (after a click they stay scroll
-keys: a pedal may send them), and the focus follows the bar playing without scrolling the page. A redraw puts the focus back on the same
-place in the grid, and the edit strip (`views/editor.js` `renderStrip`) back on the same control. A chord to check
+Down, Home and End seek when the focus came from the keyboard (after a click they stay scroll keys: a pedal may send
+them). The arrows step from the focused bar while the song is stopped and from the bar playing while it plays
+(`chart.focusedBar()`), and a focus on a bar moves with the song when it is stopped or stops (a shortcut, a seek, the
+pause), never while it plays (a screen reader would read every bar). A bar the keyboard moved to is brought into view
+(`bringIntoView`: `scrollIntoView` with `block: "nearest"`, no smooth scroll under reduced motion or for a held key)
+always while editing, and in play mode only for a keyboard's focus with the song stopped: playing, `keepInView` owns
+the page, and after a click or a tap (a pedal) the musician may be reading ahead. The bars' `scroll-margin` keeps them
+off the band's banner (`--banner-h`) and the player (`--dock-h`). A redraw puts the focus back on the same
+place in the grid, and the edit strip (`views/editor.js` `renderStrip`) back on the same control. The controls a
+musician presses in place (the instruments, the practice path, Edit the chart and the chart's view buttons, the
+guitar voicings while stopped) are drawn through `W.keepFocus` (`core/woodshed.js`): the focus goes back to the one
+new element with the same `data-testid`, without counting as a Tab (a clicked button still leaves Space to the
+music). `W.clear` itself never moves the focus. Done gives the focus to Edit the chart. Entering the stage moves the
+focus to `#stage` itself (named "Stage mode", never a stage button, so a pedal's Space plays there); leaving gives
+it back to where it was (the button, the bar pressed S on), else to Stage mode, once out of full screen (Chromium
+makes the page outside a full-screen element inert). Every button of a segmented group says `aria-pressed` with its
+`on` class. A chord to check
 in a bar is a `span.doubt`, not a button inside the bar: the bar's label says "chord to check" ("2 chords to check",
 "placement to check" for a timing doubt), a click on the mark opens the check, Enter on the bar seeks and opens its
 first chord still to check, and the pop offers the next one in the bar. In the bar editor Enter saves and closes, Ctrl or ⌘ + Enter

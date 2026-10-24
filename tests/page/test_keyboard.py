@@ -285,13 +285,14 @@ def test_the_pedal_at_the_end_of_a_song_on_stage_opens_the_next_one_with_a_bar_f
     o.js("(() => { Woodshed.app.nextSong = () => { window.__next = (window.__next || 0) + 1; return true; }; })()")
     o.js("Woodshed.app.seekBar(7)")
     bar(o, 7).focus()
-    o.js("Woodshed.app.setStage(true, false)")  # no full screen (refused, or a browser without it): keys reach the bar
+    o.js("Woodshed.app.setStage(true, false)")  # no full screen (refused, or a browser without it)
     expect(o.page.get_by_test_id("stage")).to_be_visible()
-    assert o.js(FOCUSED_BAR) == 7
+    assert o.js("document.activeElement.id") == "stage"  # the keyboard in the stage (spec 025), the keys reach it
     o.page.keyboard.press("ArrowRight")  # the pedal, at the end of the song
     assert o.js("window.__next") == 1
 
 
+@pytest.mark.tablet
 def test_a_pedal_with_a_bar_focused_does_not_scroll_back_from_reading_ahead(open_page: Any) -> None:
     o = open_page("pop", variant="sections")
     o.page.set_viewport_size({"width": 1000, "height": 420})
@@ -339,11 +340,11 @@ def test_a_placement_to_check_is_said_so(open_page: Any) -> None:
     expect(doubtful).to_have_attribute("aria-label", re.compile(r", placement to check$"))
 
 
-def test_in_play_mode_up_and_down_start_from_the_bar_playing(open_page: Any) -> None:
+def test_in_play_mode_up_and_down_start_from_the_bar_the_keyboard_followed(open_page: Any) -> None:
     o = open_page("pop", variant="sections")
     tab_to(o, "bar", "section-loop")
-    o.js("Woodshed.app.seekBar(2)")  # the song moved, the keyboard stayed on bar 1
-    assert o.js(FOCUSED_BAR) == 0
+    o.js("Woodshed.app.seekBar(2)")  # the song moved while stopped: the keyboard with it (spec 025, A14)
+    assert o.js(FOCUSED_BAR) == 2
     o.page.keyboard.press("ArrowDown")
     assert o.js("Math.floor(Woodshed.app.store.get().beat / Woodshed.current.per)") == 6
     assert o.js(FOCUSED_BAR) == 6

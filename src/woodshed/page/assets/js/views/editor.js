@@ -434,6 +434,15 @@
       if (el && !$("editStrip").hidden) el.focus();
     }
 
+    // Done hides the strip and the button with it: the keyboard goes to "Edit the chart" (spec 025), drawn again
+    // by then (the store's listeners run in the set).
+    function done() {
+      const had = $("editStrip").contains(document.activeElement);
+      store.set({ editing: false });
+      const edit = document.querySelector('[data-testid="edit-chart"]');
+      if (had && edit) edit.focus({ preventScroll: true });
+    }
+
     function renderStrip(s) {
       const strip = $("editStrip");
       const shows = s.editing && !s.stage ? [W.lang(), s.corrections].join("|") : "";
@@ -459,7 +468,7 @@
             : null,
           h("button", { type: "button", class: "btn", "data-testid": "bar-lines", "aria-haspopup": "dialog", onclick: () => app.openBarLines() }, W.t("Bar lines…")),
           h("button", { type: "button", class: "btn ghost-link", "data-testid": "untype-all", onclick: untypeAll }, W.t("Back to the analysis…")),
-          h("button", { type: "button", class: "btn primary", "data-testid": "edit-done", onclick: () => store.set({ editing: false }) }, W.t("Done"))),
+          h("button", { type: "button", class: "btn primary", "data-testid": "edit-done", onclick: done }, W.t("Done"))),
       );
       if (had !== null) (strip.querySelector('[data-testid="' + had + '"]') || strip.querySelector("button")).focus();
     }

@@ -193,7 +193,7 @@
           "div",
           { class: "seg-ctl", role: "group", "aria-label": W.t("Voicing"), style: { marginBottom: "12px" } },
           [["open", s.capo ? W.t("Open, capo {n}", { n: s.capo }) : W.t("Open")], ["barre", W.t("Barre chords")], ["funk", W.t("Funk triads")]].map(([pos, text]) =>
-            h("button", { type: "button", class: s.pos === pos ? "on" : "", "data-testid": "voicing-" + pos, onclick: () => store.set({ pos }) }, text),
+            h("button", { type: "button", class: s.pos === pos ? "on" : "", "aria-pressed": String(s.pos === pos), "data-testid": "voicing-" + pos, onclick: () => store.set({ pos }) }, text),
           ),
         ),
         h("div", { class: "shapes" }, cards),
@@ -679,7 +679,10 @@
         deskOf = s.inst + "|" + W.lang();
         desk.style.minHeight = ""; // another instrument: its own height
       }
-      clear(desk, body);
+      // A voicing pressed keeps the keyboard (spec 025); not while the song plays: the panel is drawn again
+      // at every bar, and a "Hear it" button would be announced again each time.
+      if (s.playing) clear(desk, body);
+      else W.keepFocus(desk, () => clear(desk, body));
       renderDockShapes(s);
       if (s.inst === "drums") app.drawDrumStaff();
       $("capoVal").textContent = String(s.capo);

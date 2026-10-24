@@ -30,6 +30,22 @@
     el.replaceChildren();
     return W.append(el, children);
   };
+  // A control drawn again under the focus keeps it (spec 025): `draw` redraws `el`; when the focused element was
+  // inside and is gone, the one new element with the same data-testid takes the focus back, unless it is
+  // disabled or hidden. Opt-in, for the controls a musician presses in place. A focus given here is not a Tab:
+  // the input method stays as it was (a button clicked keeps Space for the music).
+  W.keepFocus = function keepFocus(el, draw) {
+    const had = document.activeElement;
+    const key = had && had !== document.body && el.contains(had) ? had.getAttribute("data-testid") : null;
+    const out = draw();
+    if (!key || had.isConnected) return out;
+    const now = document.activeElement;
+    if (now && now !== document.body && now !== document.documentElement) return out; // something else took it
+    const same = el.querySelectorAll('[data-testid="' + CSS.escape(key) + '"]');
+    const next = same.length === 1 ? same[0] : null;
+    if (next && !next.disabled && next.getClientRects().length) next.focus({ preventScroll: true });
+    return out;
+  };
 
   // SVG built from numbers and fixed strings only: the one place markup is parsed.
   const SVG_NS = "http://www.w3.org/2000/svg";

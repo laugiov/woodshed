@@ -123,7 +123,11 @@
           b.classList.toggle("cur", on);
           b.setAttribute("aria-pressed", String(on));
         });
-        $("soundCtl").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.getAttribute("data-testid") === "sound-" + s.chordSound));
+        $("soundCtl").querySelectorAll("button").forEach((b) => {
+          const on = b.getAttribute("data-testid") === "sound-" + s.chordSound;
+          b.classList.toggle("on", on);
+          b.setAttribute("aria-pressed", String(on));
+        });
         return;
       }
       const rows = song.tracks.map((t) =>
@@ -137,7 +141,7 @@
       clear(
         $("soundCtl"),
         [["guitar", W.t("Guitar")], ["rhodes", W.t("Rhodes")], ["piano", W.t("Piano")]].map(([id, label]) =>
-          h("button", { type: "button", class: s.chordSound === id ? "on" : "", "data-testid": "sound-" + id, onclick: () => store.set({ chordSound: id }) }, label),
+          h("button", { type: "button", class: s.chordSound === id ? "on" : "", "aria-pressed": String(s.chordSound === id), "data-testid": "sound-" + id, onclick: () => store.set({ chordSound: id }) }, label),
         ),
       );
       $("mixNote").textContent =

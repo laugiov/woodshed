@@ -18,6 +18,13 @@ corrections and set list stay where they are.
 
 ### Fixed
 
+- The keyboard stays where you are: with the song stopped, the page scrolls to the bar you move to
+  with the arrows, and the arrows go on from the bar you are on. After you press an instrument, a
+  step of the practice path, Edit the chart, Done or Stage mode, the keyboard stays on that button
+  (Tab goes on to the next one, not back to the top), and Escape out of the stage brings it back
+  where it was. A screen reader says which instrument, voicing and chord sound are pressed. A pedal
+  works as before.
+
 - After a key change, the voice panel shows the range of the ending under the song's, and says in
   one sentence whether it goes higher ("From bar 82 it goes higher: up to D4.") or stays within the
   rest of the song. The best key for your voice now fits the ending too, and the line "Up a semitone
