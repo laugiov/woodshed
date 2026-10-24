@@ -15,6 +15,7 @@ import pytest
 from playwright.sync_api import Browser, Page, expect
 
 from tests import synth
+from tests.test_band import LAN, needs_lan
 from woodshed import app
 from woodshed.run import Options, Reporter, first_pass
 
@@ -254,7 +255,7 @@ def test_the_set_list_is_made_on_the_home_page(browser: Browser, server: app.App
     assert problems == []
 
 
-@pytest.mark.skipif(not app.lan_addresses(), reason="this computer has no network address")
+@needs_lan
 def test_the_band_phones_are_let_in_from_the_library_page(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     page = browser.new_context(locale="en-US").new_page()
@@ -266,7 +267,7 @@ def test_the_band_phones_are_let_in_from_the_library_page(browser: Browser, serv
     switch.click()
     expect(switch).to_have_attribute("aria-checked", "true")
     expect(switch).to_be_focused()
-    address = f"http://{app.lan_addresses()[0]}:{server.port}/"
+    address = f"http://{LAN[0]}:{server.port}/"
     expect(page.get_by_test_id("network-address")).to_contain_text(address)
     expect(page.get_by_test_id("network-qr")).to_have_attribute("aria-label", "Code to scan: " + address)
     expect(page.get_by_test_id("phones")).to_contain_text("allow it on private networks")  # still said once on
@@ -508,7 +509,7 @@ def test_a_note_open_while_another_is_saved_stays_open(browser: Browser, server:
             (server.library.root / app.CORRECTIONS_DIR / f"{name}.woodshed.json").unlink(missing_ok=True)
 
 
-@pytest.mark.skipif(not app.lan_addresses(), reason="this computer has no network address")
+@needs_lan
 def test_the_library_poll_leaves_the_set_list_as_it_is(browser: Browser, server: app.AppServer) -> None:
     page = browser.new_context(locale="en-US").new_page()
     page.goto(server.url)

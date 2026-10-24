@@ -716,7 +716,8 @@ def test_the_library_counts_what_is_left_to_check_after_the_band_corrected(serve
 
 # The switch on the library page: the band's phones let in on this computer's network address.
 
-LAN = app.lan_addresses()
+# Only the addresses the switch accepts: a VPN's (WARP's 100.64.0.0/10) is not a home network.
+LAN = [a for a in app.lan_addresses() if app._home_network(a)]
 needs_lan = pytest.mark.skipif(not LAN, reason="this computer has no network address")
 
 
@@ -777,6 +778,12 @@ def test_a_phone_still_connected_is_dropped_when_the_door_closes(server: app.App
         kept.getresponse().read()
     kept.close()
     stream.close()
+
+
+def test_a_vpn_address_is_not_the_band_network(server: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "lan_addresses", lambda: ["100.96.0.13"])  # a VPN's: shared, not private
+    status, answer = post(server, "/api/network", {"on": True})
+    assert status == 409 and "no network found" in answer["error"]
 
 
 def test_without_a_network_the_switch_says_so(server: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:
