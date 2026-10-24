@@ -120,6 +120,7 @@
       try {
         await el.play();
       } catch (err) {
+        if (err && err.name === "AbortError") return false; // a pause while it started: nothing to say
         onError && onError(err);
         return false;
       }

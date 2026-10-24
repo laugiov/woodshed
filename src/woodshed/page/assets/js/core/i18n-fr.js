@@ -558,6 +558,7 @@
     "the app did not answer": "l'app n'a pas répondu",
     "another device leads the band": "un autre appareil mène le groupe",
     "another device took the lead first": "un autre appareil a pris la tête avant toi",
+    "this device had not heard the band for a while": "cet appareil n'avait pas entendu le groupe depuis un moment",
     "Another device leads the band now: you follow it. The sound now plays on the device that leads.":
       "Un autre appareil mène le groupe maintenant : tu le suis. Le son joue maintenant sur l'appareil qui mène.",
     "This device leads the band: the sound plays here now.": "Cet appareil mène le groupe : le son joue ici maintenant.",
@@ -566,6 +567,12 @@
     "This device leads the band, stopped: the browser blocked the sound, press play.":
       "Cet appareil mène le groupe, à l'arrêt : le navigateur a bloqué le son, appuie sur lecture.",
     "Taking the lead…": "Prise de la tête…",
+    "This device leads the band, stopped: the sound did not start in 3 s, press play.":
+      "Cet appareil mène le groupe, à l'arrêt : le son n'a pas démarré en 3 s, appuie sur lecture.",
+    "The band moved on since this screen last heard it: you follow it again. Tap Lead to lead from where it is.":
+      "Le groupe a avancé depuis que cet écran l'a entendu : tu le suis de nouveau. Touche Mener pour mener depuis là où il en est.",
+    "You lead: the band hears this device's recording in {key}, not in the band's key ({band}).":
+      "Tu mènes : le groupe entend l'enregistrement de cet appareil en {key}, pas dans la tonalité du groupe ({band}).",
     "Saved on this device only: the app did not answer, the band does not see it yet.":
       "Enregistré sur cet appareil seulement : l'app n'a pas répondu, le groupe ne le voit pas encore.",
     "The band had no leader: this device leads again.": "Le groupe n'avait plus de meneur : cet appareil mène de nouveau.",

@@ -877,3 +877,35 @@ def test_removals_are_bounded_like_corrections(server: app.AppServer) -> None:
     assert post(server, "/api/corrections", fixes(fixes=many))[0] == 200
     status, _ = post(server, "/api/corrections", fixes(fixes={"extra": None}))
     assert status == 400  # the file of one song stays small
+
+
+def test_a_claim_from_a_screen_that_stopped_hearing_is_refused(
+    server: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "VIEW_LAG", 0.2)
+    seen = post(server, "/api/live", live(lead=True))[1]["v"]
+    now = post(server, "/api/live", live(time=13.5))[1]["v"]  # the leader speaks; a phone's stream is dead
+    time.sleep(0.4)
+    status, answer = post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=seen))
+    assert status == 409 and answer["error"] == "this device had not heard the band for a while"
+    assert answer["state"]["leader"] == LEADER and answer["state"]["time"] == 13.5
+    assert post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=now))[0] == 200  # it heard the last word
+
+
+def test_a_claim_that_saw_the_last_word_just_before_it_wins(server: app.AppServer) -> None:
+    """A heartbeat the phone had not heard yet when it claimed (a few ms on the way) refuses nothing."""
+    seen = post(server, "/api/live", live(lead=True))[1]["v"]
+    post(server, "/api/live", live(time=13.5))
+    assert post(server, "/api/live", live(OTHER, lead=True, over=LEADER, seen=seen))[0] == 200
+
+
+def test_a_claim_says_when_its_place_was_true(server: app.AppServer) -> None:
+    """Held on the way, a claim's place is older than its arrival: `at` (the library's clock) says when."""
+    state = post(server, "/api/live", live(lead=True, at=time.time() - 1.0))[1]
+    assert state["at"] == pytest.approx(time.time() - 1.0, abs=0.3)
+    state = post(server, "/api/live", live(lead=True, at=time.time() + 100))[1]
+    assert state["at"] == pytest.approx(time.time(), abs=0.3)  # never in the future
+    state = post(server, "/api/live", live(lead=True, at=time.time() - 100))[1]
+    assert state["at"] == pytest.approx(time.time() - 5, abs=0.3)  # 5 s at most
+    assert post(server, "/api/live", live(lead=True, at="soon"))[0] == 400
+    assert post(server, "/api/live", live(lead=True, seen=-1))[0] == 400

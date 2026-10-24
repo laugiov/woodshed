@@ -10,6 +10,7 @@
   const STALE = 3.5; // seconds without a word from a playing leader: it is gone (tab closed, asleep)
   const JUMP = 0.4; // seconds: a position further than this from the expected one is a seek
   const SOUND_WAIT_MS = 3000; // a device taking over waits this long at most for its sound to start
+  const CLAIM_MS = 4000; // a claim with no answer by then has failed (the device still follows)
   const OFFSETS = 10; // clock samples kept: the delivery delay only makes a sample smaller
 
   W.views = W.views || {};
@@ -67,28 +68,36 @@
     let sent = null; // what the leader last said: {time, at, playing, rate}
     let handingOver = false; // the leader is taking the band to the next song: no release
     let leadChecked = false;
-    // A tap on Lead waiting for the library's answer: {from, over, cancelled}. Meanwhile the device
-    // sends nothing else and the old leader keeps the band.
+    // A tap on Lead waiting for the library's answer: {from, over}. Meanwhile the device sends nothing
+    // else and the old leader keeps the band. A tap on Alone or Follow drops it at once.
     let claiming = null;
+    let unanswered = false; // a claim got no answer: the library may have taken it (the stream will say)
     let claimed = null; // {boot, v} of this device's accepted claim: an older event is not acted on
     let boot = null; // the app's run: its states count from 0 again when it restarts
 
     const offset = () => (offsets.length ? Math.max(...offsets) : 0);
     const nowServer = () => Date.now() / 1000 + offset();
 
-    async function api(path, body, again = true) {
+    // `timeout` (ms): no answer by then is no answer at all.
+    async function api(path, body, again = true, timeout = 0) {
+      const ctl = timeout ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), timeout) : 0;
       let res;
+      let data;
       try {
         res = await fetch(path, body === undefined ? { cache: "no-store" } : {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Woodshed-Token": token },
           body: JSON.stringify(body),
+          ...(ctl ? { signal: ctl.signal } : {}),
         });
+        data = await res.json().catch(() => ({}));
       } catch (err) {
-        return { ok: false, status: 0, data: { error: W.t("the app did not answer") } };
+        return { ok: false, status: 0, data: { error: "the app did not answer" } };
+      } finally {
+        clearTimeout(timer);
       }
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 403 && body !== undefined && again && (await fetchToken())) return api(path, body, false);
+      if (res.status === 403 && body !== undefined && again && (await fetchToken())) return api(path, body, false, timeout);
       return { ok: res.ok, status: res.status, data };
     }
 
@@ -126,9 +135,14 @@
         id, song: folder, playing: !!app.transport.playing, time: Math.max(0, app.transport.time),
         rate: s.bpm / app.songBpm, loop: s.loopOn && s.loop ? s.loop : null,
       };
-      if (claim) Object.assign(body, { lead: true, over });
+      // A claim also says when its place was true, in the library's clock (it may wait on the way),
+      // and the last state it heard (a screen that stopped hearing the band is refused).
+      if (claim) {
+        Object.assign(body, { lead: true, over, seen: last && typeof last.v === "number" ? last.v : null });
+        if (offsets.length) body.at = nowServer();
+      }
       sent = { time: body.time, at: Date.now() / 1000, playing: body.playing, rate: body.rate };
-      return api("/api/live", body).then((r) => {
+      return api("/api/live", body, true, claim ? CLAIM_MS : 0).then((r) => {
         if (claim && r.ok && typeof r.data.v === "number") claimed = { boot: r.data.boot, v: r.data.v };
         else if (!claim && r.status === 409 && mode === "lead") {
           if (r.data.state && !r.data.state.leader) relead(); // the app restarted: nobody leads
@@ -145,6 +159,8 @@
       say(true).then(() => (releading = false)); // the app restarted: lead again
       app.toast(W.t("The band had no leader: this device leads again."));
     }
+
+    const letGo = () => api("/api/live", { id, release: true });
 
     function startHeartbeat() {
       clearInterval(heartbeat);
@@ -305,7 +321,7 @@
     }
 
     function heard(state) {
-      measuredSince(state); // first: whatever else the state says, or skips
+      measuredSince(state); // first: whatever else the state says, or skips (counters for the whole page go here)
       if (claimed && typeof state.boot === "string" && state.boot !== claimed.boot) claimed = null; // the app restarted
       if (claimed && state.boot === claimed.boot && typeof state.v === "number" && state.v < claimed.v) return; // older than the claim
       if (state.fixes && typeof state.fixes[folder] === "number" && state.fixes[folder] > fixesRev) loadFixes();
@@ -327,6 +343,13 @@
       if (asked === "lead" && mode === "alone" && !leadChecked) {
         leadChecked = true;
         if (state.leader === id) setMode("lead"); // the band followed this device to this song
+      }
+      // The library names this device, which does not lead: a claim whose answer was lost leads;
+      // anything else (Follow tapped after the claim left, a release lost on the way) lets it go.
+      if (!claiming && mode !== "lead" && state.leader === id) {
+        if (unanswered) adopt();
+        else letGo();
+        return;
       }
       if (mode !== "follow") return renderBand();
       if (state.leader && state.song && state.song !== folder) {
@@ -369,8 +392,15 @@
 
     function setMode(next, message) {
       if (claiming) {
-        if (next !== "lead") claiming.cancelled = next; // Alone or Follow while the claim waits
-        return;
+        if (next === "lead") return; // on its way
+        // Alone or Follow while the claim waits: at once. A claim already sent lets the lead go when
+        // its answer comes (see claim()).
+        if (claiming.from === "follow" && app.transport.playing) app.transport.pause();
+        claiming = null;
+        if (next === mode) {
+          if (mode === "follow") follow();
+          return renderBand();
+        }
       }
       if (next === mode) return;
       if (next === "lead") return takeLead();
@@ -378,7 +408,7 @@
       mode = next;
       cancelAnimationFrame(frame);
       clearInterval(heartbeat);
-      if (before === "lead" && next === "alone") api("/api/live", { id, release: true });
+      if (before === "lead") letGo(); // Alone or Follow: nobody keeps a lead it does not use
       if (before === "follow") {
         // Back on its own: the device plays from where the band was, at the band's tempo.
         const s = store.get();
@@ -404,7 +434,8 @@
     // the library agrees, the device sends nothing else and the old leader keeps the band.
     function takeLead() {
       const from = mode;
-      const me = { from, cancelled: null, over: last && last.leader ? last.leader : null };
+      const me = { from, over: last && last.leader ? last.leader : null };
+      unanswered = false;
       claiming = me;
       cancelAnimationFrame(frame);
       const band = from === "follow" && last && last.song === folder ? last : null;
@@ -428,42 +459,89 @@
     }
 
     async function claim(me, band, playing, sound) {
-      if (playing) await Promise.race([sound, new Promise((r) => setTimeout(r, SOUND_WAIT_MS))]);
-      if (me.cancelled) {
-        if (app.transport.playing || playing) app.transport.pause();
-        return claimDone(me, null);
-      }
-      if (playing && !app.transport.playing) app.transport.pause(); // blocked, or not loaded in time
+      let started = null;
+      if (playing) started = await Promise.race([sound, new Promise((r) => setTimeout(() => r(null), SOUND_WAIT_MS))]);
+      if (claiming !== me) return; // Alone or Follow meanwhile: nothing was sent
+      // Stopped by the browser, or the file did not come in time.
+      const stopped = playing && !app.transport.playing ? (started === null ? "late" : "blocked") : null;
+      if (stopped) app.transport.pause();
+      // The band hears the leader's sound: the full mix, not a track this device practised on.
+      if (band && store.get().track !== "mix") await app.setTrack("mix");
+      if (claiming !== me) return;
       if (band && last && last.song === folder && Math.abs(app.transport.time - bandTime()) > 0.1) {
         app.transport.seek(bandTime()); // the old leader kept the band meanwhile
         await seeked(); // the claim says where the sound is, not where it is going
       }
+      if (claiming !== me) return;
       const r = await say(true, me.over);
-      const old = band && band.leader && band.leader !== id;
-      return claimDone(me, r, playing && !app.transport.playing, old);
+      if (claiming !== me) {
+        if (!claiming && mode !== "lead") letGo(); // Alone or Follow after it left: taken or not, let it go
+        return;
+      }
+      claimDone(me, r, stopped, band && band.leader && band.leader !== id);
     }
 
-    function claimDone(me, r, blocked, old) {
+    function claimDone(me, r, stopped, old) {
       claiming = null;
-      if (r && r.ok) {
+      // An event newer than the claim names another leader: it took the lead over this device before
+      // the answer came. A stopped band says nothing more: follow it now.
+      const passed = r.ok && last && claimed && last.boot === claimed.boot && last.v > claimed.v && last.leader && last.leader !== id;
+      if (r.ok) {
         mode = "lead";
         startHeartbeat();
-      } else if (r) {
+        if (passed) return setMode("follow", lost());
+      } else if (r.status === 0 && last && last.leader === id) {
+        return adopt(); // no answer, but the stream already said the library took it
+      } else {
+        if (r.status === 0) unanswered = true;
         if (app.transport.playing && me.from === "follow") app.transport.pause();
         const why = W.t(r.data.error || "the app did not answer"); // the app's fixed reasons are in core/i18n-fr.js
         if (me.from === "alone") app.toast(W.t("Could not lead the band: {why}.", { why }));
-        else if (r.data.state) app.toast(W.t("Another device took the lead first: you follow it."));
-        else app.toast(W.t("Could not lead the band: {why}. You still follow.", { why }));
+        else if (r.data.error === "another device took the lead first") app.toast(W.t("Another device took the lead first: you follow it."));
+        else if (r.data.error === "this device had not heard the band for a while") {
+          app.toast(W.t("The band moved on since this screen last heard it: you follow it again. Tap Lead to lead from where it is."));
+        } else app.toast(W.t("Could not lead the band: {why}. You still follow.", { why }));
       }
       if (mode === "follow") follow();
       listen();
       document.body.classList.toggle("following", mode === "follow");
-      if (r && !r.ok && r.data.state && typeof r.data.state.now === "number") heard(r.data.state); // the band as it is now
+      if (!r.ok && r.data.state && typeof r.data.state.now === "number") heard(r.data.state); // the band as it is now
       renderBand();
-      if (r && r.ok && blocked) app.toast(W.t("This device leads the band, stopped: the browser blocked the sound, press play."));
-      else if (r && r.ok && old) app.toast(W.t("This device leads the band: the sound plays here now."));
+      if (r.ok) leadSaid(stopped, old);
       if (app.awakeCheck) app.awakeCheck();
-      if (me.cancelled && me.cancelled !== mode && !(me.cancelled === "follow" && mode === "lead")) setMode(me.cancelled);
+    }
+
+    // What a new leader is told: its sound stopped, its sound in another key than the band's, or that
+    // the band's sound is here now.
+    function leadSaid(stopped, old) {
+      const s = store.get();
+      const heardKey = s.transpose && app.pitchFollows && app.pitchFollows() && app.pitchReady() ? s.transpose : 0;
+      const bandKey = s.bandKey || 0;
+      if (stopped === "blocked") app.toast(W.t("This device leads the band, stopped: the browser blocked the sound, press play."));
+      else if (stopped === "late") app.toast(W.t("This device leads the band, stopped: the sound did not start in 3 s, press play."));
+      else if (heardKey !== bandKey) {
+        app.toast(W.t("You lead: the band hears this device's recording in {key}, not in the band's key ({band}).", {
+          key: song.keyPathText(heardKey), band: song.keyPathText(bandKey),
+        }));
+      } else if (old) app.toast(W.t("This device leads the band: the sound plays here now."));
+    }
+
+    // The library took a claim whose answer was lost: this device leads, from the band's place.
+    function adopt() {
+      unanswered = false;
+      mode = "lead";
+      cancelAnimationFrame(frame);
+      clearInterval(heartbeat);
+      if (last.song === folder && typeof last.time === "number") app.transport.seek(bandTime());
+      if (last.playing && !app.transport.playing) {
+        app.transport.play().then((ok) => ok || app.toast(W.t("This device leads the band, stopped: the browser blocked the sound, press play.")));
+      }
+      startHeartbeat();
+      listen();
+      document.body.classList.toggle("following", false);
+      renderBand();
+      app.toast(W.t("This device leads the band: the sound plays here now."));
+      if (app.awakeCheck) app.awakeCheck();
     }
 
     // The next song of the set.

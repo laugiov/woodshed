@@ -14,6 +14,7 @@ network address (closed again, it drops the phones still connected).
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import errno
 import http.client
@@ -67,6 +68,7 @@ FREE_MARGIN = 2 * 1024**3  # room left for the page's tracks after an upload
 CHUNK = 1024 * 1024
 TOKEN_HEADER = "X-Woodshed-Token"
 LEADER_GONE = 10.0  # seconds without a word from a playing leader (it says where it is every second)
+VIEW_LAG = 2.5  # seconds: a claim that missed the leader's words for longer saw an old band (a dead stream)
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
 SETLIST_MAX = 500
@@ -1170,6 +1172,7 @@ class Live:
         self.state: dict[str, Any] = {"leader": None}
         self.version = 0
         self.boot = secrets.token_hex(6)
+        self.spoken: collections.deque[tuple[int, float]] = collections.deque(maxlen=256)  # (v, when) of each word
         self.followers = 0
         self.closed = False
         self.fixes: dict[str, int] = {}  # page folder -> revision of its corrections, told to followers
@@ -1226,6 +1229,7 @@ class Live:
                 if leader == who:
                     self.state = {"leader": None}
                     self._changed()
+                    self.spoken.append((self.version, time.time()))
                 return self._numbered()
             claim = data.get("lead") is True
             if not claim and leader != who:
@@ -1233,6 +1237,11 @@ class Live:
             over = data.get("over")
             if over is not None and not (isinstance(over, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", over)):
                 raise ValueError("over: the id of the device that led, or null")
+            seen, at = data.get("seen"), data.get("at")
+            if seen is not None and not (type(seen) is int and seen >= 0):
+                raise ValueError("seen: the number of the last state the device heard, or null")
+            if at is not None and (isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at)):
+                raise ValueError("at: when the place was true, in the library's clock")
             song = data.get("song")
             if not isinstance(song, str) or not song.endswith(".woodshed") or "/" in song or song.startswith("."):
                 raise ValueError("song: a page folder of the library")
@@ -1254,6 +1263,14 @@ class Live:
             gone = self.state.get("playing") is True and time.time() - self.state.get("at", 0) > LEADER_GONE
             if claim and "over" in data and leader not in (None, who, over) and not gone:
                 raise NotLeader("another device took the lead first", {**self._numbered(), "now": time.time()})
+            # A claim from a screen that stopped hearing the band (a dead stream) would stop and rewind it:
+            # refused when the leader's first word it missed is older than VIEW_LAG.
+            missed = next((when for v, when in self.spoken if v > seen), None) if claim and seen is not None else None
+            if leader not in (None, who) and not gone and missed is not None and time.time() - missed > VIEW_LAG:
+                raise NotLeader(
+                    "this device had not heard the band for a while", {**self._numbered(), "now": time.time()}
+                )
+            now = time.time()
             self.state = {
                 "leader": who,
                 "song": song,
@@ -1261,9 +1278,12 @@ class Live:
                 "time": float(data["time"]),
                 "rate": float(data.get("rate", 1.0)),
                 "loop": loop,
-                "at": time.time(),  # the server clock when `time` was true
+                # The server clock when `time` was true: a claim says it (it may have waited on the way),
+                # never in the future nor more than 5 s back.
+                "at": max(now - 5.0, min(now, float(at))) if claim and at is not None else now,
             }
             self._changed()
+            self.spoken.append((self.version, now))
             return self._numbered()
 
     def _changed(self) -> None:

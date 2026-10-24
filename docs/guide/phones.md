@@ -34,7 +34,9 @@ for the whole band.
 Any device can take over: tap Lead on a phone that follows and the song goes on from where the band
 is, playing or stopped. The sound moves with the lead: only the device that leads plays, so the old
 leader goes quiet and follows. If two of you tap Lead at the same moment, the first one leads and
-the other is told and keeps following.
+the other is told and keeps following. The device that takes the lead plays the full mix for the
+band (not the track you practised on), and tells you if its recording plays in another key than
+the band's.
 
 ## Stage mode
 
