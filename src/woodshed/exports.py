@@ -12,6 +12,7 @@ import json
 import math
 import re
 import struct
+import uuid
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
@@ -677,8 +678,15 @@ def file_stem(song: Song) -> str:
 
 
 def write_chordpro(song: Song, folder: Path, words: dict[str, Any] | None) -> None:
-    """The page's ChordPro file again, with the words placed since (woodshed lyrics, a rebuild)."""
-    (folder / f"{file_stem(song)}.cho").write_text(chordpro(song, words), encoding="utf-8")
+    """The page's ChordPro file again, with the words placed since (woodshed lyrics, a rebuild, a line fixed
+    on the sheet): written whole, as a phone of the band may be downloading it."""
+    target = folder / f"{file_stem(song)}.cho"
+    part = folder / f".{target.name}.{uuid.uuid4().hex}.part"
+    try:
+        part.write_text(chordpro(song, words), encoding="utf-8")
+        part.replace(target)
+    finally:
+        part.unlink(missing_ok=True)
 
 
 def write_all(song: Song, folder: Path) -> list[Path]:

@@ -99,6 +99,7 @@ LINE_INDEX = re.compile(r"0|[1-9][0-9]{0,3}")
 WORD_FIXES_MAX = 500  # lines fixed on one placement: more than any song has lines
 WORD_TEXT_MAX = 200  # code points of one line
 LINE_WORDS_MAX = 40
+LINE_PIECES_MAX = 4  # a line split on the sheet: four lines at most, and as many lines joined into one
 VOICES_KEPT = 2  # pages whose voice heard before is kept in memory for fixing lines (about a megabyte each)
 TYPES = {
     ".flac": "audio/flac",
@@ -647,31 +648,52 @@ class Library:
                 raise LineChanged(sorted(changed, key=int))
             now = dict(entry["lines"])
             changes: dict[str, Any] = {}
-            for k in sorted(checked["lines"], key=int):
+            lines_of = placed["lines"]
+            asked = sorted(checked["lines"], key=int)
+            if any(int(k) >= len(lines_of) for k in asked):
+                raise ValueError("lines: by the index of a placed line")
+            # First what holds no words to place (taken back, out of this recording, another voice, joined into
+            # the line before): the new words are then placed with every line around them as it will be.
+            for k in asked:
                 i, want = int(k), checked["lines"][k]
-                if i >= len(placed["lines"]):
-                    raise ValueError("lines: by the index of a placed line")
-                own = placed["lines"][i]
+                own = lines_of[i]
                 if want is None or ("text" in want and want["text"] == own.get("text") and "voice" not in want):
                     changes[k] = None  # the placement's line again
                 elif "gone" in want:
-                    changes[k] = {"was": own["text"], "gone": "not-sung"}
+                    changes[k] = {"was": own["text"], "gone": want["gone"]}
                 elif want["text"] == own.get("text"):
                     changes[k] = {"was": own["text"], "voice": "other"}  # the same words, another voice
                 else:
-                    others = {j: v for j, v in now.items() if j != k}
-                    lines = lyrics.apply_edits(placed, others)["lines"]
-                    line = (
-                        lyrics.place_line(voice, lines, i, want["text"], song, own)
-                        if voice is not None
-                        else lyrics.spread_line(own, want["text"])
-                    )
-                    other = {"voice": "other"} if "voice" in want else {}
-                    changes[k] = {"was": own["text"], "lines": [line], **other}
+                    continue
                 if changes[k] is None:
                     now.pop(k, None)
                 else:
-                    now[k] = changes[k]  # the next line of this change is placed beside it
+                    now[k] = changes[k]
+            # A line that holds no words now lets go of the lines joined into it (spec 028 B).
+            for k in [k for k in asked if k in changes and (changes[k] or {}).get("gone") != "joined"]:
+                for j in _held_by(now, int(k)):
+                    if str(j) not in checked["lines"]:
+                        changes[str(j)] = None
+                        now.pop(str(j), None)
+            for k in asked:
+                if k in changes:
+                    continue
+                i, want = int(k), checked["lines"][k]
+                own = lines_of[i]
+                held = _held_by(now, i)
+                others = {j: v for j, v in now.items() if j != k}
+                lines = lyrics.edited_lines(placed, others)
+                whole = lyrics.joined(lines_of, i, len(held))
+                texts = want["text"].split("\n")
+                pieces = (
+                    lyrics.place_pieces(voice, lines, i, texts, song, whole)
+                    if voice is not None
+                    else lyrics.spread_pieces(whole, texts)
+                )
+                other = {"voice": "other"} if "voice" in want else {}
+                changes[k] = {"was": own["text"], "lines": pieces, **other}
+                now[k] = changes[k]  # the next line of this change is placed beside it
+            _check_joins(now, lines_of)
             merged, removed = _merge_keyed(entry["lines"], entry["removed"], changes)
             if max(len(merged), len(removed)) > WORD_FIXES_MAX:
                 raise ValueError("lines: too many lines fixed")
@@ -679,6 +701,8 @@ class Library:
             for old in sorted(stored["words"], key=lambda k: stored["words"][k]["at"])[:-CORRECTIONS_KEYS]:
                 stored["words"].pop(old)  # the placements of long ago
             rev = self._write(folder, stored)
+            with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the fix is kept whatever happens
+                lyrics.write_songbook(self.root / folder, song, placed, merged)
             return {"key": key, "lines": merged, "removed": removed, "rev": rev}
 
     def _commit_words(self, folder: str, notes: list[str]) -> Callable[[dict[str, Any], lyrics.Voice], None]:
@@ -697,6 +721,9 @@ class Library:
                 # Carried first: a failure here leaves the words and their fixes as they were.
                 changed = carry_fixes(stored, old, data, voice, song, notes)
                 lyrics.write(page, data)
+                fixed = stored["words"].get(lyrics.words_key(data), {}).get("lines", {})
+                with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+                    lyrics.write_songbook(page, lyrics.page_song(page), data, fixed)
                 if not changed:
                     return
                 rev = self._write(folder, stored)
@@ -1405,6 +1432,8 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
             old = None
         if not path.exists():  # a page out of a library, or with nothing corrected
             lyrics.write(page, data)
+            with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+                lyrics.write_songbook(page, lyrics.page_song(page), data, {})
             return
         with corrections_lock(path):  # the app on the same library waits, and reads the file again after
             stored = read_corrections(path)
@@ -1412,8 +1441,21 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
             lyrics.write(page, data)
             if changed:
                 write_corrections(path, stored)
+            fixed = stored["words"].get(lyrics.words_key(data), {}).get("lines", {})
+            with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the words are kept whatever happens
+                lyrics.write_songbook(page, lyrics.page_song(page), data, fixed)
 
     return commit
+
+
+def page_fixes(page: Path, data: dict[str, Any]) -> dict[str, Any]:
+    """The band's fixes of the words of a page of a library (its corrections file), for the placement `data`:
+    a rebuild writes the songbook file with them (build._keep_lyrics)."""
+    path = page.parent / CORRECTIONS_DIR / f"{page.name}.json"
+    if not path.is_file():
+        return {}
+    fixed: dict[str, Any] = read_corrections(path)["words"].get(lyrics.words_key(data), {}).get("lines", {})
+    return fixed
 
 
 def _number(v: Any) -> bool:
@@ -1434,7 +1476,7 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
     for k, v in lines.items():
         if not LINE_INDEX.fullmatch(k):
             raise ValueError("lines: by the index of a placed line")
-        if v is None or v == {"gone": "not-sung"}:
+        if v is None or v == {"gone": "not-sung"} or v == {"gone": "joined"}:
             out[k] = v
             continue
         if not isinstance(v, dict) or not set(v) <= {"text", "voice"} or not isinstance(v.get("text"), str):
@@ -1443,13 +1485,14 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("voice: other")
         if len(v["text"]) > WORD_TEXT_MAX:
             raise ValueError(f"text: {WORD_TEXT_MAX} characters at most")
-        if "\n" in v["text"] or "\r" in v["text"]:
-            raise ValueError("text: one line")
-        text = UNSAFE.sub("", v["text"]).strip()
-        words, _ = lyrics.line_words(text)
+        # A line split on the sheet (spec 028 B): one to four lines, each with words the voice can sing.
+        pieces = [UNSAFE.sub("", p).strip() for p in re.split(r"\r\n|\r|\n", v["text"])]
+        if len(pieces) > LINE_PIECES_MAX:
+            raise ValueError(f"text: {LINE_PIECES_MAX} lines at most")
+        words = [w for p in pieces for w in lyrics.line_words(p)[0]]
         if len(words) > LINE_WORDS_MAX:
             raise ValueError(f"text: {LINE_WORDS_MAX} words at most")
-        out[k] = {"text": text, **({"voice": "other"} if "voice" in v else {})}
+        out[k] = {"text": "\n".join(pieces), **({"voice": "other"} if "voice" in v else {})}
     expect = data.get("expect", {})
     if not isinstance(expect, dict) or len(expect) > WORD_FIXES_MAX:
         raise ValueError("expect: the lines as this device knows them")
@@ -1469,34 +1512,70 @@ def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
     was = v.get("was")
     if not isinstance(was, str) or len(was) > 4 * WORDS_BYTES:
         raise ValueError("was: the placement's text")
-    if set(v) == {"was", "gone"} and v["gone"] == "not-sung":
-        return {"was": was, "gone": "not-sung"}
+    if set(v) == {"was", "gone"} and v["gone"] in ("not-sung", "joined"):
+        return {"was": was, "gone": v["gone"]}
     if not set(v) <= {"was", "lines", "voice"} or len(v) < 2 or v.get("voice", "other") != "other":
         raise ValueError("a line fix")
     out: dict[str, Any] = {"was": was}
     if "lines" in v:
         fixed = v["lines"]
-        if not isinstance(fixed, list) or len(fixed) != 1:
-            raise ValueError("lines: one line")
-        line = fixed[0]
-        text, words, check, backing = line["text"], line["words"], line.get("check"), line.get("backing", [])
-        if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or not isinstance(words, list):
-            raise ValueError("lines: words")
-        if not 0 < len(words) <= LINE_WORDS_MAX or not (check is None or (isinstance(check, str) and len(check) < 200)):
-            raise ValueError("lines: words")
-        if not isinstance(backing, list) or not all(isinstance(b, str) and len(b) <= WORD_TEXT_MAX for b in backing):
-            raise ValueError("lines: backing vocals")
-        kept = []
-        for w in words:
-            start, end = w["start"], w["end"]
-            timed = _number(start) and _number(end) and 0 <= start <= end < 86400
-            if not isinstance(w["text"], str) or len(w["text"]) > WORD_TEXT_MAX or not (timed or start is end is None):
-                raise ValueError("lines: words in time")
-            kept.append({"text": w["text"], "start": start, "end": end})
-        out["lines"] = [{"text": text, "backing": list(backing), "words": kept, "check": check}]
+        if not isinstance(fixed, list) or not 0 < len(fixed) <= LINE_PIECES_MAX:  # more than one: a split
+            raise ValueError("lines: one to four lines")
+        out["lines"] = []
+        for line in fixed:
+            text, words, check, backing = line["text"], line["words"], line.get("check"), line.get("backing", [])
+            if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or not isinstance(words, list):
+                raise ValueError("lines: words")
+            if not 0 < len(words) <= LINE_WORDS_MAX or not (
+                check is None or (isinstance(check, str) and len(check) < 200)
+            ):
+                raise ValueError("lines: words")
+            if not isinstance(backing, list) or not all(
+                isinstance(b, str) and len(b) <= WORD_TEXT_MAX for b in backing
+            ):
+                raise ValueError("lines: backing vocals")
+            kept = []
+            for w in words:
+                start, end = w["start"], w["end"]
+                timed = _number(start) and _number(end) and 0 <= start <= end < 86400
+                text_ok = isinstance(w["text"], str) and len(w["text"]) <= WORD_TEXT_MAX
+                if not text_ok or not (timed or start is end is None):
+                    raise ValueError("lines: words in time")
+                kept.append({"text": w["text"], "start": start, "end": end})
+            out["lines"].append({"text": text, "backing": list(backing), "words": kept, "check": check})
     if "voice" in v:
         out["voice"] = "other"
     return out
+
+
+def _held_by(entries: dict[str, Any], i: int) -> list[int]:
+    """The lines joined into line i (spec 028 B): the ones right after it kept as "joined"."""
+    out, j = [], i + 1
+    while isinstance(entries.get(str(j)), dict) and entries[str(j)].get("gone") == "joined":
+        out.append(j)
+        j += 1
+    return out
+
+
+def _check_joins(entries: dict[str, Any], lines: list[Any]) -> None:
+    """Every line joined into the line before it: that line holds words the band wrote, in the same part,
+    both sung where the words were placed, four lines at most in one."""
+    for k, e in entries.items():
+        if not (isinstance(e, dict) and e.get("gone") == "joined"):
+            continue
+        i = int(k) - 1
+        while i >= 0 and isinstance(entries.get(str(i)), dict) and entries[str(i)].get("gone") == "joined":
+            i -= 1
+        base = entries.get(str(i)) if i >= 0 else None
+        if not (isinstance(base, dict) and base.get("lines") and "gone" not in base):
+            raise ValueError("lines: a line joined into the line before it, with the words of both")
+        if len(_held_by(entries, i)) >= LINE_PIECES_MAX:
+            raise ValueError(f"lines: {LINE_PIECES_MAX} lines at most joined into one")
+        j = int(k)
+        if lines[j].get("block") != lines[i].get("block") or lines[j].get("tag") != lines[i].get("tag"):
+            raise ValueError("lines: lines of one part only are joined")
+        if not (lines[j].get("sung") and lines[i].get("sung")):
+            raise ValueError("lines: lines sung where the words were placed are joined")
 
 
 class LineChanged(PermissionError):

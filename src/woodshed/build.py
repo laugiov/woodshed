@@ -142,9 +142,12 @@ def _keep_lyrics(old: Path, new: Path, song_data: dict[str, Any], source: Path) 
         (new / lyrics.LYRICS).unlink(missing_ok=True)
         (new / lyrics.LYRICS_JS).write_text(empty, encoding="utf-8")
         return
-    # The songbook file with the words; the words are kept whatever happens to it.
+    # The songbook file with the words and the band's fixes of them (a library's page keeps its placement,
+    # so its fixes); the words are kept whatever happens to it.
     with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError):
-        exports.write_chordpro(song_data, new / "exports", data)
+        from woodshed.app import page_fixes
+
+        exports.write_chordpro(song_data, new / "exports", lyrics.apply_edits(data, page_fixes(old, data)))
 
 
 def upgraded(data: dict[str, Any]) -> dict[str, Any]:

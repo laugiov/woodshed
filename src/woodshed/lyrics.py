@@ -900,26 +900,53 @@ def _first_letters(words: Sequence[Any]) -> str:
     return next((x for w in words if (x := letters_of(str(w.text if isinstance(w, Word) else w.get("text", ""))))), "")
 
 
+def joined(lines: Sequence[Any], i: int, n: int) -> dict[str, Any]:
+    """Line i of the placement with the n lines after it joined into it (spec 028 B): one line holding all
+    their words, so its window spans them all."""
+    held = [ln for ln in lines[i : i + n + 1] if isinstance(ln, dict)]
+    words = [w for ln in held for w in ln.get("words") or []]
+    return {**lines[i], "text": " ".join(str(ln.get("text") or "") for ln in held), "words": words}
+
+
 def place_line(
     voice: Voice, lines: Sequence[Any], i: int, text: str, song: dict[str, Any], placed: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Line i of the sheet with new words, placed again in its own window (line_window): its words with
-    their times, its backing vocals, and its check. `lines`: the lines as the sheet shows them now;
-    `placed`: the line as the words were placed (its time is the window's middle). Raises NoRoom."""
+    their times, its backing vocals, and its check. `lines`: the lines as the sheet shows them now, by
+    their index in the placement (edited_lines); `placed`: the line as the words were placed (its time
+    is the window's middle). Raises NoRoom."""
+    return place_pieces(voice, lines, i, [text], song, placed)[0]
+
+
+def place_pieces(
+    voice: Voice,
+    lines: Sequence[Any],
+    i: int,
+    texts: Sequence[str],
+    song: dict[str, Any],
+    placed: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Line i with new words written as one to four lines (a split, spec 028 B): placed together in the
+    line's window, a wildcard between them as place_words does, so each line gets the time it is sung in.
+    `placed`: the line as placed, or several joined into one (joined). Raises NoRoom."""
     own = placed if placed is not None else lines[i]
-    text = text.strip()
-    words, backing = line_words(text)
+    texts = [t.strip() for t in texts]
+    read_lines = [line_words(t) for t in texts]
+    words = [w for ws, _ in read_lines for w in ws]
     if any(c not in voice.labels for w in words for c in w.letters):
         raise ValueError("letters the model cannot hear in this line")
     first_changed = _first_letters(words) != _first_letters(own.get("words") or [])
     a, b = line_window(lines, i, own, song, voice.emission.shape[0], first_changed, voice.frame)
     dictionary = {c: k for k, c in enumerate(voice.labels)}
     tokens, owner = [voice.star], []
-    for wi, w in enumerate(words):
-        for c in w.letters:
-            owner.append(wi)
-            tokens.append(dictionary[c])
-    tokens.append(voice.star)
+    wi = 0
+    for ws, _ in read_lines:
+        for w in ws:
+            for c in w.letters:
+                owner.append(wi)
+                tokens.append(dictionary[c])
+            wi += 1
+        tokens.append(voice.star)  # the voice may breathe, or sing what is not written, between two lines
     letters = [k for k, t in enumerate(tokens) if t != voice.star]
     try:
         if b <= a:
@@ -939,30 +966,42 @@ def place_line(
         else {"text": w.text, "start": None, "end": None}
         for wi, w in enumerate(words)
     ]
-    sung = "".join(w.letters for w in words)
-    f0, f1 = a + times[order[0]][0][0], a + times[order[-1]][-1][1] + 1
-    if len(sung) >= ANCHOR_LETTERS:  # the anchor rule: heard as its text, or to check
-        check = None if cer(heard(voice, f0, f1), sung) <= ANCHOR_CER else LINE_CHECK
-    else:  # too short to be heard as a text: as placed, unless its words moved
-        half_beat = 30 / float(song["bpm"])
-        before = [w.get("start") if isinstance(w, dict) else None for w in own.get("words") or []]
-        after = [w["start"] for w in out]
-        pairs = zip(before, after, strict=False)
-        still = len(before) == len(after) and all(
-            (x is None) == (y is None) and (x is None or abs(x - y) <= half_beat) for x, y in pairs
-        )
-        check = own.get("check") if still else LINE_CHECK
-    return {"text": text, "backing": backing, "words": out, "check": check}
+    # Too short to be heard as a text: as placed, unless its words moved more than half a beat.
+    half_beat = 30 / float(song["bpm"])
+    before = [w.get("start") if isinstance(w, dict) else None for w in own.get("words") or []]
+    pairs = zip(before, [w["start"] for w in out], strict=False)
+    still = len(before) == len(out) and all(
+        (x is None) == (y is None) and (x is None or abs(x - y) <= half_beat) for x, y in pairs
+    )
+    pieces, at = [], 0
+    for text, (ws, backing) in zip(texts, read_lines, strict=True):
+        mine = range(at, at + len(ws))
+        at += len(ws)
+        sung = "".join(w.letters for w in ws)
+        timed = [wi for wi in mine if wi in times]
+        if len(sung) >= ANCHOR_LETTERS and timed:  # the anchor rule: heard as its text, or to check
+            f0, f1 = a + times[timed[0]][0][0], a + times[timed[-1]][-1][1] + 1
+            check = None if cer(heard(voice, f0, f1), sung) <= ANCHOR_CER else LINE_CHECK
+        else:
+            check = own.get("check") if still else LINE_CHECK
+        pieces.append({"text": text, "backing": backing, "words": out[mine.start : mine.stop], "check": check})
+    return pieces
 
 
 def spread_line(placed: dict[str, Any], text: str) -> dict[str, Any]:
     """Line `placed` with new words when the voice heard before is not in the cache (it was cleared):
     spread by syllables over the line's own time, a placeholder to listen to. The model is not run."""
-    text = text.strip()
-    words, backing = line_words(text)
+    return spread_pieces(placed, [text])[0]
+
+
+def spread_pieces(placed: dict[str, Any], texts: Sequence[str]) -> list[dict[str, Any]]:
+    """spread_line for a line written as one to four lines: all their words over the line's own time."""
+    texts = [t.strip() for t in texts]
+    read_lines = [line_words(t) for t in texts]
     span = _span(placed)
     if span is None:
         raise ValueError("lines: a line placed on the voice")
+    words = [w for ws, _ in read_lines for w in ws]
     weights = [max(1, len(SYLLABLE.findall(w.text))) if w.letters else 0 for w in words]
     total, t = sum(weights), span[0]
     out: list[dict[str, Any]] = []
@@ -973,7 +1012,11 @@ def spread_line(placed: dict[str, Any], text: str) -> dict[str, Any]:
         step = (span[1] - span[0]) * n / total
         out.append({"text": w.text, "start": round(t, 3), "end": round(t + step, 3)})
         t += step
-    return {"text": text, "backing": backing, "words": out, "check": SPREAD_CHECK}
+    pieces, at = [], 0
+    for text, (ws, backing) in zip(texts, read_lines, strict=True):
+        pieces.append({"text": text, "backing": backing, "words": out[at : at + len(ws)], "check": SPREAD_CHECK})
+        at += len(ws)
+    return pieces
 
 
 def apply_edits(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
@@ -990,6 +1033,9 @@ def apply_edits(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]
         if e.get("gone") == "not-sung":
             ln.update(sung=False, edited="not-sung")
             continue
+        if e.get("gone") == "joined":  # its words went to the line before it (spec 028 B)
+            ln.update(sung=False, edited="joined")
+            continue
         fixed = e.get("lines")
         if isinstance(fixed, list) and fixed:
             words = [dict(w) for w in fixed[0]["words"]]
@@ -998,7 +1044,63 @@ def apply_edits(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]
         if e.get("voice") == "other":
             ln["voice"] = "other"
         ln["edited"] = True
-    return {**data, "lines": lines}
+    return _split_rows({**data, "lines": lines}, entries)
+
+
+def _split_rows(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
+    """A line split on the sheet (spec 028 B) as rows: its first line where it was, the others right after
+    it, each marked with `piece` (1, 2, 3): a fix, a window, an Undo still name the line by its index in
+    the placement (edited_lines). Markers name the row they come before."""
+    lines = data["lines"]
+    more: dict[int, list[Any]] = {}
+    for k, e in entries.items():
+        i = int(k) if isinstance(k, str) and k.isdigit() else -1
+        if 0 <= i < len(lines) and isinstance(lines[i], dict) and isinstance(e, dict) and "gone" not in e:
+            fixed = e.get("lines")
+            if isinstance(fixed, list) and len(fixed) > 1:
+                more[i] = fixed[1:]
+    if not more:
+        return data
+    rows: list[Any] = []
+    where: list[int] = []  # the row of each line of the placement
+    for i, ln in enumerate(lines):
+        where.append(len(rows))
+        rows.append(ln)
+        for j, piece in enumerate(more.get(i, []), 1):
+            words = [dict(w) for w in piece["words"]]
+            rows.append(
+                {
+                    **ln,
+                    "text": piece["text"],
+                    "backing": list(piece.get("backing") or []),
+                    "words": words,
+                    "check": piece.get("check"),
+                    "sung": any(_timed(w) for w in words),
+                    "piece": j,
+                }
+            )
+    out = {**data, "lines": rows}
+    if isinstance(data.get("markers"), list):
+        out["markers"] = [
+            {**m, "before": where[m["before"]] if m["before"] < len(where) else len(rows)}
+            if isinstance(m, dict) and isinstance(m.get("before"), int) and m["before"] >= 0
+            else m
+            for m in data["markers"]
+        ]
+    return out
+
+
+def edited_lines(data: dict[str, Any], entries: dict[str, Any]) -> list[Any]:
+    """The lines with the band's fixes on, one per line of the placement (by its index): a split line is one
+    line again, holding its pieces' words. The windows of the lines around a fix are read from these."""
+    out: list[Any] = []
+    for row in apply_edits(data, entries)["lines"]:
+        if isinstance(row, dict) and row.get("piece") and out and isinstance(out[-1], dict):
+            out[-1]["words"] = [*out[-1]["words"], *row["words"]]
+            out[-1]["sung"] = bool(out[-1].get("sung") or row["sung"])
+        else:
+            out.append(dict(row) if isinstance(row, dict) else row)
+    return out
 
 
 def carry_edits(
@@ -1006,34 +1108,64 @@ def carry_edits(
 ) -> tuple[dict[str, Any], int]:
     """The band's fixes of an old placement on a new one (the words placed again): each goes to the line
     that reads as its line did (the same text, its k-th time), placed again in its new window; one whose
-    line changed in the text is left out (counted), one the new text already has is dropped."""
+    line changed in the text is left out (counted), one the new text already has is dropped. A join goes
+    whole, with the lines it holds, or not at all."""
     before, after = old.get("lines") or [], new.get("lines") or []
+
+    def index(k: str) -> int:
+        return int(k) if k.isdigit() else -1
+
+    def held_by(i: int) -> list[int]:  # the lines joined into line i
+        out, j = [], i + 1
+        while str(j) in entries and isinstance(entries[str(j)], dict) and entries[str(j)].get("gone") == "joined":
+            out.append(j)
+            j += 1
+        return out
+
+    def target(i: int, was: Any) -> int | None:  # the line of the new placement that reads as line i did
+        if not (0 <= i < len(before)) or before[i].get("text") != was:
+            return None
+        nth = sum(1 for ln in before[:i] if ln.get("text") == was)
+        same = [j for j, ln in enumerate(after) if ln.get("text") == was]
+        return same[nth] if nth < len(same) else None
+
     out: dict[str, Any] = {}
     left = 0
-    for key in sorted(entries, key=lambda k: int(k) if k.isdigit() else -1):
-        e, i = entries[key], int(key) if key.isdigit() else -1
+    joins = {j for k in entries for j in held_by(index(k)) if entries[k].get("gone") != "joined"}
+    for key in sorted(entries, key=index):
+        e, i = entries[key], index(key)
+        if e.get("gone") == "joined":
+            left += i not in joins  # a join whose line is not there any more: nothing to carry it by
+            continue
+        held = held_by(i)
         was = e.get("was")
         fixed = e["lines"][0]["text"] if isinstance(e.get("lines"), list) and e["lines"] else None
         if not (0 <= i < len(before)) or before[i].get("text") != was:
-            left += 1  # not the line it was made on: nothing to carry it by
+            left += 1 + len(held)  # not the line it was made on: nothing to carry it by
             continue
-        nth = sum(1 for ln in before[:i] if ln.get("text") == was)
-        same = [j for j, ln in enumerate(after) if ln.get("text") == was]
-        if nth >= len(same):
-            if fixed is None or not any(ln.get("text") == fixed for ln in after):
-                left += 1
+        n = target(i, was)
+        moved = [target(j, entries[str(j)].get("was")) for j in held]
+        if n is None or any(m != n + 1 + f for f, m in enumerate(moved)):
+            if n is None and fixed is not None and any(ln.get("text") == fixed for ln in after):
+                continue  # the paste has the fix
+            left += 1 + len(held)
             continue
-        n = same[nth]
         if fixed is None:  # not in this recording, another voice: as it was
             out[str(n)] = dict(e)
             continue
         try:
-            effective = apply_edits(new, out)["lines"]
-            line = place_line(voice, effective, n, fixed, song, after[n]) if voice else spread_line(after[n], fixed)
+            for f, j in enumerate(held):
+                out[str(n + 1 + f)] = dict(entries[str(j)])
+            effective = edited_lines(new, out)
+            own = joined(after, n, len(held))
+            texts = [ln["text"] for ln in e["lines"]]
+            lines = place_pieces(voice, effective, n, texts, song, own) if voice else spread_pieces(own, texts)
         except (LyricsError, ValueError):
-            left += 1
+            for f in range(len(held)):
+                out.pop(str(n + 1 + f), None)
+            left += 1 + len(held)
             continue
-        out[str(n)] = {**e, "lines": [line]}
+        out[str(n)] = {**e, "lines": lines}
     return out, left
 
 
@@ -1287,7 +1419,8 @@ def add_to_page(
 
     Shared by `woodshed lyrics` and the library app. The page needs its instrument tracks in the cache.
     `progress` hears how far it is, 0 to 1: listening to the voice is most of the time. `commit`, when
-    given, writes the words instead (the library: under its lock, the band's fixes carried over).
+    given, writes the words and the songbook file instead (the library: under its lock, the band's fixes
+    carried over).
     """
     step = progress or (lambda f: None)
     cache = stems_folder(page)
@@ -1301,14 +1434,21 @@ def add_to_page(
     data = place(text, voice, chart)
     if commit is None:
         write(page, data)
+        write_songbook(page, chart, data, {})
     else:
-        commit(data, voice)
-    if (page / "exports").is_dir():  # the songbook file of the page, with the words now
-        from woodshed import exports
-
-        exports.write_chordpro(chart, page / "exports", data)
+        commit(data, voice)  # the songbook too, with the band's fixes carried
     step(1.0)
     return data
+
+
+def write_songbook(page: Path, song: dict[str, Any], data: dict[str, Any], entries: dict[str, Any]) -> None:
+    """The songbook file of the page (exports/<song>.cho) with the words and the band's fixes of them
+    (spec 028 B), written whole: a phone may download it meanwhile."""
+    if not (page / "exports").is_dir():
+        return
+    from woodshed import exports
+
+    exports.write_chordpro(song, page / "exports", apply_edits(data, entries))
 
 
 def page_song(folder: Path) -> dict[str, Any]:

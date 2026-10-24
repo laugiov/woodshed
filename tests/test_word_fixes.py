@@ -472,7 +472,7 @@ def test_the_token_is_needed_but_not_the_right_to_add_songs(
         {"4": {"text": "a line"}},  # past the last line
         {"01": {"text": "a line"}},  # one spelling an index
         {"1": {"text": "a" * 201}},  # 200 characters at most
-        {"1": {"text": "two\nlines"}},  # one line at a time (split and join come later)
+        {"1": {"text": "a\nb\nc\nd\ne"}},  # a line split in four at most
         {"1": {"text": "мир"}},  # letters the speech model cannot hear
         {"1": {"text": " ".join(["la"] * 41)}},  # 40 words at most
         {"1": {"text": "a line", "voice": "lead"}},
@@ -693,7 +693,7 @@ def test_the_command_line_waits_for_the_app_and_keeps_its_fix(
 ) -> None:
     fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
     commit, data, v = cli_commit_setup(library, monkeypatch)
-    place = lyrics.place_line
+    place = lyrics.place_pieces
     inside = threading.Event()
 
     def slow(*args: Any, **kwargs: Any) -> Any:
@@ -701,11 +701,11 @@ def test_the_command_line_waits_for_the_app_and_keeps_its_fix(
         time.sleep(1.0)  # the app holds the corrections while it places a line from a phone
         return place(*args, **kwargs)
 
-    monkeypatch.setattr(lyrics, "place_line", slow)
+    monkeypatch.setattr(lyrics, "place_pieces", slow)
     phone = threading.Thread(target=lambda: fix(library, {"2": {"text": "hold on hold on to the northern lights"}}))
     phone.start()
     assert inside.wait(5)
-    monkeypatch.setattr(lyrics, "place_line", place)
+    monkeypatch.setattr(lyrics, "place_pieces", place)
     started = time.monotonic()
     commit(data, v)  # the command line places the words again meanwhile
     waited = time.monotonic() - started
