@@ -29,6 +29,15 @@ chord name or a bar number opens that bar, a line opens the line editor to fix i
 the arrows go from line to line, **Enter** opens the line, **Escape** comes back to it, and Space
 still plays.
 
+A line too long for one row, or two short lines sung as one phrase: in the line editor,
+**Shift+Enter** (or **Split at the cursor**, behind **More** on a phone while the keyboard is up)
+breaks the line where the cursor is, up to four rows, and **Save** places them together in the
+line's own time. **Join with the next line** makes the line and the next one of the same part a
+single line, placed in the time of both; in Edit mode the line it took in shows as a quiet row,
+"joined into line 7", with **Back to the placement**. Undo and **Back to the placement** take back
+the whole split or join, and the songbook file in the page folder (`exports/*.cho`) is written again
+with the fixes.
+
 Shapes, keys, the stage view and every export follow what you type, and through the library the
 band's phones get it live.
 

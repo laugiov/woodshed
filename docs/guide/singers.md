@@ -37,6 +37,8 @@ gives the line back as it was placed.
 - **Not in this recording**: the line leaves the sheet, the stage and the ChordPro; in Edit mode it
   stays as one quiet row with the way back.
 - The chips under the field open the bar editor on each bar of the line, to type its chord.
+- **Shift+Enter** (or **Split at the cursor**) breaks a line where the cursor is; **Join with the next
+  line** makes two lines of one part one line. Each is placed in the line's own time.
 - Placing all the words again, from the app or with `woodshed lyrics`, keeps each fix whose line still
   reads the same, and says which ones it left out.
 - Undo never takes back a fix another device made since: it says so and leaves it.

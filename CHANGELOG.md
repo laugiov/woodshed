@@ -23,6 +23,11 @@ corrections and set list stay where they are.
   a line the recording does not have, **Not in this recording**. The chord of each bar of the line
   opens from there. The stage, the phones and the ChordPro export read the fixed words, and placing
   all the words again keeps each fix whose line still reads the same.
+- Split a line of the words or join two, right on the sheet: in the line editor, **Shift+Enter** (or
+  **Split at the cursor**) breaks the line where the cursor is, and **Join with the next line** makes
+  two lines of one part a single line. The library places them in the line's own time, the lines
+  around do not move, and Undo or **Back to the placement** takes back the whole split or join. The
+  songbook file of the page (`exports/*.cho`) is written again with the band's fixes after each one.
 - An older woodshed opened on the same library keeps the chords, but forgets the lines fixed on the
   sheet the next time it saves a chord: update every computer that runs the library.
 
