@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -82,6 +82,7 @@ QUALITIES = ("", "m", "7", "m7")
 CORRECTIONS_DIR = ".corrections"  # in the library: one file per page, never served
 CORRECTIONS_KEYS = 8  # analyses of one song kept (each rebuild with a new analysis is one)
 KNOWN_SECTIONS = {"rev", "by_key", "band", "edits", "words"}  # of a corrections file; any other is kept as it is
+LOCK_WAIT = 10.0  # seconds a write waits for another woodshed (the app, `woodshed lyrics`) writing the same file
 NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
 DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 # The band's typed chords and part names (core/edits.js), by the beat they start on.
@@ -430,11 +431,12 @@ class Library:
 
     def _clear_note(self, folder: str) -> int | None:
         """Under the lock: the band's note on a song taken away; its new revision, or None if it had none."""
-        stored = self._stored(folder)
-        if "note" not in stored["band"]:
-            return None
-        stored["band"].pop("note")
-        return self._write(folder, stored)
+        with corrections_lock(self._corrections_file(folder)):  # another woodshed on the library waits
+            stored = self._stored(folder)
+            if "note" not in stored["band"]:
+                return None
+            stored["band"].pop("note")
+            return self._write(folder, stored)
 
     def clear_notes_out_of_the_set(self) -> None:
         """At start, once the port is ours (serve): the notes 0.4.0 left on songs out of the set."""
@@ -499,7 +501,7 @@ class Library:
         folder = self._page(data.get("page"))
         checked = _checked_corrections(data, removals=True)
         key = checked["key"]
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             # Two devices correcting at once: both chords are kept; a later choice for a doubt wins.
             # A choice of null takes the doubt back to the analysis: it is remembered as removed, so a
@@ -530,7 +532,7 @@ class Library:
         folder = self._page(data.get("page"))
         checked = _checked_edits(data, removals=True)
         key = checked["key"]
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             entry = stored["edits"].get(key, {})
             bars, removed_bars = _merge_keyed(entry.get("bars", {}), entry.get("removed_bars", {}), checked["bars"])
@@ -566,7 +568,7 @@ class Library:
         change = _checked_band({k: data[k] for k in ("transpose", "key", "note") if k in data})
         if ("transpose" in change) != ("key" in change):
             raise ValueError("transpose and key go together")
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             stored = self._stored(folder)
             band = {**stored["band"], **change}
             if band.get("transpose") == 0:  # the recorded key again: nothing to say
@@ -630,7 +632,7 @@ class Library:
         checked = _checked_words(data)
         key = checked["key"]
         voice = self._voice(folder)  # before the lock: the first fix of a page decodes its voice
-        with self.lock:
+        with self.lock, corrections_lock(self._corrections_file(folder)):
             placed = self._placement(folder)
             if lyrics.words_key(placed) != key:
                 raise StaleWords("the words were placed again: reload the page")
@@ -685,7 +687,7 @@ class Library:
 
         def commit(data: dict[str, Any], voice: lyrics.Voice) -> None:
             page = self.root / folder
-            with self.lock:
+            with self.lock, corrections_lock(self._corrections_file(folder)):
                 try:
                     old: dict[str, Any] | None = self._placement(folder)
                 except ValueError:
@@ -1230,10 +1232,14 @@ def read_corrections(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         return out
     out["other"] = {k: v for k, v in data.items() if k not in KNOWN_SECTIONS}
+    # A known section in a shape this version cannot read is kept as it is too, not dropped by the next write.
+    out["other"] |= {k: data[k] for k in ("by_key", "edits", "words") if k in data and not isinstance(data[k], dict)}
     rev = data.get("rev")
     out["rev"] = rev if type(rev) is int and rev >= 0 else 0
-    with contextlib.suppress(ValueError):
+    try:
         out["band"] = _checked_band(data.get("band") or {})
+    except ValueError:
+        out["other"]["band"] = data["band"]
     entries = data.get("by_key")
     for key, entry in entries.items() if isinstance(entries, dict) else []:
         try:
@@ -1279,22 +1285,68 @@ def read_corrections(path: Path) -> dict[str, Any]:
     return out
 
 
+@contextlib.contextmanager
+def corrections_lock(path: Path) -> Iterator[None]:
+    """One writer at a time for a page's corrections, across processes: the library app and `woodshed lyrics` on
+    the same library read, change and write the file inside it (a lock file beside it, locked by the system and let
+    go if the process dies). A writer that waits LOCK_WAIT seconds in vain is refused with a sentence."""
+    path.parent.mkdir(exist_ok=True)
+    with path.with_name(path.name + ".lock").open("a+b") as fh:
+        deadline = time.monotonic() + LOCK_WAIT
+        while not _lock_file(fh):
+            if time.monotonic() > deadline:
+                raise WoodshedError("another woodshed is writing the corrections of this song: try again")
+            time.sleep(0.05)
+        try:
+            yield
+        finally:
+            _unlock_file(fh)
+
+
+def _lock_file(fh: Any) -> bool:
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock_file(fh: Any) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 def write_corrections(path: Path, stored: dict[str, Any], seen: int = 0) -> int:
     """A page's corrections and band choices written whole (`stored` as read_corrections gives it), with the next
     revision (past `seen`, the last one this library told). Every section is written back, a newer woodshed's too."""
     rev: int = max(stored["rev"], seen) + 1  # kept in the file: grows across restarts
     body: dict[str, Any] = dict(stored.get("other") or {})
     body["rev"] = rev
-    body["by_key"] = {
-        k: {
-            "fixes": v,
-            "at": stored["at"][k],
-            **({"removed": r} if (r := stored["removed"].get(k)) else {}),
+    if stored["by_key"] or "by_key" not in body:  # one this version could not read is kept until it has its own
+        body["by_key"] = {
+            k: {
+                "fixes": v,
+                "at": stored["at"][k],
+                **({"removed": r} if (r := stored["removed"].get(k)) else {}),
+            }
+            for k, v in stored["by_key"].items()
         }
-        for k, v in stored["by_key"].items()
-    }
     for name in ("band", "edits", "words"):
-        body.pop(name, None)
         if stored.get(name):
             body[name] = stored[name]
     path.parent.mkdir(exist_ok=True)
@@ -1351,15 +1403,15 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
             old = json.loads((page / lyrics.LYRICS).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             old = None
-        stored = read_corrections(path)
-        changed = (
-            path.exists()
-            and isinstance(old, dict)
-            and carry_fixes(stored, old, data, voice, lyrics.page_song(page), notes)
-        )
-        lyrics.write(page, data)
-        if changed:
-            write_corrections(path, stored)
+        if not path.exists():  # a page out of a library, or with nothing corrected
+            lyrics.write(page, data)
+            return
+        with corrections_lock(path):  # the app on the same library waits, and reads the file again after
+            stored = read_corrections(path)
+            changed = isinstance(old, dict) and carry_fixes(stored, old, data, voice, lyrics.page_song(page), notes)
+            lyrics.write(page, data)
+            if changed:
+                write_corrections(path, stored)
 
     return commit
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -672,3 +673,125 @@ def test_a_section_from_a_newer_woodshed_is_kept_by_every_write(library: app.App
     post(library, "/api/corrections", {"page": PAGE, "key": "a1b2c3", "fixes": {"3": [9, "m"]}})
     fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
     assert stored(library)["future"] == {"kept": [1, 2]}
+
+
+# The library and the command line on one library (the review of the second version): one writer at a time.
+
+
+def cli_commit_setup(library: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, dict[str, Any], Any]:
+    """The command line's commit for a new placement of the page (a line added first), and that voice."""
+    new = ["a new first line", *LINES]
+    v = voice([(t, 1.0 + 5 * k, 5.0 + 5 * k) for k, t in enumerate(new)], 40.0)
+    monkeypatch.setattr(lyrics, "page_song", lambda page: CHART)
+    data = lyrics.place("\n".join(new), v, CHART)
+    notes: list[str] = []
+    return app.lyrics_commit(library.library.root / PAGE, notes), data, v
+
+
+def test_the_command_line_waits_for_the_app_and_keeps_its_fix(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    commit, data, v = cli_commit_setup(library, monkeypatch)
+    place = lyrics.place_line
+    inside = threading.Event()
+
+    def slow(*args: Any, **kwargs: Any) -> Any:
+        inside.set()
+        time.sleep(1.0)  # the app holds the corrections while it places a line from a phone
+        return place(*args, **kwargs)
+
+    monkeypatch.setattr(lyrics, "place_line", slow)
+    phone = threading.Thread(target=lambda: fix(library, {"2": {"text": "hold on hold on to the northern lights"}}))
+    phone.start()
+    assert inside.wait(5)
+    monkeypatch.setattr(lyrics, "place_line", place)
+    started = time.monotonic()
+    commit(data, v)  # the command line places the words again meanwhile
+    waited = time.monotonic() - started
+    phone.join(10)
+    assert waited > 0.5  # it waited for the app's write
+    got = read(library, lyrics.words_key(data))["words"]["lines"]
+    assert set(got) == {"2", "3"}  # both fixes carried: the phone's is not lost
+    assert got["3"]["lines"][0]["text"] == "hold on hold on to the northern lights"
+
+
+def test_the_app_waits_for_the_command_line_and_keeps_its_write(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    commit, data, v = cli_commit_setup(library, monkeypatch)
+    carry = lyrics.carry_edits
+    inside = threading.Event()
+
+    def slow(*args: Any, **kwargs: Any) -> Any:
+        inside.set()
+        time.sleep(1.0)  # the command line holds the corrections while it carries
+        return carry(*args, **kwargs)
+
+    monkeypatch.setattr(lyrics, "carry_edits", slow)
+    cli_thread = threading.Thread(target=commit, args=(data, v))
+    cli_thread.start()
+    assert inside.wait(5)
+    started = time.monotonic()
+    status, _ = post(library, "/api/corrections", {"page": PAGE, "key": "a1b2c3", "fixes": {"3": [9, "m"]}})
+    waited = time.monotonic() - started
+    cli_thread.join(10)
+    assert status == 200 and waited > 0.5
+    body = stored(library)
+    assert body["by_key"]["a1b2c3"]["fixes"] == {"3": [9, "m"]}  # the chord picked meanwhile
+    assert lyrics.words_key(data) in body["words"]  # and the fixes carried by the command line
+
+
+def test_a_write_that_cannot_get_the_corrections_says_so(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "LOCK_WAIT", 0.3)
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    held, done = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with app.corrections_lock(path):
+            held.set()
+            done.wait(5)
+
+    t = threading.Thread(target=hold)
+    t.start()
+    assert held.wait(5)
+    try:
+        status, answer = post(library, "/api/corrections", {"page": PAGE, "key": "a1b2c3", "fixes": {"3": [9, "m"]}})
+    finally:
+        done.set()
+        t.join(5)
+    assert status == 409 and answer["error"] == "another woodshed is writing the corrections of this song: try again"
+
+
+def test_a_known_section_in_a_shape_this_version_cannot_read_is_kept(library: app.AppServer) -> None:
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"rev": 1, "edits": ["a", "list"], "band": {"transpose": 99}}), encoding="utf-8")
+    post(library, "/api/corrections", {"page": PAGE, "key": "a1b2c3", "fixes": {"3": [9, "m"]}})
+    body = stored(library)
+    assert body["edits"] == ["a", "list"] and body["band"] == {"transpose": 99}
+
+
+def test_a_crash_while_the_command_line_carries_leaves_everything_as_it_was(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _, answer = fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    before = placement(library)
+    new = ["a new first line", *LINES]
+    v = voice([(t, 1.0 + 5 * k, 5.0 + 5 * k) for k, t in enumerate(new)], 40.0)
+    monkeypatch.setattr(lyrics, "listen", lambda *args, **kwargs: v)
+    monkeypatch.setattr(lyrics, "page_song", lambda page: CHART)
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("a bug")
+
+    monkeypatch.setattr(app, "carry_fixes", broken)
+    words = tmp_path / "words.txt"
+    words.write_text("\n".join(new), encoding="utf-8")
+    with pytest.raises(RuntimeError):  # a bug in the command line shows its traceback
+        cli.main(["lyrics", str(library.library.root / PAGE), str(words)])
+    assert placement(library) == before
+    assert read(library)["words"]["lines"] == answer["lines"]
