@@ -24,6 +24,26 @@ reader hears each line's opening chord ("still Cm"). The singer's stage keeps to
 
 From the command line, or for a page opened from disk: `woodshed lyrics "Song.woodshed" words.txt`.
 
+### Fix a line on the sheet
+
+A typo, a number, a line the MC speaks: press **Edit chords and words**, then click (or tap) the
+line. Fix the words and press **Enter**: only that line is placed again, in a blink, on the voice
+heard the first time; the lines around it do not move, and every device of the band shows the fix.
+**Undo** is in the note and in the strip (**Ctrl+Z**, **⌘+Z** on a Mac); **Back to the placement**
+gives the line back as it was placed.
+
+- **Other voice / spoken**: a line someone else sings or speaks stays on the sheet with its chords,
+  in quieter letters, off your stage view and its "Next:".
+- **Not in this recording**: the line leaves the sheet, the stage and the ChordPro; in Edit mode it
+  stays as one quiet row with the way back.
+- The chips under the field open the bar editor on each bar of the line, to type its chord.
+- Placing all the words again keeps each fix whose line still reads the same, and says which ones it
+  left out.
+
+A line is fixed through the library (woodshed app), on any device of the band; a page opened from
+disk cannot place it. Without the voice heard before (the cache was cleared), the words are spread
+over the line's time and marked to listen to.
+
 What the words need:
 
 - Latin letters only (most accented letters are fine).

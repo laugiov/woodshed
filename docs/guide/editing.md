@@ -23,6 +23,12 @@ offers to type it on every repeat of that line.
 
 **Enter** saves the bar; **Ctrl+Enter** (**⌘+Enter** on a Mac) saves and opens the next one.
 
+With the words placed, the button reads **Edit chords and words** and the words stay on screen: a
+chord name or a bar number opens that bar, a line opens the line editor to fix its words (see
+[For singers](singers.md#fix-a-line-on-the-sheet)). With the keyboard, the lines are one Tab stop:
+the arrows go from line to line, **Enter** opens the line, **Escape** comes back to it, and Space
+still plays.
+
 Shapes, keys, the stage view and every export follow what you type, and through the library the
 band's phones get it live.
 

@@ -16,6 +16,15 @@ corrections and set list stay where they are.
   grey over its first word ("Cm", "N.C."), so a line with no change never reads as "no chord found".
   Also on the guitar and keys words stage (the lines coming), never on the singer's stage; a screen
   reader hears each line's opening chord.
+- Fix a line of the words right on the sheet: **Edit chords and words**, click the line, type, Enter.
+  Only that line is placed again, in a blink, and the lines around it do not move; every device of
+  the band shows it, and Undo or **Back to the placement** brings it back. A line someone else sings
+  or speaks can be marked **Other voice / spoken** (kept on the sheet, off the singer's stage), and
+  a line the recording does not have, **Not in this recording**. The chord of each bar of the line
+  opens from there. The stage, the phones and the ChordPro export read the fixed words, and placing
+  all the words again keeps each fix whose line still reads the same.
+- An older woodshed opened on the same library keeps the chords, but forgets the lines fixed on the
+  sheet the next time it saves a chord: update every computer that runs the library.
 
 ## [0.5.1] - 2026-10-24
 
