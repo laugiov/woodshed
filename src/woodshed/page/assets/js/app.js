@@ -1242,6 +1242,7 @@
     // plays, its ArrowRight seeks. Leaving, it comes back where it was (the Stage mode button, the bar pressed
     // S on), else to Stage mode; the page stays on the song.
     let stageReturn = null;
+    let leftFor = null; // the stage left, the keyboard's place to give back once out of full screen
     const shown = (el) => !!el && el.isConnected && el.getClientRects().length > 0;
     // Out of the stage: the keyboard back where it was, unless the musician put it elsewhere meanwhile.
     // Full screen makes the rest of the page inert in Chromium: given again once it is left.
@@ -1263,20 +1264,21 @@
       store.set({ stage: on });
       if (on && !was) $("stage").focus({ preventScroll: true });
       const r = !on && was ? stageReturn : null;
+      if (on && !was) leftFor = null;
       if (!on && was) {
         stageReturn = null;
+        leftFor = r; // given again when full screen is left (below), even one granted after the stage closed
         giveBack(r);
       }
       if (on && full) {
         try {
           const p = $("stage").requestFullscreen && $("stage").requestFullscreen();
-          if (p && p.catch) p.catch(() => {});
+          // Granted after the stage was left already (Escape pressed quickly): left again.
+          if (p && p.then) p.then(() => !store.get().stage && document.exitFullscreen().catch(() => {}), () => {});
         } catch (err) {
           /* full screen refused: the stage still covers the page */
         }
-      } else if (document.fullscreenElement) {
-        document.exitFullscreen().then(() => r && giveBack(r), () => {});
-      }
+      } else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }
     $("stageBtn").addEventListener("click", () => setStage(true));
     $("stageExit").addEventListener("click", () => setStage(false));
@@ -1307,7 +1309,10 @@
       if (changed.has("playing") || changed.has("stage")) renderStagePlay(s);
     });
     document.addEventListener("fullscreenchange", () => {
-      if (!document.fullscreenElement && store.get().stage) setStage(false);
+      if (document.fullscreenElement) return;
+      if (store.get().stage) setStage(false);
+      else if (leftFor) giveBack(leftFor);
+      leftFor = null;
     });
     let spoken = "";
     store.on((s, changed) => {

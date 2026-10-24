@@ -107,15 +107,16 @@ def test_a3_in_edit_mode_a_bar_brought_into_view_keeps_a_margin(open_page: Any) 
     o.page.keyboard.press("ArrowDown")
     o.page.keyboard.press("ArrowDown")
     assert o.js(FOCUSED_BAR) == 24
-    settled(o)
-    box = o.js(BOX)
-    assert box["bottom"] <= box["seen"], box  # never under the player
+    until(o, f"(() => {{ const b = {BOX}; return b.bottom <= b.seen; }})()")  # never under the player
     o.page.keyboard.press("ArrowUp")
     o.page.keyboard.press("ArrowUp")
     assert o.js(FOCUSED_BAR) == 0
+    # 12 px from the window's top (less sub-pixel rounding), never flush with it; polled: a smooth scroll may
+    # start late on a loaded machine.
+    until(o, f"(() => {{ const b = {BOX}; return b.top >= 11 && b.bottom <= b.seen; }})()")
     settled(o)
     box = o.js(BOX)
-    assert box["top"] >= 11, box  # 12 px from the window's top (less sub-pixel rounding), never flush with it
+    assert box["top"] >= 11, box
 
 
 @pytest.mark.tablet
@@ -265,6 +266,7 @@ def test_a11_space_after_tapping_in_and_out_of_stage_plays(open_page: Any) -> No
     expect(o.page.get_by_test_id("stage")).to_be_visible()
     o.page.get_by_test_id("stage-exit").click()
     expect(o.page.get_by_test_id("stage")).to_be_hidden()
+    until(o, f"{FOCUSED} === 'stage-open'")  # given back once out of full screen, still the mouse's focus
     o.page.keyboard.press(" ")
     until(o, "Woodshed.debug().playing === true")
     o.page.wait_for_timeout(200)
