@@ -73,7 +73,8 @@ ear. How sure each part is: [your part](parts.md).
 - Chords are triads by default; `--sevenths` adds 7 and m7 chords, less reliably.
 - Key changes: found when the new key holds 8 bars or more; shorter ones (a tonicisation) are not, and the
   band cannot type one yet. One meter for the whole song.
-- Lyrics: Latin letters only (most accented letters are fine); write numbers out as words ("twenty", not "20").
+- Lyrics placed by the model: Latin letters only (most accented letters are fine); write numbers out as words
+  ("twenty", not "20"). Tapping along and typing take any script.
 - The page is tested in Chromium and Firefox on every change, and what tablets need in WebKit
   (Safari's engine), not yet on a real iPad.
 
@@ -87,10 +88,13 @@ woodshed is MIT. The models it downloads come with their own licences:
 | beat_this | Beats and downbeats | MIT |
 | MMS forced aligner (weights, 1.2 GB) | Placing lyrics (optional) | **CC BY-NC 4.0**: non-commercial use |
 
-**If your band is paid to play, leave the words feature aside** unless you are sure your use is
-non-commercial: it is the only part that needs the MMS weights, and
+**If your band is paid to play, leave the model aside** unless you are sure your use is
+non-commercial: placing the words on the voice is the only part that needs the MMS weights, and
 [their licence](https://creativecommons.org/licenses/by-nc/4.0/) allows non-commercial use only
-(this is not legal advice). Everything else in woodshed is under permissive licences (MIT, and SIL
+(this is not legal advice). The words still go on the chart without it: paste them and **lay them by
+tapping along**, or type a line yourself. Start the library with `woodshed app --no-words-model` (or
+`WOODSHED_NO_WORDS_MODEL=1` in Docker) and it never offers the model, never downloads it, and refuses
+it if asked. Everything else in woodshed is under permissive licences (MIT, and SIL
 OFL for the fonts) and free for any use, paid gigs included.
 
 The page ships VexFlow (MIT) for notation, the FluidR3 GM SoundFont (MIT) for instrument sounds,

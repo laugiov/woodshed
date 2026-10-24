@@ -7,11 +7,19 @@ shapes, every phone, and the recording itself.
 
 <img src="../images/lyrics.png" alt="The Lyrics view: chords above the words, bar lines numbered, the line being sung lit" width="100%">
 
-In the library, a song with its parts offers **add the words**; on its page, **+ Add the words**
-next to the chart. Paste them (part names like `[Chorus]` help; one line per sung line), press
-**Place the words**: woodshed places them on the singer's voice, line by line (a progress bar shows
-how far it is), and a minute later the page shows each chord above the word it lands on. The first
-time takes longer: the model that listens to the voice is downloaded once.
+In the library, a song offers **add the words**; on its page, **+ Add the words** next to the
+chart. Paste them (part names like `[Chorus]` help; one line per sung line), then pick one of two
+paths:
+
+- **Lay them by tapping along**: no model, any language, free for any use (paid gigs included). See
+  [Tap along](#tap-along) below.
+- **Place them on the voice**: woodshed listens to the singer's own track and places each line on it
+  (a progress bar shows how far it is); a minute later the page shows each chord above the word it
+  lands on. The first time takes longer: the model is downloaded once. It needs the song built with
+  its instrument tracks, and its licence allows non-commercial use only (see below).
+
+The library computer can start without the model: `woodshed app --no-words-model` (or
+`WOODSHED_NO_WORDS_MODEL=1`, for Docker). Then only tapping along and typing are offered.
 
 Bar lines are numbered, pushes are marked, and the line being sung lights up as the song plays.
 Click a word to jump there. Instrumental bars stay a grid, so a solo never hides inside a lyric
@@ -56,7 +64,23 @@ What the words need:
 - The song built with its instrument tracks, since the words are placed on the singer's own track.
 
 The model that places the words is free for non-commercial use only: if your band is paid to play,
-read [the licences](how-it-works.md#models-and-licences) first.
+tap along or type the words instead (no model), and read [the licences](how-it-works.md#models-and-licences).
+
+### Tap along
+
+**Lay them by tapping along** reads the pasted words as the model would (parts, `x2`, rows of chords
+dropped, words in brackets as backing vocals), closes the dialog and plays the song. A panel shows the
+line to come: tap **Space**, your pedal (it sends Space, Right arrow or Page Down) or the big **Tap**
+button on a phone or tablet the moment the line starts. **Escape** (or **Done**) stops: the lines
+tapped so far are laid, the others are not.
+
+- Each tap snaps to the nearest quarter beat.
+- A line's words take one beat per syllable from the tap (half beats, or quarter beats, when the line
+  is crowded before the next tap); `_` holds a word one more syllable, as when you type a line.
+- One **Undo** takes the whole layout back. Laying the words again replaces only the lines the last
+  layout laid: a line you typed by hand stays, and a new line that would be sung over it is left out.
+- Then move the words that fall wrong, as below. In a swing feel, "half a beat" is the straight half:
+  a swung "and" sits a little later, so a word on it may need a nudge by ear.
 
 ### Type a line yourself
 

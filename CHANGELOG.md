@@ -34,6 +34,14 @@ corrections and set list stay where they are.
   syllables, the editor reads the line back before saving, and the band sees it live. A typed line
   covers the placed line under it while it is there. Move any word half a beat with ◀ ▶, a tap on
   its place in the bar, or **M** from the keyboard.
+- Paste all the words and tap along, no model needed: **Words** opens one dialog with two paths,
+  **Lay them by tapping along** (no model, any language, any use) and **Place them on the voice**
+  (the speech model, its non-commercial licence said under it). Tapping along plays the song: tap
+  Space, a pedal or the big button on a phone as each line starts, Escape to stop. Each tap snaps to
+  the nearest quarter beat, the words share the line by syllables, and one Undo takes the whole layout
+  back. Laying them again replaces only the lines the last layout laid, never a line typed by hand.
+- `woodshed app --no-words-model` (or `WOODSHED_NO_WORDS_MODEL=1`, for Docker) starts a library that
+  never offers nor runs the speech model: for a band paid to play, only tapping along and typing.
 - An older woodshed opened on the same library keeps the chords, but forgets the lines fixed on the
   sheet the next time it saves a chord: update every computer that runs the library.
 
