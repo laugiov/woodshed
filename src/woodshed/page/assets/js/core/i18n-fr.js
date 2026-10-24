@@ -107,6 +107,12 @@
 
     // Wiring: toasts, steps, the export menu (app.js)
     "no chord": "pas d'accord",
+    // The chord still sounding at the start of a sung line (spec 027).
+    "still {chord}": "toujours {chord}",
+    "still no chord": "toujours sans accord",
+    "Still {chord}: the chord goes on from before": "Toujours {chord} : l'accord continue d'avant",
+    "Still no chord: nothing played from before": "Toujours sans accord : rien de joué depuis avant",
+    "Grey chord: still sounding from before.": "Accord gris : il sonne encore depuis la ligne d'avant.",
     "sounds {chord}, capo {n}": "sonne {chord}, capo {n}",
     "play the {chord} shape, capo {n}": "joue la position de {chord}, capo {n}",
     "funk triad on strings 3-2-1": "triade funk sur les cordes 3-2-1",

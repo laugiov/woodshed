@@ -186,13 +186,31 @@
         }
         return [name, push];
       };
+      // The chord a line opens on (spec 027), named as the line's chords but spelled in the key of the bar it
+      // opens in. opts.remind: shown when it goes on from before, small and muted, in the first word's chord slot,
+      // over the words unless the next item has a chord (two chords never glued). On the sheet a screen reader
+      // hears it on every line ("C", "still C"), unless a chord to check there already reads it.
+      const items = row.bars.flatMap((b) => b.items);
+      const opens = opts.remind ? row.opens : null;
+      const opening = (item, checks) => {
+        if (!opens || item !== items[0]) return [null, null];
+        const c = opens.chord;
+        const name = c.pc < 0 ? null : app.nameFor(c, shift, s, opens.bar);
+        const said = name === null ? W.t(opens.still ? "still no chord" : "no chord") : opens.still ? W.t("still {chord}", { chord: W.prettyText(name) }) : W.prettyText(name);
+        const sr = opts.stage || checks ? null : h("span", { class: "sr-only", "data-testid": "line-chord" }, said);
+        if (!opens.still) return [sr, null];
+        const title = name === null ? W.t("Still no chord: nothing played from before") : W.t("Still {chord}: the chord goes on from before", { chord: W.prettyText(name) });
+        const over = !(items[1] && items[1].chords.length);
+        return [sr, h("span", { class: "remind" + (over ? " over" : ""), "data-testid": "chord-reminder" }, h("span", { "aria-hidden": "true", title }, name === null ? "N.C." : chordNode(name)))];
+      };
       const word = (item) => {
         const checks = !opts.stage && item.chords.some((p) => p.chord.doubt); // to check, or a correction to change
-        // The chord names are for the eye: a screen reader reads the words, and the checks.
-        const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]));
-        if (item.kind === "gap") return h("span", { class: "lw gap" }, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));
+        const [sr, remind] = opening(item, checks);
+        // The chord names are for the eye: a screen reader reads the words, the checks and the line's opening chord.
+        const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]), remind);
+        if (item.kind === "gap") return h("span", { class: "lw gap" }, sr, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));
         const seek = !opts.stage && item.timed ? item.t.toFixed(3) : null;
-        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, lc, h("span", { class: "wt", translate: "no" }, item.text));
+        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, sr, lc, h("span", { class: "wt", translate: "no" }, item.text));
       };
       const parts = [];
       row.bars.forEach((b, i) => {
@@ -293,6 +311,7 @@
       const out = [];
       let shown = -1;
       const keySaid = new Set(); // a key change inside sung lines: said once, above the line it falls in
+      let legendSaid = false;
       for (const x of blocks) {
         const k = sections.length ? song.sectionIndex(x.at, sections) : -1;
         while (k > shown) {
@@ -311,13 +330,18 @@
             out.push(h("div", { class: "lkey", "data-testid": "key-change-words" }, W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, region)) })));
           }
         }
+        // Above the first sung line, once: what the grey chord is (a touch screen has no hover for its title).
+        if (!legendSaid && rows.some((x) => x.opens && x.opens.still)) {
+          legendSaid = true;
+          out.push(h("p", { class: "remind-legend", "data-testid": "chord-reminder-legend" }, W.t("Grey chord: still sounding from before.")));
+        }
         out.push(
           h(
             "div",
             // The check is one of the texts woodshed lyrics writes, in core/i18n-fr.js.
             { class: "lline" + (r.line.check ? " check" : ""), "data-line": r.li, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null },
             h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) }, fmt(r.line.start)),
-            lyricLine(r, s, { stage: false }),
+            lyricLine(r, s, { stage: false, remind: true }),
           ),
         );
       }

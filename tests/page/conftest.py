@@ -102,6 +102,10 @@ def rewritten(name: str, root: str, tag: str, change: Callable[[dict[str, Any]],
     midline = data["song"].pop("_lyrics_midline", False)
     opened = data["song"].pop("_lyrics_opened", False)
     at = data["song"].pop("_lyrics_at", 0)
+    given = data["song"].pop("_lyrics_data", None)
+    if given is not None:  # words written by the variant itself
+        (folder / "lyrics.js").write_text("window.WOODSHED_LYRICS = " + build.script_json(given) + ";\n")
+        (folder / "lyrics.json").write_text(json.dumps(given))
     if data["song"].pop("_lyrics", False):
         lyrics = lyrics_for(data["song"], at)
         if late:  # a line whose only word comes late in bar 2, after both of its chord changes
@@ -171,6 +175,70 @@ def lyrics_for(song: dict[str, Any], at: int = 0) -> dict[str, Any]:
              "words": [{"text": "not", "start": None, "end": None}]},
         ],
     }  # fmt: skip
+
+
+def lyrics_per_bar(song: dict[str, Any], at: int, texts: list[tuple[str, str]]) -> dict[str, Any]:
+    """One sung line per bar from bar `at` (0-based), one per pair of `texts`: the first word on the downbeat, the
+    second at half the bar."""
+    line: dict[str, Any] = {"tag": None, "block": 0, "backing": [], "sung": True, "check": None}
+    lines = []
+    for k, (a, b) in enumerate(texts):
+        start, end = song["bars"][at + k]["start"], song["bars"][at + k]["end"]
+        size = end - start
+        words = [
+            {"text": a, "start": start, "end": start + 0.4 * size},
+            {"text": b, "start": start + 0.5 * size, "end": start + 0.8 * size},
+        ]
+        lines.append({**line, "text": a + " " + b, "words": words})
+    return {"version": 1, "language": "en", "text": "", "chords": [], "lines": lines}
+
+
+VAMP_WORDS = [
+    ("Morning", "comes"), ("the", "road"), ("radio", "hums"), ("in", "time"), ("no", "sound"), ("still", "here"),
+]  # fmt: skip
+
+
+def _vamp(song: dict[str, Any], quality: str = "", glue: bool = False, early: bool = False) -> None:
+    """pop as a vamp (spec 027): bars 1-4 all C, bars 5-6 no chord, a close call (G) on bar 3's C, one sung line per
+    bar over bars 1-6. `glue`: the vamp in `quality`, line 2 opening on one letter with a change (G) on its second
+    word, line 4 on one letter. `early`: bar 4 played as G, line 4's first word 0.1 s before its downbeat and its
+    second 0.15 s after it (the change pushed to it)."""
+    bars = song["bars"]
+    c = {**bars[0]["chords"][0], "pc": 0, "quality": quality, "beats": song["beats_per_bar"], "doubt": None}
+    alternatives = [{"pc": 7, "quality": "", "share": 55}, {"pc": 0, "quality": quality, "share": 45}]
+    doubt = {"id": 910, "why": "Close call between the top candidates.", "kind": "chord", "alternatives": alternatives}
+    for u in range(4):
+        bars[u]["chords"] = [dict(c)]
+    bars[2]["chords"] = [{**c, "doubt": doubt}]
+    for u in (4, 5):
+        bars[u]["chords"] = [{**c, "pc": -1, "quality": ""}]
+    texts = list(VAMP_WORDS)
+    if glue:
+        half = song["beats_per_bar"] // 2
+        bars[1]["chords"] = [{**c, "beats": half}, {**c, "pc": 7, "quality": "", "beats": half}]
+        texts[1], texts[3] = ("a", "road"), ("I", "time")
+    if early:
+        bars[3]["chords"] = [{**c, "pc": 7, "quality": ""}]
+    words = lyrics_per_bar(song, 0, texts)
+    if early:
+        t = bars[3]["start"]
+        first, second = words["lines"][3]["words"]
+        first.update(start=t - 0.1, end=t + 0.1)
+        second.update(start=t + 0.15, end=t + 0.6)
+    song["_lyrics_data"] = words
+
+
+def _vamp_lift(song: dict[str, Any]) -> None:
+    """lift (C, then D flat from bar 17) with bars 16-18 all on pitch class 6 (F sharp in C, G flat in D flat), one
+    sung line per bar over bars 15-19; the line of bar 17 sung 0.1 s before its downbeat (on bar 16's chord, in C)."""
+    bars = song["bars"]
+    for u in (15, 16, 17):
+        bars[u]["chords"] = [{**bars[u]["chords"][0], "pc": 6, "quality": "", "beats": song["beats_per_bar"]}]
+    texts = [("one", "two"), ("three", "four"), ("five", "six"), ("seven", "eight"), ("nine", "ten")]
+    words = lyrics_per_bar(song, 14, texts)
+    t = bars[16]["start"]
+    words["lines"][2]["words"][0].update(start=t - 0.1)
+    song["_lyrics_data"] = words
 
 
 def _with_lyrics(song: dict[str, Any]) -> None:
@@ -365,6 +433,10 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "lyrics-stacked": _lyrics_stacked,
     "lyrics-midline": _lyrics_midline,
     "lyrics-opened": _lyrics_opened,
+    "lyrics-vamp": _vamp,
+    "lyrics-vamp-glue": lambda song: _vamp(song, quality="m7", glue=True),
+    "lyrics-vamp-early": lambda song: _vamp(song, early=True),
+    "lyrics-vamp-lift": _vamp_lift,
     "lyrics-lift": _lyrics_over_the_lift,
     "lyrics-lift-early": _lyrics_before_the_lift,
     "keys-readings": _keys_readings,

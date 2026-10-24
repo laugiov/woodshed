@@ -43,6 +43,12 @@ panel names it, with the barre chords it saves, and a button to put it on), and 
 in the bar: the strumming rhythm, read from the guitar's own track. When the song changes key, the
 shapes come grouped by key ("From bar 17: D♭ major"), with a word for the hands on a lift.
 
+Guitar and keys can read the words instead of the grid (the Lyrics view, and stage mode beside the
+big chord). Every line starts with a chord: bold where it changes, small and grey where it goes on
+from before ("Cm" over a line in a C minor vamp), so a line with no change never reads as "nothing
+found here". On stage the grey chord is shown on the lines coming, not on the one you play (the big
+chord names it).
+
 ## Bass
 
 **Rough: check by ear.** The line as played, in tab, bar by bar. Hear any bar on its own; a looped

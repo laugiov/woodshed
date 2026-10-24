@@ -10,6 +10,13 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+### Added
+
+- In the Lyrics view, a line that opens on a chord still sounding from before shows it, small and
+  grey over its first word ("Cm", "N.C."), so a line with no change never reads as "no chord found".
+  Also on the guitar and keys words stage (the lines coming), never on the singer's stage; a screen
+  reader hears each line's opening chord.
+
 ## [0.5.1] - 2026-10-24
 
 ### Changed

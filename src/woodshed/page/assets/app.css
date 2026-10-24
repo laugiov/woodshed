@@ -682,6 +682,12 @@ body.following #playBtn { opacity: 0.45; }
 .lw { display: inline-flex; flex-direction: column; vertical-align: bottom; cursor: pointer; }
 .lw .lc { min-height: 1.2em; font-family: var(--font-chord); font-size: 1.05em; font-weight: 700; color: var(--ink); white-space: nowrap; padding-right: 0.35em; }
 .lw .lc .doubt { font-size: 1em; }
+/* The chord still sounding at the start of a line with none of its own (spec 027): a plain name, small and muted, so
+   it never reads as a change. Over the words when the next item has no chord (the first word keeps its width);
+   taking its width when it does, so two chords are never glued. */
+.lw .lc .remind { font-size: 0.72em; font-weight: 500; color: var(--muted); }
+.lw .lc .remind.over { display: inline-block; width: 0; overflow: visible; }
+.remind-legend { margin: 2px 6px 0; font-size: 13px; color: var(--muted); }
 .lw.gap { color: var(--muted); cursor: default; }
 .lw .push { font-family: var(--font-body); font-size: 0.45em; font-weight: 600; color: var(--muted); margin-left: 2px; vertical-align: super; }
 .lwords .bl { display: inline-block; position: relative; width: 2px; height: 2.3em; background: var(--muted); margin: 0 8px 0 10px; vertical-align: bottom; }
@@ -748,6 +754,8 @@ body.following #playBtn { opacity: 0.45; }
   .lwords .bl { height: 2em; margin: 0 5px 0 6px; }
   .lwords .bl i { top: -10px; font-size: 7.5px; }
   .lw .lc { font-size: 1em; min-height: 1.1em; }
+  .lw .lc .remind { font-size: 0.82em; }
+  .remind-legend { font-size: 9px; margin: 0 2px; }
   .doubt sup { display: none; }
   .lline.cur { background: none; }
   .lline .nb.inloop { box-shadow: none; }

@@ -256,8 +256,10 @@
         if (sec && before && sec.name !== before.name) out.push(h("div", { class: "st-next-part" }, W.partName(sec)));
         const now = i === 0 && k >= 0;
         const ready = i === 0 && stopped && !now;
+        // The chord still sounding (spec 027) on the lines after the one sung (the big Now chord names it); never
+        // on the singer's stage, which keeps to the words.
         if (ready) out.push(h("div", { class: "st-next-label", "data-testid": "stage-next-label" }, W.t("Next:")));
-        out.push(h("div", { class: "st-line" + (now ? " now" : ready ? " ready" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true })));
+        out.push(h("div", { class: "st-line" + (now ? " now" : ready ? " ready" : " later"), "data-testid": "stage-line" }, app.lyricLine(r, s, { stage: true, remind: s.inst !== "voice" && !now && !ready })));
         if (now) {
           const span = Math.max(0.1, (rows[k + 1] ? rows[k + 1].line.start : r.line.end) - r.line.start);
           const done = Math.max(0, Math.min(1, (s.time - r.line.start) / span));

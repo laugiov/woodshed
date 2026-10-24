@@ -500,6 +500,8 @@ The rule: **for an uncorrected song, the two produce the same bytes.** The JS fi
 
 The same idea applies to placing chords on words: `core/lyrics.js` uses the same rule as `lyrics.chord_changes` and `lyrics.place_chords` in Python.
 
+Page only, with no Python twin: `rows()` also gives each sung line `opens`, the chord it opens on (its first item's own, or the chord of the chart sounding at that time, `still: true`, spelled in the key of the bar the line opens in). The Lyrics view and the words stage draw it as a small grey reminder (spec 027); the exports write chord changes only.
+
 If you change an export, change both sides in the same commit.
 
 ---

@@ -126,6 +126,16 @@
         if (into) into.items.push({ kind: "gap", t: p.t, chords: [p] });
       }
       for (const r of out) for (const b of r.bars) b.items.sort((a, c) => a.t - c.t || (a.wi ?? -1) - (c.wi ?? -1));
+      // The chord each line opens on (spec 027): its first item's own (still: false), else the chord of the chart
+      // sounding at that item's exact time (still: true), spelled in the region of the bar the line opens in.
+      // Nothing before the chart's first beat.
+      for (const r of out) {
+        const first = r.bars.flatMap((b) => b.items)[0];
+        r.opens = null;
+        if (!first) continue;
+        if (first.chords.length) r.opens = { chord: first.chords[0].chord, bar: first.chords[0].bar, still: false };
+        else if (first.t >= song.beatTime(0)) r.opens = { chord: song.chordAtBeat(song.beatAt(first.t)), bar: r.bars[0].bar, still: true };
+      }
       return { rows: out, owner };
     }
 

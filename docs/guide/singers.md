@@ -17,6 +17,11 @@ Bar lines are numbered, pushes are marked, and the line being sung lights up as 
 Click a word to jump there. Instrumental bars stay a grid, so a solo never hides inside a lyric
 line.
 
+A chord is written where it changes. A line that opens on a chord still sounding from before shows
+it anyway, small and grey over its first word ("Cm", or "N.C." when nothing is played): a grey chord
+means "keep playing it", a bold one is a change. One line above the words says so, and a screen
+reader hears each line's opening chord ("still Cm"). The singer's stage keeps to the words.
+
 From the command line, or for a page opened from disk: `woodshed lyrics "Song.woodshed" words.txt`.
 
 What the words need:
