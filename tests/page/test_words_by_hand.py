@@ -327,7 +327,9 @@ def test_tap_a_word_then_a_slot(browser: Browser, library: Callable[[str], app.A
     assert words[1]["at"] == s["first_beat"] + 3.5 and words[1]["start"] == typed.beat_time(s, s["first_beat"] + 3.5)
     expect(page.get_by_test_id("move-where")).to_have_text("“comes”: bar 1, the and of 4")  # still open
     page.get_by_test_id("toast-action").click()  # Undo
-    until(page, "!!document.querySelector('#sheet .lline[data-key]')")
+    # Waited for on the page: the word back on beat 3 as the sheet draws it (the row was there before the Undo too).
+    back = s["first_beat"] + 2
+    until(page, f"((Woodshed.app.wordFixes().t00000001 || {{}}).lines || [{{words: []}}])[0].words[1]?.at === {back}")
     assert typed_entries(srv)["t00000001"]["lines"][0]["words"][1]["at"] == s["first_beat"] + 2
     assert problems == []
 
