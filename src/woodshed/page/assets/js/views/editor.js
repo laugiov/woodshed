@@ -259,6 +259,14 @@
           : null,
         also ? h("label", { class: "also" }, also, W.t("Also {parts}, the same bar", { parts: listOf([...new Set(others.map((v) => (partOf(v) === partOf(u) ? W.t("{part}, played again", { part: partOf(v) }) : partOf(v))))]) })) : null,
         startPart(u),
+        // Words typed by hand from this bar (spec 029): a page with no words, a bar the model left empty, a line
+        // typed over a placed one. With the library, which reads the line and shares it.
+        app.canFixWords()
+          ? h("div", { class: "type-here" }, h("button", { type: "button", class: "btn", "data-testid": "type-line-here", onclick: () => {
+              close(false);
+              app.typedLines.openNew(u);
+            } }, "+ ", W.t("Type a line here")))
+          : null,
         h("p", { class: "tip" }, W.t("As on a chord sheet: Asus4, Cmaj7, Bdim, D/F#. A dot holds the chord, % repeats the bar before.")),
         h("p", { class: "tip", "data-testid": "bar-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next bar.", { mod: MOD })),
         h(
@@ -394,7 +402,7 @@
       const strip = $("editStrip");
       const words = app.sheetMode(s) === "lyrics";
       const fixing = words && app.canFixWords();
-      const fixed = Object.keys(app.wordFixes()).length;
+      const fixed = Object.keys(app.wordFixes()).filter((k) => !W.typedWords.KEY.test(k)).length; // placed lines fixed
       const undo = app.wordsUndo();
       const shows = s.editing && !s.stage ? [W.lang(), s.corrections, words, fixing, fixed, undo].join("|") : "";
       strip.hidden = !shows;

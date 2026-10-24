@@ -582,7 +582,7 @@ def test_back_to_the_placement_is_a_finger_wide_on_a_phone(browser: Browser, ser
     page.get_by_test_id("line-more").click()  # the keyboard up: the tools behind More
     page.get_by_test_id("line-gone").click()
     box = page.get_by_test_id("line-gone-back").bounding_box()
-    assert box is not None and box["height"] >= 44
+    assert box is not None and round(box["height"], 2) >= 44  # Firefox: a scroll of a fraction of a pixel, 43.99998
     assert problems == []
 
 

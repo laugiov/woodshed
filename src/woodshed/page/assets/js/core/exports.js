@@ -272,6 +272,7 @@
         waiting = waiting.filter((p) => p.t >= ln.end);
         let tokens = [];
         let lastEnd = ln.start;
+        let glue = false; // a syllable typed with "-" (spec 029): the next one joins it, "stum[G]ble"
         ln.words.forEach((w, wi) => {
           const timed = typeof w.start === "number" && typeof w.end === "number"; // as lyrics.js reads a word
           const ahead = inside.filter((p) => timed && p.t <= w.start);
@@ -293,7 +294,11 @@
             afterRow = true;
           } else tokens.push(...extraBefore.map(chord));
           if (!wordChord && !tokens.length && afterRow && timed) wordChord = sounding(w.start); // the chord playing on the first word
-          tokens.push((wordChord ? chord(wordChord) : "") + lyricText(w.text));
+          const joined = typeof w.text === "string" && w.text.length > 1 && w.text.endsWith("-");
+          const said = (wordChord ? chord(wordChord) : "") + lyricText(joined ? w.text.slice(0, -1) : w.text);
+          if (glue && tokens.length && !extraBefore.length) tokens[tokens.length - 1] += said;
+          else tokens.push(said);
+          glue = joined && !extraAfter.length;
           tokens.push(...extraAfter.map(chord));
           afterRow = false;
           if (timed && Number.isFinite(w.end)) lastEnd = w.end;

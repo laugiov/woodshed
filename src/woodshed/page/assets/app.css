@@ -956,6 +956,47 @@ body.line-open .lline:focus { background: var(--accent-soft); box-shadow: inset 
 .ed.line-ed .field { max-height: 40vh; overflow-y: auto; }
 @media print { .lline.gone { display: none !important; } .lline .fixed-mark { display: none; } }
 
+/* The words typed by hand (views/typed.js, views/moves.js, spec 029): the typed mark, a placed line covered, the
+   way in from an empty bar, the keys a phone hides, the move group and its ruler. */
+.lline .typed-mark { display: block; font: 600 10.5px var(--font-body); color: var(--muted); letter-spacing: 0.02em; }
+.lline.covered .gone-text { text-decoration: none; }
+.lline.covered .covered-why { font-size: 12.5px; color: var(--muted); font-style: italic; }
+.ed h3 .earlier { font-size: 12.5px; margin-left: 4px; }
+.ed h3 .earlier:disabled { display: none; }
+/* The line editor open: the note (Undo) above its sheet, never over its buttons. */
+body.line-open .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; }
+.free-act { padding: 2px 0 10px 64px; }
+.free-act .btn, .ed .type-here .btn { font-size: 13px; }
+.ed .wkeys { display: none; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ed .wkeys button { min-height: 44px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 8px; font: 600 18px var(--font-mono); }
+.ed .moves { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; min-width: 0; }
+.ed .moves .mrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 0; }
+.ed .moves select { font: 15px var(--font-body); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); min-height: 36px; max-width: 12em; }
+.ed .moves .nudge { min-width: 44px; min-height: 36px; font-size: 15px; justify-content: center; }
+.ed .moves .where { color: var(--ink); font-weight: 600; }
+.ed .moves .where.warn { color: var(--warn); }
+.ed .read .warn-text { color: var(--warn); }
+.lwords .glued { white-space: nowrap; }
+.ed .ruler { position: relative; display: grid; box-sizing: border-box; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 18px 0 0; background: var(--sheet); }
+.ed .ruler .cell { position: relative; display: grid; border-left: 2px solid var(--muted); min-width: 0; }
+.ed .ruler .cell:last-child { border-right: 2px solid var(--muted); }
+.ed .ruler .num { position: absolute; top: -16px; left: 4px; font: 11px var(--font-mono); color: var(--muted); }
+.ed .ruler .slot { height: 36px; min-width: 0; border: 0; background: none; position: relative; cursor: pointer; padding: 0; }
+.ed .ruler .slot::after { content: ""; position: absolute; left: 0; bottom: 0; width: 1px; height: 8px; background: var(--line); }
+.ed .ruler .slot.beat::after { height: 16px; background: var(--muted); }
+.ed .ruler .slot:first-child::after { display: none; }
+.ed .ruler .slot:hover { background: var(--accent-soft); }
+.ed .ruler .slot .dot { position: absolute; left: 0; top: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transform: translateX(-50%); }
+.ed .ruler .slot.lit .dot { background: var(--accent); width: 11px; height: 11px; top: 4px; box-shadow: 0 0 0 3px var(--accent-soft); }
+@media (max-width: 600px) {
+  .free-act { padding-left: 0; }
+  .ed .wkeys { display: grid; }
+  .ed .ruler .slot { height: 44px; }
+  .ed .moves .nudge, .ed .moves select { min-height: 44px; }
+  .ed.line-ed.typing .moves { display: none; }
+}
+@media print { .free-act { display: none !important; } .lline .typed-mark { display: none; } }
+
 /* Moving the bar lines (views/barlines.js). */
 .bars-dialog h2 small { font: 400 14px var(--font-body); color: var(--muted); }
 .bars-dialog .beats-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 8px; margin: 10px 0; }

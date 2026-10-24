@@ -92,7 +92,7 @@
     function fixedNote() {
       const el = $("wordsFixed");
       if (!el) return;
-      const n = Object.keys(app.wordFixes()).length;
+      const n = Object.keys(app.wordFixes()).filter((k) => !W.typedWords.KEY.test(k)).length; // typed lines are kept as they are
       el.hidden = !n;
       el.textContent = n === 1
         ? W.t("1 line is fixed on the sheet: placing the words again keeps each fix whose line still reads the same here.")

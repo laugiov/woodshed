@@ -160,6 +160,7 @@
     // A sung line on its bars: each bar kept whole (a bar line, numbered, then its words), each
     // chord above the word it lands on, a chord with no word under it over a dash, a push marked.
     // Shared with stage mode (opts.stage: no bar lines, no seeking, no checks).
+    const joins = (item) => item.kind === "word" && typeof item.text === "string" && item.text.length > 1 && item.text.endsWith("-");
     function lyricLine(row, s, opts) {
       const shift = app.showShapes(s) ? s.capo : 0;
       const mark = (p) => {
@@ -214,14 +215,27 @@
         const lc = h("span", { class: "lc", "aria-hidden": checks ? null : "true" }, item.chords.map((p, i) => [i ? " " : "", mark(p)]), remind);
         if (item.kind === "gap") return h("span", { class: "lw gap" }, sr, lc, h("span", { class: "wt", "aria-hidden": "true" }, "–"));
         const seek = !opts.stage && item.timed ? item.t.toFixed(3) : null;
-        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek }, sr, lc, h("span", { class: "wt", translate: "no" }, item.text));
+        return h("span", { class: "lw" + (item.chords.length ? " has" : ""), "data-seek": seek, "data-wi": item.wi }, sr, lc, h("span", { class: "wt", translate: "no" }, item.text));
       };
       const parts = [];
       row.bars.forEach((b, i) => {
         const inner = [];
         if (!opts.stage && !b.cont) inner.push(h("span", { class: "bl", "aria-hidden": "true" }, h("i", null, String(b.bar + 1))));
-        b.items.forEach((item, j) => inner.push(j ? " " : "", word(item)));
-        if (i) parts.push(" ");
+        // A syllable typed with "-" (spec 029) is drawn joined to the next one: "stum-ble".
+        // Joined syllables are kept on one row: a group that never wraps between them.
+        let glued = null;
+        b.items.forEach((item, j) => {
+          const after = j && joins(b.items[j - 1]);
+          const el = word(item);
+          if (after && glued) glued.append(el);
+          else if (joins(item)) {
+            glued = h("span", { class: "glued" }, el);
+            inner.push(j ? " " : "", glued);
+          } else inner.push(j && !after ? " " : "", el);
+          if (!joins(item)) glued = null;
+        });
+        const prev = i ? row.bars[i - 1].items : [];
+        if (i && !(prev.length && joins(prev[prev.length - 1]))) parts.push(" ");
         parts.push(h("span", { class: "nb", "data-bar": b.cont ? null : b.bar }, inner));
       });
       const backing = row.line.backing && row.line.backing.length ? h("span", { class: "bv", translate: "no" }, " (" + row.line.backing.join(") (") + ")") : null;
@@ -310,7 +324,7 @@
       // the band took out of this recording stays as one quiet row with the way back (spec 028).
       const editing = s.editing && !s.stage;
       const fixing = editing && app.canFixWords();
-      if (editing) blocks.push(...goneLines());
+      if (editing) blocks.push(...goneLines(), ...coveredLines());
       let run = null;
       owner.forEach((li, u) => {
         const head = sections.some((sec) => sec.start === u);
@@ -348,10 +362,20 @@
         }
         if (x.free) {
           out.push(freeRow(x.free, s, freeNote(x)));
+          // Words typed by hand from here (spec 029): a part the model left empty, an ending, a page with no words.
+          if (fixing) {
+            const u = typeFrom(x.free[0], sections, rows);
+            out.push(h("div", { class: "free-act" }, h("button", { type: "button", class: "btn", "data-testid": "type-line-here", "data-bar": u,
+              "aria-label": W.t("Type a line here, from bar {n}", { n: u + 1 }), onclick: () => app.typedLines.openNew(u) }, "+ ", W.t("Type a line here"))));
+          }
           continue;
         }
         if (x.gone) {
           out.push(goneRow(x.gone, fixing));
+          continue;
+        }
+        if (x.covered) {
+          out.push(coveredRow(x.covered));
           continue;
         }
         const r = x.row;
@@ -371,11 +395,14 @@
             "div",
             // The check is one of the texts woodshed lyrics writes, in core/i18n-fr.js.
             {
-              class: "lline" + (r.line.check ? " check" : "") + (r.line.edited === true ? " edited" : "") + (r.line.voice === "other" ? " other" : ""),
-              "data-line": r.li, "data-index": r.line.index, "data-piece": r.line.piece || 0, "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null,
+              class: "lline" + (r.line.check ? " check" : "") + (r.line.edited === true ? " edited" : "") + (r.line.voice === "other" ? " other" : "") + (r.line.typed ? " typed" : ""),
+              // A line typed by hand (spec 029) is named by its key: its place among the lines changes as lines are typed.
+              "data-line": r.li, "data-index": r.line.typed ? r.line.key : r.line.index, "data-key": r.line.typed ? r.line.key : null, "data-piece": r.line.piece || 0,
+              "data-from": r.bars[0].bar, "data-to": last, "data-testid": "lyric-line", title: r.line.check ? W.t(r.line.check) : null,
             },
             h("button", { type: "button", class: "t", "data-seek": r.line.start.toFixed(3), "aria-label": W.t("Play from {time}: {words}", { time: fmt(r.line.start), words: r.line.text }) },
-              fmt(r.line.start), r.line.edited === true ? h("span", { class: "fixed-mark" }, r.line.voice === "other" && !fixedWords(r.line) ? W.t("✎ other voice") : W.t("✎ fixed")) : null),
+              fmt(r.line.start), r.line.edited === true ? h("span", { class: "fixed-mark" }, r.line.voice === "other" && !fixedWords(r.line) ? W.t("✎ other voice") : W.t("✎ fixed")) : null,
+              r.line.typed && editing ? h("span", { class: "typed-mark" }, W.t("typed")) : null), // a sheet is a sheet in play mode
             lyricLine(r, s, { stage: false, remind: true }),
           ),
         );
@@ -397,8 +424,8 @@
     // Editing: a sung line is one control, named with its time, its words and what the band did to it; the
     // buttons inside it (its time, its checks) are reached through it, not with Tab (spec 021, 025).
     function asControl(el, line) {
-      const said = W.t("Line {n}, {time}: {words}", { n: line.index + 1, time: fmt(line.start), words: line.text });
-      const name = fixedWords(line) ? W.t("{line}, fixed", { line: said })
+      const said = line.typed ? W.t("Line at {time}: {words}", { time: fmt(line.start), words: line.text }) : W.t("Line {n}, {time}: {words}", { n: line.index + 1, time: fmt(line.start), words: line.text });
+      const name = line.typed ? W.t("{line}, typed", { line: said }) : fixedWords(line) ? W.t("{line}, fixed", { line: said })
         : line.voice === "other" ? W.t("{line}, other voice", { line: said })
           : line.check ? W.t("{line}, to check", { line: said }) : said;
       el.setAttribute("role", "button");
@@ -406,6 +433,34 @@
       el.setAttribute("aria-label", name);
       el.removeAttribute("title");
       el.querySelectorAll("button").forEach((b) => b.setAttribute("tabindex", "-1"));
+    }
+    // Where a line typed from a run of free bars starts: the run's first bar, or the start of its part when the
+    // bars before it in the part hold no word (the line before only rings on there): a part left empty starts at
+    // its own beat one.
+    function typeFrom(u, sections, rows) {
+      const sec = sections.length ? sections[song.sectionIndex(u, sections)] : null;
+      if (!sec || sec.start >= u) return u;
+      const from = bar(sec.start).start - 0.05;
+      const to = bar(u).start - 0.05;
+      const sung = rows.some((r) => r.line.words.some((w) => typeof w.start === "number" && w.start >= from && w.start < to));
+      return sung ? u : sec.start;
+    }
+    // Placed lines a line typed by hand covers (spec 029), in Edit mode only: one quiet row each, where they were.
+    function coveredLines() {
+      const lines = app.wordsData && Array.isArray(app.wordsData.lines) ? app.wordsData.lines : [];
+      const out = [];
+      lines.forEach((ln) => {
+        const sp = ln && ln.covered ? W.typedWords.span(ln) : null;
+        if (sp) out.push({ at: song.barAt(sp[0] + 0.15), t: sp[0] + 0.001, covered: { text: ln.text, t: sp[0] } });
+      });
+      return out;
+    }
+    function coveredRow(c) {
+      return h("div", { class: "lline gone covered", "data-testid": "line-covered-row" },
+        h("span", { class: "t" }, fmt(c.t)),
+        h("span", { class: "gone-row" },
+          h("span", { class: "gone-text", translate: "no" }, c.text),
+          h("span", { class: "covered-why" }, W.t("covered by a typed line"))));
     }
     // The lines taken out of this recording by the band, where they were placed.
     // And the lines joined into the line before them (spec 028 B): "joined into line 7".
@@ -493,7 +548,7 @@
     function paintLyrics(s) {
       if (app.sheetMode(s) !== "lyrics") return;
       const k = app.lineNow(s).now;
-      document.querySelectorAll(".lline").forEach((el) => el.classList.toggle("cur", +el.getAttribute("data-line") === k));
+      document.querySelectorAll(".lline").forEach((el) => el.classList.toggle("cur", el.hasAttribute("data-line") && +el.getAttribute("data-line") === k)); // a quiet row is never sung
     }
 
     function renderSheet(s) {

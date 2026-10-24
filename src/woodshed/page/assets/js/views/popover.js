@@ -56,7 +56,7 @@
 
   // Tab and Shift+Tab cycle inside the dialog.
   function trap(box, e) {
-    const list = [...box.querySelectorAll("button:not([disabled]), input, textarea")].filter((el) => el.getClientRects().length > 0);
+    const list = [...box.querySelectorAll("button:not([disabled]):not([tabindex='-1']), input, textarea, select")].filter((el) => el.getClientRects().length > 0);
     const first = list[0];
     const last = list[list.length - 1];
     if (!e.shiftKey && document.activeElement === last) {

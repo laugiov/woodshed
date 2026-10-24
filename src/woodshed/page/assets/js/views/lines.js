@@ -28,8 +28,12 @@
       const line = { ...rows[0].line, start: Math.min(...rows.map((r) => r.line.start)), end: Math.max(...rows.map((r) => r.line.end)) };
       return { ...rows[0], line, bars, rows: rows.length };
     }
-    const lineEl = (i, piece) => document.querySelector('#sheet .lline[data-index="' + i + '"][data-piece="' + (piece || 0) + '"]') ||
-      document.querySelector('#sheet .lline[data-index="' + i + '"]');
+    // A placed line by its index (a split line by its row), a line typed by hand by its key (views/typed.js shares
+    // this editor's shell).
+    const lineEl = (i, piece) => (W.typedWords.KEY.test(String(i))
+      ? document.querySelector('#sheet .lline[data-key="' + i + '"]')
+      : document.querySelector('#sheet .lline[data-index="' + i + '"][data-piece="' + (piece || 0) + '"]') ||
+        document.querySelector('#sheet .lline[data-index="' + i + '"]'));
     const placedText = (i) => app.placedWords.lines[i].text;
     // The lines joined into line i (spec 028 B), as the library keeps them.
     function held(i) {
@@ -68,6 +72,7 @@
       document.body.classList.remove("line-open");
       document.querySelectorAll(".ed-tail").forEach((t) => t.remove());
       open = null;
+      cancelShown = null;
       const back = was === null ? null : lineEl(was, row);
       if (restore && back) back.focus({ preventScroll: true });
     }
@@ -91,9 +96,10 @@
 
     // A change made here: sent, then the toast with Undo (kept in the strip until the next change).
     // The lines joined into a line changed go with it (the library lets them go): its Undo brings them back too.
-    async function commit(i, change, said, after, status) {
-      const before = {};
-      for (const k of Object.keys(change)) for (const n of [+k, ...group(+k)]) before[n] = asked(n);
+    // `back`: the change that undoes this one, when asking for the line as it was cannot (a typed line, a word moved).
+    async function commit(i, change, said, after, status, back) {
+      const before = back ? { ...back } : {};
+      if (!back) for (const k of Object.keys(change)) for (const n of [+k, ...group(+k)]) before[n] = asked(n);
       const r = await send(change);
       if (!r.ok) {
         if (status) status(r);
@@ -182,7 +188,7 @@
       return e && e.lines && e.lines.length > 1 ? e.lines.map(fieldText).join("\n") : fieldText(line);
     }
 
-    function openLine(i, word, from) {
+    function openLine(i, word, from, move) {
       if (!app.canFixWords()) return app.toast(W.t("Fixing a line's words needs the library (woodshed app)."));
       const r = rowOf(i);
       if (!r) return close(false);
@@ -341,10 +347,14 @@
         W.t("Other voice / spoken")),
         h("button", { type: "button", class: "tool", "data-testid": "line-gone", onclick: act({ gone: "not-sung" }, () => W.t("“{words}” is not in this recording.", { words: app.lineWords(i) })) }, W.t("Not in this recording")));
       const partOf = app.sectionOf(r.firstBar);
+      // A word moved without dragging (spec 029): the word tapped, ◀ ▶, a slot of the ruler.
+      const wi = move && move.wi !== undefined ? move.wi : word && word.hasAttribute("data-wi") ? +word.getAttribute("data-wi") : 0;
+      const moves = app.moves.group(String(i), wi, (k, focus) => openLine(i, null, from, { wi: k, focus: focus || "move" }));
       const extra = h("div", { class: "extra", onfocusin: () => box.classList.remove("typing") },
         PHONE.matches ? hearLine(r) : null,
         h("div", { class: "bars-of-line" }, h("span", null, W.t("Chords:")), chips(r)),
         tools,
+        moves,
         PHONE.matches ? null : h("p", { class: "tip", "data-testid": "line-keys" }, W.t("Enter saves, {mod}+Enter saves and opens the next line.", { mod: MOD }), " ", W.t("Shift+Enter splits at the cursor.")));
       clear(
         box,
@@ -388,15 +398,29 @@
       }
       if (at >= 0) field.setSelectionRange(at, at + tapped.length);
       else field.setSelectionRange(field.value.length, field.value.length);
+      const focus = move && move.focus;
+      const target = focus === "move" ? box.querySelector("[data-testid=move-word]") : focus ? box.querySelector('[data-testid="' + focus + '"]') : null;
+      if (target) {
+        box.classList.remove("typing");
+        target.focus({ preventScroll: true });
+      }
     }
 
     let saveNext = null;
+    let cancelShown = null; // the typed line's editor in this shell (views/typed.js): its own Cancel
+    // Another editor drawn in this shell: its line followed on scroll, its keys (Escape, Ctrl or ⌘ + Enter) its own.
+    function shown(key, next, cancel) {
+      open = key;
+      saveNext = next;
+      cancelShown = cancel;
+    }
     // The dialog keeps the keyboard: Escape anywhere cancels, Ctrl or ⌘ + Enter saves and opens the next line.
     box.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        close(true);
+        if (cancelShown) cancelShown();
+        else close(true);
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing && saveNext) {
         e.preventDefault();
         e.stopPropagation();
@@ -439,7 +463,7 @@
 
     // Every line fixed taken back, for the whole band: said first, undone in one tap.
     function untypeAll() {
-      const keys = Object.keys(app.wordFixes());
+      const keys = Object.keys(app.wordFixes()).filter((k) => !W.typedWords.KEY.test(k)); // never the lines typed by hand
       if (!keys.length) return;
       const ask = keys.length === 1 ? W.t("Take back 1 fixed line, for the whole band?") : W.t("Take back {n} fixed lines, for the whole band?", { n: keys.length });
       if (!window.confirm(ask)) return;
@@ -456,6 +480,6 @@
       }
     });
 
-    return { open: openLine, back, untypeAll, isOpen: () => open !== null, render() {} };
+    return { open: openLine, back, untypeAll, commit, shown, close: () => close(false), isOpen: () => open !== null, render() {} };
   };
 })();

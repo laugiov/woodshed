@@ -284,6 +284,14 @@ def _lyrics_over_the_lift(song: dict[str, Any]) -> None:
     song["_lyrics_at"] = 14
 
 
+def _lyrics_verse_only(song: dict[str, Any]) -> None:
+    """pop as a verse and a chorus, the words placed in the verse only: the chorus left empty by the model."""
+    _two_sections(song)
+    data = lyrics_for(song)
+    data["lines"] = data["lines"][:1]
+    song["_lyrics_data"] = data
+
+
 def _lyrics_named(song: dict[str, Any]) -> None:
     """Two lines of the chart the analysis could only letter (Part A, Part B), named by the words."""
     _two_sections(song)
@@ -453,6 +461,7 @@ VARIANTS: dict[str, Callable[[dict[str, Any]], None]] = {
     "sections": _two_sections, "nosections": _no_sections, "lyrics": _with_lyrics,
     "lyrics-nosections": _lyrics_no_sections, "lyrics-named": _lyrics_named,
     "lyrics-same-check": _lyrics_same_chord_to_check,
+    "lyrics-verse-only": _lyrics_verse_only,
     "groove-loose": _groove_loose,
     "bass-doubts": _bass_doubts,
     "groove-edge": _groove_edge,

@@ -137,17 +137,20 @@
     // the singer's next line, the exports and the chords on the words.
     const placedWords = window.WOODSHED_LYRICS;
     app.placedWords = placedWords && Array.isArray(placedWords.lines) ? placedWords : null;
-    app.wordsKey = app.placedWords ? W.wordEdits.key(app.placedWords) : null;
+    // No words placed: the lines typed by hand (spec 029) go under the key of the empty placement.
+    const noWords = { version: 1, language: "", text: "", lines: [], chords: [] };
+    app.wordsKey = W.wordEdits.key(app.placedWords || noWords);
     let wordFixes = {};
     function buildWords() {
-      app.wordsData = app.placedWords ? W.wordEdits.apply(app.placedWords, wordFixes) : placedWords;
+      app.wordsData = W.wordEdits.apply(app.placedWords || noWords, wordFixes);
       app.words = W.lyrics(song, app.wordsData);
     }
     buildWords();
     app.wordFixes = () => ({ ...wordFixes });
     // A line named by its first words, as the band says it ("Je ne fais pourtant…"): a number reads as a bar's.
     app.lineWords = (i) => {
-      const rows = (app.wordsData ? W.wordEdits.byIndex(app.wordsData)[i] : null) || []; // a split line: its rows
+      const typedLine = W.typedWords.KEY.test(String(i)); // a line typed by hand, by its key (spec 029)
+      const rows = (app.wordsData ? (typedLine ? app.wordsData.lines.filter((x) => x && x.key === i) : W.wordEdits.byIndex(app.wordsData)[i]) : null) || []; // a split line: its rows
       const words = rows.map((ln) => String((ln && ln.text) || "")).join(" ").split(/\s+/).filter(Boolean);
       return words.slice(0, 4).join(" ") + (words.length > 4 ? "\u2026" : "");
     };
@@ -161,8 +164,8 @@
       for (const [k, v] of Object.entries(lines && typeof lines === "object" ? lines : {})) if (W.wordEdits.valid(k, v)) next[k] = v;
       const changed = [...new Set([...Object.keys(wordFixes), ...Object.keys(next)])]
         .filter((k) => JSON.stringify(wordFixes[k]) !== JSON.stringify(next[k]))
-        .map(Number)
-        .sort((a, b) => a - b);
+        .map((k) => (W.typedWords.KEY.test(k) ? k : Number(k)))
+        .sort((a, b) => (typeof a === typeof b ? (a < b ? -1 : a > b ? 1 : 0) : typeof a === "number" ? -1 : 1));
       wordFixes = next;
       if (!changed.length) return;
       buildWords();
@@ -919,9 +922,13 @@
     const editor = W.views.editor(app, chart);
     views.push(editor);
     app.editor = editor;
+    app.moves = W.views.moves(app);
     const lines = W.views.lines(app, chart, editor);
     views.push(lines);
     app.lines = lines;
+    const typedLines = W.views.typed(app, chart, editor); // the words typed by hand (spec 029)
+    views.push(typedLines);
+    app.typedLines = typedLines;
     // The instrument on the page itself: a phone's layout follows it (the singer: words first).
     const mark = (s) => {
       document.body.dataset.inst = s.inst;
@@ -1070,7 +1077,8 @@
         if (e.target.closest(".lwords")) {
           e.stopPropagation();
           popups.closeAll();
-          lines.open(+sung.getAttribute("data-index"), e.target.closest(".lw"), sung);
+          if (sung.hasAttribute("data-key")) typedLines.open(sung.getAttribute("data-key"), e.target.closest(".lw"));
+          else lines.open(+sung.getAttribute("data-index"), e.target.closest(".lw"), sung);
           return;
         }
       }
@@ -1161,7 +1169,14 @@
       const sungLine = e.target.closest && e.target.closest("#sheet .lline[role=button]");
       if (sungLine && e.target === sungLine && e.key === "Enter") {
         e.preventDefault();
+        if (sungLine.hasAttribute("data-key")) return typedLines.open(sungLine.getAttribute("data-key"), null);
         return lines.open(+sungLine.getAttribute("data-index"), null, sungLine);
+      }
+      // M moves a word of the line (spec 029): its editor opens on the move group. Edit mode only: no pedal sends M.
+      if (sungLine && e.target === sungLine && (e.key === "m" || e.key === "M") && !e.ctrlKey && !e.metaKey && !e.altKey && store.get().editing) {
+        e.preventDefault();
+        if (sungLine.hasAttribute("data-key")) return typedLines.open(sungLine.getAttribute("data-key"), null, true);
+        return lines.open(+sungLine.getAttribute("data-index"), null, sungLine, { wi: 0, focus: "move" });
       }
       // Undo of a line fixed, away from a text field (the field's own Undo is the browser's).
       const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target.isContentEditable === true);

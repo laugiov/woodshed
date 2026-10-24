@@ -35,6 +35,7 @@
 
   // A fix as the library sends it: a line's words in time, another voice, or not in this recording.
   function valid(k, v) {
+    if (W.typedWords.KEY.test(k)) return W.typedWords.valid(k, v); // a line typed by hand (spec 029)
     if (!INDEX.test(k) || !v || typeof v !== "object" || typeof v.was !== "string") return false;
     if (v.gone !== undefined) return (v.gone === "not-sung" || v.gone === "joined") && Object.keys(v).length === 2;
     if (v.voice !== undefined && v.voice !== "other") return false;
@@ -74,7 +75,8 @@
       if (e.voice === "other") ln.voice = "other";
       ln.edited = true;
     }
-    return splitRows({ ...data, lines }, entries);
+    // The lines typed by hand (spec 029) after the rows, over those they cover.
+    return W.typedWords.withTyped(splitRows({ ...data, lines }, entries), entries);
   }
 
   // A line split on the sheet (spec 028 B) as rows: its first line where it was, the others right after it, each
