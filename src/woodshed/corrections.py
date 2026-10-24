@@ -226,19 +226,17 @@ def read_corrections(path: Path) -> dict[str, Any]:
         for part in ("lines", "removed"):
             given: dict[str, Any] = entry[part] if isinstance(entry.get(part), dict) else {}
             fuller: dict[str, Any] = whole[part] if isinstance(whole.get(part), dict) else {}
+            wanted = _whole(given, fuller, joins=part == "lines")
             for k, v in given.items():
                 if not (isinstance(k, str) and LINE_INDEX.fullmatch(k)):
                     continue
                 if part == "removed" and v is None:
                     found[part][k] = None
                     continue
-                # A split or a join, as this version wrote it beside the one-line fix an older woodshed reads:
-                # taken only while that fix is still the one written with it (else the older woodshed changed it).
-                full = fuller.get(k)
-                if full is not None and older_word_entry(full) == v:
-                    v = full
+                if k not in wanted:
+                    continue  # a joined line's "not sung", let go with the join (_whole)
                 try:
-                    found[part][k] = _checked_word_entry(k, v)
+                    found[part][k] = _checked_word_entry(k, wanted[k])
                 except (ValueError, KeyError, TypeError, AttributeError):
                     raw[part][k] = v  # damaged by hand, or a newer woodshed's: not shown, kept for the next write
         at = entry.get("at", 0)
@@ -248,17 +246,63 @@ def read_corrections(path: Path) -> dict[str, Any]:
     return out
 
 
+def _whole(given: dict[str, Any], fuller: dict[str, Any], joins: bool) -> dict[str, Any]:
+    """The entries of `words` with the splits and joins of `words_more` back: each only while its `words` entry is
+    still the one written with it (else an older woodshed changed it, and its change wins). A join comes back whole
+    or not at all: the line it went to and every line joined into it unchanged; if the older woodshed took a joined
+    line back (or changed it), the line it went to gets the fix it had before the join and the joined lines it did
+    not touch are the placement's again; if it changed the line the join went to, every line stays as it wrote it."""
+    out = dict(given)
+    same = {k for k, full in fuller.items() if k in given and older_word_entry(full) == given[k]}
+    done: set[str] = set()
+    for owner in sorted((k for k in fuller if k.isdigit()), key=int) if joins else []:
+        full = fuller[owner]
+        if not (isinstance(full, dict) and "unjoined" in full):
+            continue
+        held, j = [], int(owner) + 1
+        while isinstance(fuller.get(str(j)), dict) and fuller[str(j)].get("gone") == "joined":
+            held.append(str(j))
+            j += 1
+        done |= {owner, *held}
+        if owner not in same:
+            continue  # the line it went to changed there: every line as the older woodshed left it
+        if all(k in same for k in held):
+            out.update({k: fuller[k] for k in (owner, *held)})
+            continue
+        if full["unjoined"] is None:
+            out.pop(owner, None)
+        else:
+            out[owner] = full["unjoined"]
+        for k in held:
+            if k in same:
+                out.pop(k, None)
+    for k in same - done:
+        if not (joins and isinstance(fuller[k], dict) and fuller[k].get("gone") == "joined"):
+            out[k] = fuller[k]
+    return out
+
+
 def older_word_entry(entry: Any) -> Any:
-    """A fix of the words as woodshed 0.5.1 reads it (one line, or not sung), what the file's `words` holds: a split
-    line's first line, a line joined into the one before as not sung (so its words are never shown twice), without
-    the fix the line had before a join. The whole of it goes in `words_more`, a section 0.5.1 keeps as it is."""
+    """A fix of the words as woodshed 0.5.1 reads it (one line, or not sung), what the file's `words` holds: a
+    split line as one line (its first row past 0.5.1's limits), a line joined into the one before as not sung (so
+    its words are never shown twice), without the fix the line had before a join. The whole of it goes in
+    `words_more`, a section 0.5.1 keeps as it is."""
     if not isinstance(entry, dict):
         return entry
     if entry.get("gone") == "joined":
         return {"was": entry.get("was"), "gone": "not-sung"}
     out = {k: v for k, v in entry.items() if k != "unjoined"}
-    if isinstance(out.get("lines"), list) and len(out["lines"]) > 1:
-        out["lines"] = out["lines"][:1]
+    rows = out.get("lines")
+    if isinstance(rows, list) and len(rows) > 1 and all(isinstance(r, dict) for r in rows):
+        # A split line as one line, every row's words in it, when 0.5.1's limits allow; else its first row.
+        words = [w for r in rows for w in r.get("words") or []]
+        text = " ".join(str(r.get("text", "")) for r in rows)
+        if len(words) <= LINE_WORDS_MAX and len(text) <= WORD_TEXT_MAX:
+            backing = [b for r in rows for b in r.get("backing") or []]
+            check = next((r.get("check") for r in rows if r.get("check")), None)
+            out["lines"] = [{"text": text, "backing": backing, "words": words, "check": check}]
+        else:
+            out["lines"] = rows[:1]
     return out
 
 

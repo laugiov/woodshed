@@ -7,13 +7,13 @@ window and Undo names a line by its index in the placement. The speech model is 
 
 from __future__ import annotations
 
-import contextlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tests import woodshed_051
 from tests.test_band import post
 from tests.test_exports import pop  # noqa: F401  (the fixture)
 from tests.test_lyrics import voice
@@ -392,56 +392,12 @@ def test_a_rebuild_keeps_the_fixes_in_the_songbook_file(
 # keeping a section it does not know as it is. A split or a join must survive it, and never show words twice.
 
 
-def older_entry(k: str, v: Any) -> dict[str, Any]:
-    """How woodshed 0.5.1 reads a fix of the words (app._checked_word_entry there): one line, or not sung."""
-    if not isinstance(v, dict) or not isinstance(v.get("was"), str):
-        raise ValueError("a line fix")
-    if set(v) == {"was", "gone"} and v["gone"] == "not-sung":
-        return {"was": v["was"], "gone": "not-sung"}
-    if not set(v) <= {"was", "lines", "voice"} or len(v) < 2 or v.get("voice", "other") != "other":
-        raise ValueError("a line fix")
-    out: dict[str, Any] = {"was": v["was"]}
-    if "lines" in v:
-        if not isinstance(v["lines"], list) or len(v["lines"]) != 1:
-            raise ValueError("lines: one line")
-        line = v["lines"][0]
-        out["lines"] = [
-            {
-                "text": line["text"],
-                "backing": list(line.get("backing", [])),
-                "words": [{"text": w["text"], "start": w["start"], "end": w["end"]} for w in line["words"]],
-                "check": line.get("check"),
-            }
-        ]
-    if "voice" in v:
-        out["voice"] = "other"
-    return out
-
-
 def older_read(path: Path) -> dict[str, Any]:
-    """The words section as woodshed 0.5.1 reads it: an entry it cannot read is skipped (a removed one, None)."""
-    out: dict[str, Any] = {}
-    for key, entry in json.loads(path.read_text(encoding="utf-8")).get("words", {}).items():
-        lines, removed = {}, {}
-        for k, v in entry.get("lines", {}).items():
-            with contextlib.suppress(ValueError, KeyError, TypeError, AttributeError):
-                lines[k] = older_entry(k, v)
-        for k, v in entry.get("removed", {}).items():
-            try:
-                removed[k] = None if v is None else older_entry(k, v)
-            except (ValueError, KeyError, TypeError, AttributeError):
-                removed[k] = None
-        out[key] = {"lines": lines, "removed": removed, "at": entry.get("at", 0)}
-    return out
+    return woodshed_051.read_words(path)
 
 
 def older_write(path: Path, words: dict[str, Any]) -> None:
-    """woodshed 0.5.1 saving anything (a chord pick): every section it does not know kept as it is, `words` as it
-    read it."""
-    body = json.loads(path.read_text(encoding="utf-8"))
-    body["rev"] = body.get("rev", 0) + 1
-    body["words"] = words
-    path.write_text(json.dumps(body), encoding="utf-8")
+    woodshed_051.write_words(path, words)
 
 
 def sung_words(data: dict[str, Any], entries: dict[str, Any]) -> list[str]:
@@ -457,8 +413,10 @@ def test_a_split_and_a_join_survive_an_older_woodshed_and_it_never_shows_words_t
     key = lyrics.words_key(placement(library))
     old = older_read(path)
     seen = old[key]["lines"]
-    # The older woodshed shows the split line's first row, and the joined line once (the line it took in, not sung).
-    assert seen["0"]["lines"][0]["text"] == "morning comes in" and seen["2"]["gone"] == "not-sung"
+    # The older woodshed shows the split line as one line, and the joined line once (the line it took in, not sung).
+    split = seen["0"]["lines"][0]
+    assert split["text"] == "morning comes in on the harbour road" and len(split["words"]) == 7
+    assert seen["2"]["gone"] == "not-sung"
     shown = sung_words(placement(library), seen)
     assert shown.count("hold") == 2 and shown.count("radio") == 1  # LINES[2] sings "hold" twice, once here
     older_write(path, old)  # it saves a chord: words written back as it read them
@@ -567,3 +525,48 @@ def test_a_rebuild_writes_the_songbook_holding_the_corrections_lock(
     assert time.monotonic() - started > 0.5
     rows = [r for r in (new / "exports" / cho.name).read_text(encoding="utf-8").splitlines() if "forgot" in r]
     assert len(rows) == 1 and "radio" in rows[0]  # the fix taken back while it waited: one row again
+
+
+def test_a_split_past_an_older_woodsheds_limits_shows_its_first_row_there(library: app.AppServer) -> None:  # noqa: F811
+    from woodshed import corrections
+
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    fix(library, {"1": {"text": " ".join(["la"] * 21) + "\n" + " ".join(["lo"] * 19)}})
+    assert len(older_read(path)[key]["lines"]["1"]["lines"][0]["words"]) == 40  # one line there, every word
+    row = {"text": "x " * 30, "backing": [], "check": None, "words": [{"text": "x", "start": 1.0, "end": 1.1}] * 30}
+    long = {"was": "w", "lines": [row, {**row, "text": "y " * 30}]}  # 60 words: past 0.5.1's 40, by hand
+    older = corrections.older_word_entry(long)
+    assert older["lines"] == [row]  # its first row
+    assert woodshed_051._checked_word_entry("1", older) == older  # one 0.5.1 reads
+
+
+def test_an_older_woodshed_taking_back_the_line_a_join_went_to_leaves_no_orphan(
+    library: app.AppServer,  # noqa: F811
+) -> None:
+    fix(library, {"1": {"text": LINES[1] + " " + LINES[2]}, "2": {"gone": "joined"}})
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    old = older_read(path)
+    del old[key]["lines"]["1"]  # Back to the placement on 0.5.1
+    older_write(path, old)
+    got = read(library)["words"]["lines"]
+    assert "1" not in got and got.get("2") == {"was": LINES[2], "gone": "not-sung"}  # as 0.5.1 left it
+    status, answer = fix(library, {"3": {"text": "We are only halfway through the night!"}})
+    assert status == 200, answer  # the song can still be fixed
+
+
+def test_an_older_woodshed_taking_back_a_joined_line_gives_the_join_back_whole(
+    library: app.AppServer,  # noqa: F811
+) -> None:
+    _, before = fix(library, {"1": {"text": "The radio hums what the night forgot!"}})
+    fix(library, {"1": {"text": "The radio hums what the night forgot! " + LINES[2]}, "2": {"gone": "joined"}})
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    old = older_read(path)
+    del old[key]["lines"]["2"]  # the "not sung" taken back on 0.5.1: line 3 sung again
+    older_write(path, old)
+    got = read(library)["words"]["lines"]
+    assert got == {"1": before["lines"]["1"]}  # the fix line 2 had before the join, line 3 the placement's
+    shown = sung_words(placement(library), got)
+    assert shown.count("hold") == 2  # never twice
