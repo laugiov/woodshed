@@ -275,10 +275,10 @@ class Voice:
     def star(self) -> int:
         return self.labels.index("*")
 
-    def masked(self) -> npt.NDArray[np.float32]:
-        """No letter where the voice is silent: only the blank and the wildcard there."""
-        em: npt.NDArray[np.float32] = self.emission.copy()
-        silent = ~self.sung
+    def masked(self, a: int = 0, b: int | None = None) -> npt.NDArray[np.float32]:
+        """No letter where the voice is silent: only the blank and the wildcard there. Frames [a, b)."""
+        em: npt.NDArray[np.float32] = self.emission[a:b].copy()
+        silent = ~self.sung[a:b]
         keep = np.zeros(em.shape[1], bool)
         keep[[self.blank, self.star]] = True
         em[np.ix_(silent, ~keep)] = -1e4
@@ -314,6 +314,36 @@ def windows(samples: int) -> list[tuple[int, int]]:
     return [(s, min(samples, s + WINDOW + extra)) for s in range(0, samples, WINDOW) if samples - s >= RECEPTIVE]
 
 
+def _emission(stored: Path) -> tuple[npt.NDArray[Any], list[str]] | None:
+    """The model's letters heard before, or None when the file is missing or damaged."""
+    if not stored.exists():
+        return None
+    try:
+        with stored.open("rb") as fh, np.load(fh) as npz:  # closed even when the file is damaged
+            return npz["emission"], [str(x) for x in npz["labels"]]
+    except (OSError, ValueError, KeyError, EOFError, zipfile.BadZipFile):
+        return None
+
+
+def cached_voice(cache: Path) -> Voice | None:
+    """The voice as the speech model heard it when the words were placed, from the cache only: None
+    when the vocal track or the model's letters are missing or damaged. The model is never run here
+    (a line fixed on the sheet costs milliseconds, not a minute)."""
+    from woodshed import audio
+
+    loaded = _emission(cache / CACHE)
+    if loaded is None:
+        return None
+    try:
+        vocals = audio.load(cache / "vocals.flac")
+        emission = np.asarray(loaded[0], np.float32)
+        if emission.ndim != 2 or emission.shape[1] != len(loaded[1]) or not {"-", "*"} <= set(loaded[1]):
+            return None
+    except (OSError, ValueError, WoodshedError):
+        return None
+    return Voice(emission, loaded[1], voice_mask(vocals, audio.SR, emission.shape[0]))
+
+
 def listen(
     vocals_path: Path, cache: Path, offline: bool = False, progress: Callable[[float], None] | None = None
 ) -> Voice:
@@ -323,13 +353,7 @@ def listen(
 
     vocals = audio.load(vocals_path)
     stored = cache / CACHE
-    loaded = None
-    if stored.exists():
-        try:
-            with np.load(stored) as npz:
-                loaded = npz["emission"], [str(x) for x in npz["labels"]]
-        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
-            loaded = None  # a damaged file: heard again
+    loaded = _emission(stored)  # a damaged file: heard again
     if loaded is None:
         emission, labels = _run_model(vocals, audio.SR, offline, progress)
         tmp = cache / f".{CACHE}.{os.getpid()}.{uuid.uuid4().hex[:8]}.npz"
@@ -618,19 +642,26 @@ def place_words(
             (
                 (seg.start + times[(li, wi)][0][0]) * voice.frame,
                 (seg.start + times[(li, wi)][-1][1] + 1) * voice.frame,
-                li,
             )
             for li in seg.lines
             for wi in range(len(lines[li].words))
         ]
-        # A word lasts until the next word starts or the voice stops: the model's wildcard is free,
-        # so a held vowel's frames are not reliably the letter's.
-        for k, (start, end, li) in enumerate(spans):
-            nxt = spans[k + 1][0] if k + 1 < len(spans) else seg.end * voice.frame
-            run_end = next(
-                (b * voice.frame for a, b in runs if a * voice.frame <= end - voice.frame < b * voice.frame), end
-            )
-            out.setdefault(li, []).append((start, max(end, min(nxt, run_end))))
+        owners = [li for li in seg.lines for _ in lines[li].words]
+        for li, span in zip(owners, _held(spans, seg.end * voice.frame, runs, voice.frame), strict=True):
+            out.setdefault(li, []).append(span)
+    return out
+
+
+def _held(
+    spans: Sequence[tuple[float, float]], until: float, runs: Sequence[tuple[int, int]], frame: float
+) -> list[tuple[float, float]]:
+    """Words as (start, end) seconds, each lasting until the next word starts or the voice stops: the
+    model's wildcard is free, so a held vowel's frames are not reliably the letter's."""
+    out = []
+    for k, (start, end) in enumerate(spans):
+        nxt = spans[k + 1][0] if k + 1 < len(spans) else until
+        run_end = next((b * frame for a, b in runs if a * frame <= end - frame < b * frame), end)
+        out.append((start, max(end, min(nxt, run_end))))
     return out
 
 
@@ -759,6 +790,251 @@ def place(text: str, voice: Voice, song: dict[str, Any], language: str = "auto")
     if named is not None:
         out["sections"] = named
     return out
+
+
+# One line fixed on the sheet (spec 028): only that line placed again, in its own window, on the voice
+# heard when the words were placed (never the model, never the whole song), so the lines around it
+# cannot move. Measured on five songs: 1 to 12 ms a line, 70 ms at worst.
+
+MARGIN_FIRST = 0.3  # seconds before its own start a line may begin again (a bar when its first word changed)
+LINE_CHECK = "placed in this line's time: listen to it"
+SPREAD_CHECK = "spread over the line's time, not heard: listen to it"
+SYLLABLE = re.compile(r"[aeiouyàâäéèêëîïôöùûü]+", re.IGNORECASE)  # a vowel group: about a syllable
+
+
+def clock(t: float) -> str:
+    """0:17, as the page writes a time."""
+    whole = int(max(0.0, t))
+    return f"{whole // 60}:{whole % 60:02d}"
+
+
+class NoRoom(LyricsError):
+    """The words cannot be sung in the line's window: nothing is saved."""
+
+    def __init__(self, start: float, end: float) -> None:
+        super().__init__(f"not enough time for these words between {clock(start)} and {clock(end)}")
+        self.start, self.end = start, end
+
+
+def _timed(word: Any) -> bool:
+    """A word with a start and an end, as the page reads one."""
+    return isinstance(word, dict) and all(
+        isinstance(word.get(k), (int, float)) and not isinstance(word.get(k), bool) and math.isfinite(word[k])
+        for k in ("start", "end")
+    )
+
+
+def _ms(t: Any) -> int | None:
+    ok = isinstance(t, (int, float)) and not isinstance(t, bool) and math.isfinite(t)
+    return math.floor(t * 1000 + 0.5) if ok else None
+
+
+def words_key(data: dict[str, Any]) -> str:
+    """The key the band's fixes of the words are kept under (W.wordEdits.key in the page): each line's
+    text and its words' start times in whole milliseconds. The same words placed again on the same voice
+    give the same key; a rebuild of the page keeps them, so the key too."""
+    from woodshed.fnv import fnv1a
+
+    lines: list[list[Any]] = []
+    for ln in data.get("lines") or []:
+        ln = ln if isinstance(ln, dict) else {}
+        text = ln.get("text") if isinstance(ln.get("text"), str) else ""
+        words: list[Any] = ln["words"] if isinstance(ln.get("words"), list) else []
+        lines.append([text, [_ms(w.get("start")) if isinstance(w, dict) else None for w in words]])
+    return fnv1a(json.dumps(lines, separators=(",", ":"), ensure_ascii=False))
+
+
+def line_words(text: str) -> tuple[list[Word], list[str]]:
+    """A line typed on the sheet, read as the pasted words are (read): chords in brackets dropped, words
+    in round brackets kept apart as backing vocals. A number ("14") stays a word, with no letter the
+    voice can sing (it gets no time); a word in another alphabet is refused."""
+    row = INLINE_CHORD.sub("", text).strip()
+    if not row or chord_row(row):
+        raise ValueError("no words the voice can sing in this line")
+    backing = re.findall(r"\(([^)]*)\)", row)
+    words: list[Word] = []
+    for w in re.split(r"[\s\-]+", re.sub(r"\([^)]*\)", " ", row)):
+        letters = letters_of(w)
+        if letters or any(ch.isdigit() for ch in w):
+            words.append(Word(w, letters))
+        elif any(unicodedata.category(ch).startswith("L") for ch in w):
+            raise ValueError("letters the model cannot hear in this line")
+    if not any(w.letters for w in words):
+        raise ValueError("no words the voice can sing in this line")
+    return words, backing
+
+
+def _span(line: Any) -> tuple[float, float] | None:
+    """A sung line's time, from its first word to its last."""
+    if not isinstance(line, dict) or not line.get("sung"):
+        return None
+    times = [(w["start"], w["end"]) for w in line.get("words") or [] if _timed(w)]
+    return (min(s for s, _ in times), max(e for _, e in times)) if times else None
+
+
+def line_window(
+    lines: Sequence[Any],
+    i: int,
+    own: dict[str, Any],
+    song: dict[str, Any],
+    frames: int,
+    first_changed: bool,
+    frame: float = FRAME,
+) -> tuple[int, int]:
+    """The frames a fixed line may be placed in: from its own start less MARGIN_FIRST (a bar when its
+    first word changed), never before the end of the sung line before it, to its own end and a bar,
+    never past the start of the sung line after it. `own`: the line as placed; `lines`: the lines as
+    the sheet shows them now (the band's other fixes on)."""
+    span = _span(own)
+    if span is None:
+        raise ValueError("lines: a line placed on the voice")
+    bar = 60 / float(song["bpm"]) * int(song["beats_per_bar"])
+    before = next((s for j in range(i - 1, -1, -1) if (s := _span(lines[j]))), None)
+    after = next((s for j in range(i + 1, len(lines)) if (s := _span(lines[j]))), None)
+    start = max(before[1] if before else 0.0, span[0] - (bar if first_changed else MARGIN_FIRST))
+    end = min(after[0] if after else frames * frame, span[1] + bar)
+    return max(0, round(start / frame)), min(frames, round(end / frame))
+
+
+def _first_letters(words: Sequence[Any]) -> str:
+    return next((x for w in words if (x := letters_of(str(w.text if isinstance(w, Word) else w.get("text", ""))))), "")
+
+
+def place_line(
+    voice: Voice, lines: Sequence[Any], i: int, text: str, song: dict[str, Any], placed: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Line i of the sheet with new words, placed again in its own window (line_window): its words with
+    their times, its backing vocals, and its check. `lines`: the lines as the sheet shows them now;
+    `placed`: the line as the words were placed (its time is the window's middle). Raises NoRoom."""
+    own = placed if placed is not None else lines[i]
+    text = text.strip()
+    words, backing = line_words(text)
+    if any(c not in voice.labels for w in words for c in w.letters):
+        raise ValueError("letters the model cannot hear in this line")
+    first_changed = _first_letters(words) != _first_letters(own.get("words") or [])
+    a, b = line_window(lines, i, own, song, voice.emission.shape[0], first_changed, voice.frame)
+    dictionary = {c: k for k, c in enumerate(voice.labels)}
+    tokens, owner = [voice.star], []
+    for wi, w in enumerate(words):
+        for c in w.letters:
+            owner.append(wi)
+            tokens.append(dictionary[c])
+    tokens.append(voice.star)
+    letters = [k for k, t in enumerate(tokens) if t != voice.star]
+    try:
+        if b <= a:
+            raise LyricsError("no frames")
+        first, last, _ = ctc_align(voice.masked(a, b), tokens, voice.blank)
+    except LyricsError as exc:
+        raise NoRoom(a * voice.frame, b * voice.frame) from exc
+    times: dict[int, list[tuple[int, int]]] = {}
+    for k, wi in zip(letters, owner, strict=True):
+        times.setdefault(wi, []).append((first[k], last[k]))
+    order = sorted(times)
+    spans = [((a + times[wi][0][0]) * voice.frame, (a + times[wi][-1][1] + 1) * voice.frame) for wi in order]
+    held = dict(zip(order, _held(spans, b * voice.frame, phrases(voice.sung, voice.frame), voice.frame), strict=True))
+    out = [
+        {"text": w.text, "start": round(held[wi][0], 3), "end": round(held[wi][1], 3)}
+        if wi in held
+        else {"text": w.text, "start": None, "end": None}
+        for wi, w in enumerate(words)
+    ]
+    sung = "".join(w.letters for w in words)
+    f0, f1 = a + times[order[0]][0][0], a + times[order[-1]][-1][1] + 1
+    if len(sung) >= ANCHOR_LETTERS:  # the anchor rule: heard as its text, or to check
+        check = None if cer(heard(voice, f0, f1), sung) <= ANCHOR_CER else LINE_CHECK
+    else:  # too short to be heard as a text: as placed, unless its words moved
+        half_beat = 30 / float(song["bpm"])
+        before = [w.get("start") if isinstance(w, dict) else None for w in own.get("words") or []]
+        after = [w["start"] for w in out]
+        pairs = zip(before, after, strict=False)
+        still = len(before) == len(after) and all(
+            (x is None) == (y is None) and (x is None or abs(x - y) <= half_beat) for x, y in pairs
+        )
+        check = own.get("check") if still else LINE_CHECK
+    return {"text": text, "backing": backing, "words": out, "check": check}
+
+
+def spread_line(placed: dict[str, Any], text: str) -> dict[str, Any]:
+    """Line `placed` with new words when the voice heard before is not in the cache (it was cleared):
+    spread by syllables over the line's own time, a placeholder to listen to. The model is not run."""
+    text = text.strip()
+    words, backing = line_words(text)
+    span = _span(placed)
+    if span is None:
+        raise ValueError("lines: a line placed on the voice")
+    weights = [max(1, len(SYLLABLE.findall(w.text))) if w.letters else 0 for w in words]
+    total, t = sum(weights), span[0]
+    out: list[dict[str, Any]] = []
+    for w, n in zip(words, weights, strict=True):
+        if not n:
+            out.append({"text": w.text, "start": None, "end": None})
+            continue
+        step = (span[1] - span[0]) * n / total
+        out.append({"text": w.text, "start": round(t, 3), "end": round(t + step, 3)})
+        t += step
+    return {"text": text, "backing": backing, "words": out, "check": SPREAD_CHECK}
+
+
+def apply_edits(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
+    """The placement with the band's fixes on it (W.wordEdits.apply in the page, the same rules): a fixed
+    line takes its words, times and check; another voice stays on the sheet, off the singer's stage; a
+    line not in this recording is no longer sung, so the chords on its words go where the placement
+    rule puts them. The exports, the stage and the chords all read the words through this."""
+    lines = [dict(ln) if isinstance(ln, dict) else ln for ln in data.get("lines") or []]
+    for k, e in entries.items():
+        i = int(k) if isinstance(k, str) and k.isdigit() else -1
+        if not (0 <= i < len(lines)) or not isinstance(lines[i], dict) or not isinstance(e, dict):
+            continue
+        ln = lines[i]
+        if e.get("gone") == "not-sung":
+            ln.update(sung=False, edited="not-sung")
+            continue
+        fixed = e.get("lines")
+        if isinstance(fixed, list) and fixed:
+            words = [dict(w) for w in fixed[0]["words"]]
+            ln.update(text=fixed[0]["text"], backing=list(fixed[0].get("backing") or []), words=words)
+            ln.update(check=fixed[0].get("check"), sung=any(_timed(w) for w in words))
+        if e.get("voice") == "other":
+            ln["voice"] = "other"
+        ln["edited"] = True
+    return {**data, "lines": lines}
+
+
+def carry_edits(
+    old: dict[str, Any], new: dict[str, Any], entries: dict[str, Any], voice: Voice | None, song: dict[str, Any]
+) -> tuple[dict[str, Any], int]:
+    """The band's fixes of an old placement on a new one (the words placed again): each goes to the line
+    that reads as its line did (the same text, its k-th time), placed again in its new window; one whose
+    line changed in the text is left out (counted), one the new text already has is dropped."""
+    before, after = old.get("lines") or [], new.get("lines") or []
+    out: dict[str, Any] = {}
+    left = 0
+    for key in sorted(entries, key=lambda k: int(k) if k.isdigit() else -1):
+        e, i = entries[key], int(key) if key.isdigit() else -1
+        was = e.get("was")
+        fixed = e["lines"][0]["text"] if isinstance(e.get("lines"), list) and e["lines"] else None
+        if not (0 <= i < len(before)) or before[i].get("text") != was:
+            left += 1  # not the line it was made on: nothing to carry it by
+            continue
+        nth = sum(1 for ln in before[:i] if ln.get("text") == was)
+        same = [j for j, ln in enumerate(after) if ln.get("text") == was]
+        if nth >= len(same):
+            if fixed is None or not any(ln.get("text") == fixed for ln in after):
+                left += 1
+            continue
+        n = same[nth]
+        if fixed is None:  # not in this recording, another voice: as it was
+            out[str(n)] = dict(e)
+            continue
+        try:
+            effective = apply_edits(new, out)["lines"]
+            line = place_line(voice, effective, n, fixed, song, after[n]) if voice else spread_line(after[n], fixed)
+        except (LyricsError, ValueError):
+            left += 1
+            continue
+        out[str(n)] = {**e, "lines": [line]}
+    return out, left
 
 
 # Naming the parts by their words.
@@ -1005,11 +1281,13 @@ def add_to_page(
     offline: bool = False,
     say: Callable[[str], None] = print,
     progress: Callable[[float], None] | None = None,
+    commit: Callable[[dict[str, Any], Voice], None] | None = None,
 ) -> dict[str, Any]:
     """Place the words on a page: lyrics.json and lyrics.js, and the songbook file with the words.
 
     Shared by `woodshed lyrics` and the library app. The page needs its instrument tracks in the cache.
-    `progress` hears how far it is, 0 to 1: listening to the voice is most of the time.
+    `progress` hears how far it is, 0 to 1: listening to the voice is most of the time. `commit`, when
+    given, writes the words instead (the library: under its lock, the band's fixes carried over).
     """
     step = progress or (lambda f: None)
     cache = stems_folder(page)
@@ -1021,7 +1299,10 @@ def add_to_page(
     step(0.9)
     chart = page_song(page)
     data = place(text, voice, chart)
-    write(page, data)
+    if commit is None:
+        write(page, data)
+    else:
+        commit(data, voice)
     if (page / "exports").is_dir():  # the songbook file of the page, with the words now
         from woodshed import exports
 

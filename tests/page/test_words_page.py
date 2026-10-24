@@ -49,7 +49,7 @@ def library(tmp_path: Path, pages_root: str, monkeypatch: pytest.MonkeyPatch) ->
     pasted: list[str] = []
 
     def add_to_page(
-        folder: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None
+        folder: Path, text: str, offline: bool = False, say: Any = print, progress: Any = None, commit: Any = None
     ) -> dict[str, Any]:
         pasted.append(text)  # the speech model is not run here: the words of the test song are written
         say("listening to the voice")
