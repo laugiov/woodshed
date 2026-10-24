@@ -37,8 +37,9 @@ gives the line back as it was placed.
 - **Not in this recording**: the line leaves the sheet, the stage and the ChordPro; in Edit mode it
   stays as one quiet row with the way back.
 - The chips under the field open the bar editor on each bar of the line, to type its chord.
-- Placing all the words again keeps each fix whose line still reads the same, and says which ones it
-  left out.
+- Placing all the words again, from the app or with `woodshed lyrics`, keeps each fix whose line still
+  reads the same, and says which ones it left out.
+- Undo never takes back a fix another device made since: it says so and leaves it.
 
 A line is fixed through the library (woodshed app), on any device of the band; a page opened from
 disk cannot place it. Without the voice heard before (the cache was cleared), the words are spread
