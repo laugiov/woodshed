@@ -755,7 +755,7 @@ body.following #playBtn { opacity: 0.45; }
   .lwords .bl i { top: -10px; font-size: 7.5px; }
   .lw .lc { font-size: 1em; min-height: 1.1em; }
   .lw .lc .remind { font-size: 0.82em; }
-  .remind-legend { font-size: 9px; margin: 0 2px; }
+  .remind-legend { font-size: 10.5px; margin: 0 2px; }
   .doubt sup { display: none; }
   .lline.cur { background: none; }
   .lline .nb.inloop { box-shadow: none; }

@@ -130,6 +130,10 @@ def test_the_reminder_is_printed_in_the_paper_grey(open_page: Any) -> None:
     assert style["shown"]
     assert style["color"] == "rgb(68, 68, 68)"
     assert style["ratio"] == pytest.approx(0.82, abs=0.01)
+    legend = o.js(
+        "parseFloat(getComputedStyle(document.querySelector('[data-testid=chord-reminder-legend]')).fontSize)"
+    )
+    assert legend == pytest.approx(10.5, abs=0.1)
 
 
 GAP = """(line) => {
@@ -194,6 +198,7 @@ def test_a_legend_says_what_the_grey_chord_is(open_page: Any) -> None:
     o = open_page("pop", variant="lyrics-vamp")
     legend = o.page.get_by_test_id("chord-reminder-legend")
     expect(legend).to_have_text("Grey chord: still sounding from before.")
+    expect(legend).to_have_attribute("aria-hidden", "true")  # a screen reader hears "still C" on the line itself
     assert (
         o.js("document.querySelector('[data-testid=chord-reminder-legend]').nextElementSibling.dataset.testid")
         == "lyric-line"
@@ -203,9 +208,7 @@ def test_a_legend_says_what_the_grey_chord_is(open_page: Any) -> None:
 @pytest.mark.browser_context_args(locale="fr-FR")
 def test_the_legend_in_french(open_page: Any) -> None:
     o = open_page("pop", variant="lyrics-vamp")
-    expect(o.page.get_by_test_id("chord-reminder-legend")).to_have_text(
-        f"Accord gris{NBSP}: il sonne encore depuis la ligne d'avant."
-    )
+    expect(o.page.get_by_test_id("chord-reminder-legend")).to_have_text(f"Accord gris{NBSP}: il continue depuis avant.")
 
 
 # A9 (R7): the guitar and keys words stage, on the lines after the one sung (the big Now chord names that one);
@@ -253,3 +256,48 @@ def test_the_chordpro_writes_no_reminder(open_page: Any) -> None:
     text = download(o, "export-chordpro")
     assert text == exports.chordpro(data, words)
     assert "[C]the" not in text and "[C]in" not in text
+
+
+# The capo shapes view: the grid's label names the sounding chord, so the words say the shape as a shape.
+def test_in_the_shapes_view_a_screen_reader_hears_the_shape(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-vamp")
+    o.js("Woodshed.app.store.set({ capo: 3, pos: 'open', view: 'shapes' })")
+    assert o.js(SAID)[:2] == [["the A shape"], ["still the A shape"]]
+    o.js("Woodshed.app.store.set({ view: 'chords' })")
+    assert o.js(SAID)[:2] == [["C"], ["still C"]]  # the sounding names again
+
+
+@pytest.mark.browser_context_args(locale="fr-FR")
+def test_in_the_shapes_view_the_shape_is_said_in_french(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-vamp")
+    o.js("Woodshed.app.store.set({ capo: 3, pos: 'open', view: 'shapes' })")
+    assert o.js(SAID)[:2] == [["la position de A"], ["toujours la position de A"]]
+
+
+# A long reminder over short words: it takes its width when it would reach any chord after it, not only the next.
+@pytest.mark.parametrize(("width", "height"), [(390, 844), (1440, 900)])
+def test_a_long_reminder_never_reaches_a_chord_further_on(open_page: Any, width: int, height: int) -> None:
+    o = open_page("pop", variant="lyrics-vamp-long")
+    sized(o, width, height)
+    redraw(o)
+    line = o.page.get_by_test_id("lyric-line").nth(1)
+    assert reminders(o)[1] == ["A♭maj7/C"]
+    gap = line.evaluate(
+        """(line) => {
+          const r = line.querySelector('[data-testid="chord-reminder"] [aria-hidden="true"]').getBoundingClientRect();
+          return line.querySelectorAll('.lw')[2].querySelector('.lc').getBoundingClientRect().left - r.right;
+        }"""
+    )
+    assert gap >= 4
+
+
+# Stopped before a line (an intro), the stage's "Next:" line is the one to come: it shows its grey chord too.
+@pytest.mark.tablet
+def test_the_next_line_on_stage_shows_its_grey_chord(open_page: Any) -> None:
+    o = open_page("pop", variant="lyrics-vamp-intro")
+    on_stage(o, "Guitar")
+    at(o, bar_start(o, 0) + 0.3, playing=False)  # in the intro, before the first line
+    expect(o.page.get_by_test_id("stage-next-label")).to_be_visible()
+    assert reminders(o, STAGE)[0] == ["C"]
+    at(o, bar_start(o, 1) + 0.3, playing=False)  # inside it: the big Now chord names it
+    assert reminders(o, STAGE)[0] is None

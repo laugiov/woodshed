@@ -196,7 +196,11 @@
         if (!opens || item !== items[0]) return [null, null];
         const c = opens.chord;
         const name = c.pc < 0 ? null : app.nameFor(c, shift, s, opens.bar);
-        const said = name === null ? W.t(opens.still ? "still no chord" : "no chord") : opens.still ? W.t("still {chord}", { chord: W.prettyText(name) }) : W.prettyText(name);
+        // Said as the line shows it; in the capo shapes view as a shape (the grid's label names the sounding chord).
+        let said;
+        if (name === null) said = W.t(opens.still ? "still no chord" : "no chord");
+        else if (shift) said = W.t(opens.still ? "still the {chord} shape" : "the {chord} shape", { chord: W.prettyText(name) });
+        else said = opens.still ? W.t("still {chord}", { chord: W.prettyText(name) }) : W.prettyText(name);
         const sr = opts.stage || checks ? null : h("span", { class: "sr-only", "data-testid": "line-chord" }, said);
         if (!opens.still) return [sr, null];
         const title = name === null ? W.t("Still no chord: nothing played from before") : W.t("Still {chord}: the chord goes on from before", { chord: W.prettyText(name) });
@@ -224,6 +228,23 @@
       return h("span", { class: "lwords" }, parts, backing);
     }
     app.lyricLine = lyricLine;
+    // A reminder lying over the words must not reach a chord further on its row either (a long name over short
+    // words): measured once drawn, it then takes its width. Drawn hidden, nothing is measured (no row to compare).
+    app.unglueReminders = (root) => {
+      for (const r of root.querySelectorAll(".remind.over")) {
+        const seen = r.firstChild.getBoundingClientRect();
+        const words = r.closest(".lwords");
+        if (!words || !seen.height) continue;
+        for (const lc of words.querySelectorAll(".lc")) {
+          if (lc.contains(r) || !lc.textContent.trim()) continue;
+          const b = lc.getBoundingClientRect();
+          if (b.top < seen.bottom && b.bottom > seen.top && b.left < seen.right + 4 && b.right > seen.left) {
+            r.classList.remove("over");
+            break;
+          }
+        }
+      }
+    };
 
     // A key change (spec 012): its new key before the bar, a double bar line, and said in the bar's label.
     const changeAt = new Map(song.keyChanges.map((k) => [k.bar, k.region]));
@@ -311,7 +332,9 @@
       const out = [];
       let shown = -1;
       const keySaid = new Set(); // a key change inside sung lines: said once, above the line it falls in
-      let legendSaid = false;
+      // What the grey chord is, once above the first sung line (a touch screen has no hover for its title). Hidden
+      // from a screen reader, which hears "still C" on the line itself.
+      let legendSaid = !rows.some((x) => x.opens && x.opens.still);
       for (const x of blocks) {
         const k = sections.length ? song.sectionIndex(x.at, sections) : -1;
         while (k > shown) {
@@ -330,10 +353,9 @@
             out.push(h("div", { class: "lkey", "data-testid": "key-change-words" }, W.t("→ {key}", { key: keyWords(song.keyName(s.transpose, region)) })));
           }
         }
-        // Above the first sung line, once: what the grey chord is (a touch screen has no hover for its title).
-        if (!legendSaid && rows.some((x) => x.opens && x.opens.still)) {
+        if (!legendSaid) {
           legendSaid = true;
-          out.push(h("p", { class: "remind-legend", "data-testid": "chord-reminder-legend" }, W.t("Grey chord: still sounding from before.")));
+          out.push(h("p", { class: "remind-legend", "aria-hidden": "true", "data-testid": "chord-reminder-legend" }, W.t("Grey chord: still sounding from before.")));
         }
         out.push(
           h(
@@ -346,6 +368,8 @@
         );
       }
       clear($("sheet"), inBlocks(out));
+      app.unglueReminders($("sheet"));
+      if (document.fonts) document.fonts.ready.then(() => app.unglueReminders($("sheet"))); // measured again in its fonts
       paintLyrics(s);
     }
 
