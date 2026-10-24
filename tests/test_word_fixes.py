@@ -18,7 +18,7 @@ import pytest
 from tests.test_app import request
 from tests.test_band import post
 from tests.test_lyrics import LABELS, song, voice
-from woodshed import app, build, lyrics, stems
+from woodshed import app, build, cli, lyrics, stems
 from woodshed.fnv import fnv1a
 from woodshed.run import Options
 
@@ -451,7 +451,7 @@ def test_without_the_voice_heard_before_the_words_are_spread(library: app.AppSer
 
 def test_a_stale_placement_is_refused(library: app.AppServer) -> None:
     status, answer = fix(library, {"1": {"text": "x y z"}}, key="0123abcd")
-    assert status == 409 and answer["error"] == "the words were placed again: open the line again"
+    assert status == 409 and answer["error"] == "the words were placed again: reload the page"
     assert stored(library) == {}
 
 
@@ -590,3 +590,85 @@ def test_an_older_woodshed_file_without_words_reads_as_none(library: app.AppServ
     body["words"] = {lyrics.words_key(placement(library)): {"lines": {"1": {"was": 3}}, "removed": {}, "at": 1}}
     path.write_text(json.dumps(body))
     assert read(library)["words"] == {"lines": {}, "removed": {}}  # damaged by hand: skipped
+
+
+def place_again(srv: app.AppServer, monkeypatch: pytest.MonkeyPatch, text_lines: list[str]) -> tuple[app.Job, str]:
+    """The words placed again from the library, on a voice that sings `text_lines`."""
+    v = voice([(t, 1.0 + 5 * k, 5.0 + 5 * k) for k, t in enumerate(text_lines)], 40.0)
+    monkeypatch.setattr(lyrics, "listen", lambda *args, **kwargs: v)
+    monkeypatch.setattr(lyrics, "page_song", lambda page: CHART)
+    monkeypatch.setattr(srv.library.queue, "task_done", lambda: None)
+    job = app.Job("j", PAGE, page=PAGE, kind="words")
+    srv.library._place_words(job, srv.library.root / PAGE, "\n".join(text_lines), srv.library.opts)
+    return job, lyrics.words_key(lyrics.place("\n".join(text_lines), v, CHART))
+
+
+def test_fixes_made_on_the_new_placement_already_win(library: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    new = ["a new first line", *LINES]
+    v = voice([(t, 1.0 + 5 * k, 5.0 + 5 * k) for k, t in enumerate(new)], 40.0)
+    key = lyrics.words_key(lyrics.place("\n".join(new), v, CHART))
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    mine = {"was": LINES[1], "voice": "other"}  # made on that placement before (it was the page's once)
+    body["words"][key] = {"lines": {"2": mine}, "removed": {}, "at": 1.0}
+    path.write_text(json.dumps(body), encoding="utf-8")
+    job, new_key = place_again(library, monkeypatch, new)
+    assert job.status == "done" and new_key == key
+    assert read(library, key)["words"]["lines"]["2"] == mine
+
+
+def test_a_crash_while_carrying_leaves_the_words_and_the_fixes_as_they_were(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, answer = fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    before = placement(library)
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("a bug")
+
+    monkeypatch.setattr(lyrics, "carry_edits", broken)
+    job, _ = place_again(library, monkeypatch, ["a new first line", *LINES])
+    assert job.status == "failed"
+    assert placement(library) == before  # the words as they were, so the fixes still show
+    assert read(library)["words"]["lines"] == answer["lines"]
+
+
+def test_the_lyrics_command_carries_the_fixes_of_the_library(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    fix(library, {"3": {"text": "we are only halfway through the nights"}})
+    new = ["a new first line", LINES[0], LINES[1], LINES[2], "we are only halfway through it all"]
+    v = voice([(t, 1.0 + 5 * k, 5.0 + 5 * k) for k, t in enumerate(new)], 40.0)
+    monkeypatch.setattr(lyrics, "listen", lambda *args, **kwargs: v)
+    monkeypatch.setattr(lyrics, "page_song", lambda page: CHART)
+    words = tmp_path / "words.txt"
+    words.write_text("\n".join(new), encoding="utf-8")
+    assert cli.main(["lyrics", str(library.library.root / PAGE), str(words)]) == 0
+    assert "1 line fixed on the sheet was left out: its text changed." in capsys.readouterr().out
+    got = read(library)["words"]["lines"]  # under the new placement's key
+    assert set(got) == {"2"} and got["2"]["lines"][0]["text"] == "the radio hums what the knight forgot"
+
+
+def test_an_undo_does_not_take_back_another_devices_fix(library: app.AppServer) -> None:
+    _, mine = fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    ours = mine["lines"]["1"]
+    _, theirs = fix(library, {"1": {"text": "the radio hums what the night forgets"}})  # another device
+    before = stored(library)
+    status, answer = fix(library, {"1": None}, expect={"1": ours})  # this device's Undo
+    assert status == 409 and answer["error"] == "the line changed on another device" and answer["changed"] == ["1"]
+    assert stored(library) == before
+    status, answer = fix(library, {"1": None}, expect={"1": theirs["lines"]["1"]})
+    assert status == 200 and "1" not in answer["lines"]
+    status, _ = fix(library, {"2": {"gone": "not-sung"}}, expect={"2": None})  # nothing there yet: as expected
+    assert status == 200
+
+
+def test_a_section_from_a_newer_woodshed_is_kept_by_every_write(library: app.AppServer) -> None:
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"rev": 3, "future": {"kept": [1, 2]}}), encoding="utf-8")
+    post(library, "/api/corrections", {"page": PAGE, "key": "a1b2c3", "fixes": {"3": [9, "m"]}})
+    fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    assert stored(library)["future"] == {"kept": [1, 2]}
