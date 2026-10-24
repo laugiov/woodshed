@@ -619,3 +619,14 @@ def test_on_a_phone_the_ruler_offers_whole_beats_and_the_toast_stays_above_the_s
     t, e = toast.bounding_box(), page.get_by_test_id("line-editor").bounding_box()
     assert t is not None and e is not None and t["y"] + t["height"] <= e["y"], (t, e)
     assert problems == []
+
+
+def test_a_pickup_stays_in_its_part(browser: Browser, library: Callable[[str], app.AppServer]) -> None:
+    srv = library("lyrics-verse-only")  # Verse 1 bars 1 to 4, Chorus 1 bars 5 to 8
+    problems: list[str] = []
+    page = device(browser, srv, problems)
+    edit(page)
+    page.get_by_test_id("sheet").get_by_test_id("type-line-here").first.click()  # the chorus, from bar 5
+    expect(page.get_by_test_id("line-editor").locator("h3 small")).to_contain_text("Chorus 1")
+    expect(page.get_by_test_id("typed-earlier")).to_be_disabled()  # bar 4 is the verse's
+    assert problems == []

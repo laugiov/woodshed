@@ -225,16 +225,20 @@
         : partName(u) ? W.t("{part} · from bar {n}", { part: partName(u), n: u + 1 }) : W.t("From bar {n}", { n: u + 1 }));
       const where = h("span", { class: "where-from" }, whereText());
       // A pickup (spec 029 review): the line starts a bar earlier than the bar it was opened on.
+      // Within the part of the bar it was opened on: a pickup never starts in the part before.
+      const partStart = (v) => (app.sectionOf(v) || { start: 0 }).start;
+      const part = partStart(TW.barOf(meta, first));
+      const room = () => u > 0 && partStart(u - 1) === part;
       const earlier = h("button", { type: "button", class: "back earlier", "data-testid": "typed-earlier", onclick: () => {
-        if (u <= 0) return;
+        if (!room()) return;
         at -= per;
         u -= 1;
         clear(where, whereText());
-        earlier.disabled = u <= 0;
+        earlier.disabled = !room();
         update();
         field.focus();
       } }, W.t("Start a bar earlier"));
-      earlier.disabled = u <= 0;
+      earlier.disabled = !room();
       const extra = h("div", { class: "extra", onfocusin: () => box.classList.remove("typing") },
         h("p", { class: "tip", id: "typedTip", "data-testid": "typed-tip" }, W.t("| is a bar line, before the word on beat one. Words between bar lines share the bar by syllables; - joins two syllables, _ holds one, (ooh) is a backing vocal.")),
         moves,

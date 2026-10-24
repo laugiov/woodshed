@@ -228,7 +228,8 @@ def read_corrections(path: Path) -> dict[str, Any]:
             given: dict[str, Any] = entry[part] if isinstance(entry.get(part), dict) else {}
             fuller: dict[str, Any] = whole[part] if isinstance(whole.get(part), dict) else {}
             wanted = _whole(given, fuller, joins=part == "lines")
-            # Lines typed by hand (spec 029) live in `words_more` only: woodshed 0.5.1 never sees nor drops them.
+            # Lines typed by hand (spec 029) live in `words_more` only: a woodshed from main 3746c1f (spec 028 A's
+            # store) never sees nor drops them. The released v0.5.1 knows neither section and drops both on a write.
             typed_lines = {k: v for k, v in fuller.items() if isinstance(k, str) and TYPED_KEY.fullmatch(k)}
             for k, v in typed_lines.items():
                 try:
@@ -247,6 +248,8 @@ def read_corrections(path: Path) -> dict[str, Any]:
                     found[part][k] = _checked_word_entry(k, wanted[k])
                 except (ValueError, KeyError, TypeError, AttributeError):
                     raw[part][k] = v  # damaged by hand, or a newer woodshed's: not shown, kept for the next write
+        given_lines: dict[str, Any] = entry["lines"] if isinstance(entry.get("lines"), dict) else {}
+        _step_aside(found, given_lines, whole.get("written"))
         at = entry.get("at", 0)
         out["words"][key] = {**found, "at": float(at) if _number(at) else 0.0}
         if raw["lines"] or raw["removed"]:
@@ -254,7 +257,7 @@ def read_corrections(path: Path) -> dict[str, Any]:
     return out
 
 
-MORE_ONLY = object()  # an entry woodshed 0.5.1 cannot read at all: in `words_more` only (a line typed by hand)
+MORE_ONLY = object()  # an entry the older store (main 3746c1f) cannot read at all: in `words_more` only (a typed line)
 
 
 def _whole(given: dict[str, Any], fuller: dict[str, Any], joins: bool) -> dict[str, Any]:
@@ -294,11 +297,13 @@ def _whole(given: dict[str, Any], fuller: dict[str, Any], joins: bool) -> dict[s
 
 
 def older_word_entry(entry: Any) -> Any:
-    """A fix of the words as woodshed 0.5.1 reads it (one line, or not sung), what the file's `words` holds: a
-    split line as one line (its first row past 0.5.1's limits), a line joined into the one before as not sung (so
-    its words are never shown twice), without the fix the line had before a join. The whole of it goes in
-    `words_more`, a section 0.5.1 keeps as it is; nor the line before a word was moved by hand (`prev`, spec 029). A
-    line typed by hand (spec 029) goes to `words_more` only (MORE_ONLY): 0.5.1 neither shows nor drops it."""
+    """A fix of the words as a woodshed 0.5.x from main 3746c1f (spec 028 A's store) reads it (one line, or not
+    sung), what the file's `words` holds: a split line as one line (its first row past that version's limits), a
+    line joined into the one before as not sung (so its words are never shown twice), without the fix the line had
+    before a join, nor the line before a word was moved by hand (`prev`, spec 029). The whole of it goes in
+    `words_more`, a section that version keeps as it is; a line typed by hand (spec 029) goes there only
+    (MORE_ONLY): that version neither shows nor drops it. The released v0.5.1 (tag 0e38ee5) knows neither section
+    and drops both on its next write."""
     if not isinstance(entry, dict):
         return entry
     if entry.get("typed") is True:
@@ -308,7 +313,7 @@ def older_word_entry(entry: Any) -> Any:
     out = {k: v for k, v in entry.items() if k not in ("unjoined", "prev")}
     rows = out.get("lines")
     if isinstance(rows, list) and len(rows) > 1 and all(isinstance(r, dict) for r in rows):
-        # A split line as one line, every row's words in it, when 0.5.1's limits allow; else its first row.
+        # A split line as one line, every row's words in it, when that version's limits allow; else its first row.
         words = [w for r in rows for w in r.get("words") or []]
         text = " ".join(str(r.get("text", "")) for r in rows)
         if len(words) <= LINE_WORDS_MAX and len(text) <= WORD_TEXT_MAX:
@@ -399,7 +404,7 @@ def write_corrections(path: Path, stored: dict[str, Any], seen: int = 0) -> int:
 
 
 def _words_body(words: dict[str, Any], raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The words fixed on the sheet as the file keeps them: `words` readable by woodshed 0.5.1 (older_word_entry),
+    """The words fixed on the sheet as the file keeps them: `words` readable by main 3746c1f (older_word_entry),
     `words_more` the splits and joins whole; the entries this version could not read written back as they were,
     unless the line was fixed or taken back here since."""
     body: dict[str, Any] = {}
@@ -422,9 +427,74 @@ def _words_body(words: dict[str, Any], raw: dict[str, Any]) -> tuple[dict[str, A
                 if k not in entry["lines"] and k not in entry["removed"]:
                     (whole if TYPED_KEY.fullmatch(k) else out)[part][k] = v
         body[key] = {**out, "at": entry["at"]}
+        if any(TYPED_KEY.fullmatch(k) for k in entry["lines"]):
+            # Each line as an older woodshed reads it, as written: a line it changes since is known on the next read
+            # (a typed line over it then steps aside, so its change is seen).
+            whole["written"] = {k: {"fp": _fingerprint(v), "span": _span_of(v)} for k, v in out["lines"].items()}
         if whole["lines"] or whole["removed"]:
             more[key] = whole
     return body, more
+
+
+def _fingerprint(entry: Any) -> str:
+    from woodshed.fnv import fnv1a
+
+    return fnv1a(json.dumps(entry, sort_keys=True, ensure_ascii=False, separators=(",", ":")))
+
+
+def _span_of(entry: Any) -> list[float] | None:
+    """The time of a fixed line's words (all its lines), or None."""
+    lines = entry.get("lines") if isinstance(entry, dict) else None
+    times = []
+    for ln in lines if isinstance(lines, list) else []:
+        for w in ln.get("words") or [] if isinstance(ln, dict) else []:
+            if isinstance(w, dict) and _number(w.get("start")) and _number(w.get("end")):
+                times.append((w["start"], w["end"]))
+    return [min(a for a, _ in times), max(b for _, b in times)] if times else None
+
+
+def _step_aside(found: dict[str, dict[str, Any]], given: dict[str, Any], written: Any) -> None:
+    """A typed line over a placed line an older woodshed changed since this version wrote the file: taken back
+    (to `removed`, Undo brings it back), so the older woodshed's change shows instead of staying covered."""
+    if not isinstance(written, dict):
+        return
+    changed = [
+        k
+        for k in {*written, *given}
+        if isinstance(k, str)
+        and LINE_INDEX.fullmatch(k)
+        and _fingerprint(given.get(k)) != (written.get(k) or {}).get("fp")
+    ]
+    spans = [sp for k in changed for sp in (_span_of(given.get(k)), (written.get(k) or {}).get("span")) if sp]
+    for k, v in list(found["lines"].items()):
+        if not (TYPED_KEY.fullmatch(k) and isinstance(v, dict)):
+            continue
+        mine = _span_of(v)
+        if mine and any(isinstance(sp, list) and len(sp) == 2 and sp[0] < mine[1] and mine[0] < sp[1] for sp in spans):
+            found["removed"][k] = found["lines"].pop(k)
+
+
+def _source(page: Path) -> str | None:
+    """The fingerprint of the recording a page was built from (its manifest), None when unknown."""
+    try:
+        src = json.loads((page / "woodshed.json").read_text(encoding="utf-8"))["settings"]["source"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return src if isinstance(src, str) else None
+
+
+def _same_recording(entry: Any, src: str | None) -> bool:
+    """A placed line's fix, or a line typed on this recording (an unknown fingerprint on either side counts as the
+    same, as a rebuild does)."""
+    if not (isinstance(entry, dict) and entry.get("typed") is True):
+        return True
+    return entry.get("src") is None or src is None or entry["src"] == src
+
+
+def _this_recording(entries: dict[str, Any], src: str | None) -> dict[str, Any]:
+    """The band's fixes as this recording's sheet shows them: lines typed on another recording are kept in the
+    store but never block, cover or bound anything here."""
+    return {k: v for k, v in entries.items() if _same_recording(v, src)}
 
 
 def songbook_of(page: Path, song: dict[str, Any], data: dict[str, Any], folder: Path) -> None:
@@ -439,7 +509,7 @@ def songbook_of(page: Path, song: dict[str, Any], data: dict[str, Any], folder: 
         return
     with corrections_lock(path):
         fixed = read_corrections(path)["words"].get(lyrics.words_key(data), {}).get("lines", {})
-        exports.write_chordpro(song, folder, lyrics.apply_edits(data, fixed))
+        exports.write_chordpro(song, folder, lyrics.apply_edits(data, _this_recording(fixed, _source(page))))
 
 
 def _number(v: Any) -> bool:

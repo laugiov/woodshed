@@ -456,3 +456,47 @@ def test_what_an_older_woodshed_changed_on_a_moved_line_wins(library: app.AppSer
     got = read(library)["words"]["lines"]["1"]
     assert got["lines"][0]["text"] == "the radio hums what the night forgets" and "prev" not in got
     assert moved["lines"]["1"]["prev"] is None
+
+
+def test_an_older_woodshed_fixing_a_placed_line_a_typed_line_covers_shows_its_fix(library: app.AppServer) -> None:
+    _, typed_line = typed_fix(library, {"t00000001": {"typed": {"text": "la la | la la", "at": 32}}})  # over line 3
+    typed_fix(library, {"t00000002": {"typed": {"text": "far away", "at": 44}}})  # over nothing
+    path = library.library.root / app.CORRECTIONS_DIR / f"{PAGE}.json"
+    key = lyrics.words_key(placement(library))
+    old = woodshed_051.read_words(path)
+    words = [{"text": "OLDFIX", "start": 16.0, "end": 17.0}, {"text": "three", "start": 17.0, "end": 19.0}]
+    old[key]["lines"]["3"] = {
+        "was": LINES[3],
+        "lines": [{"text": "OLDFIX three", "backing": [], "check": None, "words": words}],
+    }
+    woodshed_051.write_words(path, old)  # fixed on the older woodshed, which never saw the typed line over it
+    got = read(library)["words"]
+    assert "t00000001" not in got["lines"] and got["removed"]["t00000001"] == typed_line["lines"]["t00000001"]
+    assert "t00000002" in got["lines"]  # a typed line elsewhere stays
+    rows = lyrics.apply_edits(placement(library), got["lines"])["lines"]
+    assert rows[3]["sung"] is True and rows[3]["text"] == "OLDFIX three"  # its fix is seen, not hidden
+    status, back = typed_fix(library, {"t00000001": {"undo": True}})  # Undo brings the typed line back
+    assert status == 200 and back["lines"]["t00000001"]["lines"] == typed_line["lines"]["t00000001"]["lines"]
+
+
+def test_lines_typed_on_another_recording_never_leave_the_library(
+    library: app.AppServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    songbooks: list[dict[str, Any]] = []
+    monkeypatch.setattr(lyrics, "write_songbook", lambda page, song, data, entries: songbooks.append(dict(entries)))
+    typed_fix(library, {"t00000001": {"typed": {"text": "When you | walk", "at": 40}}})
+    typed_fix(library, {"t00000002": {"typed": {"text": "far away", "at": 12}}})
+    typed_fix(library, {"t00000002": None})  # taken back, remembered
+    manifest = library.library.root / PAGE / "woodshed.json"
+    body = json.loads(manifest.read_text())
+    body["settings"]["source"] = "another-recording"
+    manifest.write_text(json.dumps(body))
+    got = read(library)["words"]
+    assert not [k for k in [*got["lines"], *got["removed"]] if k.startswith("t")]
+    status, answer = typed_fix(library, {"1": {"text": "the radio hums what the knight forgot"}})
+    assert status == 200 and not [k for k in [*answer["lines"], *answer["removed"]] if k.startswith("t")]
+    assert songbooks[-1] and not [k for k in songbooks[-1] if k.startswith("t")]  # the songbook of this recording
+    status, _ = typed_fix(library, {"t00000002": {"undo": True}})  # not this recording's: nothing to undo here
+    assert status == 400
+    kept = stored(library)["words_more"][lyrics.words_key(placement(library))]
+    assert "t00000001" in kept["lines"] and "t00000002" in kept["removed"]  # kept as they were

@@ -64,6 +64,9 @@ from woodshed.corrections import (
     _checked_edits,
     _checked_word_entry,
     _number,
+    _same_recording,
+    _source,
+    _this_recording,
     _without_prev,
 )
 from woodshed.errors import WoodshedError
@@ -501,7 +504,7 @@ class Library:
             fixed = stored["words"].get(words, {})
             src = _source(self.root / folder)  # lines typed on another recording are not this one's (spec 029)
             mine = {k: v for k, v in fixed.get("lines", {}).items() if _same_recording(v, src)}
-            answer["words"] = {"lines": mine, "removed": fixed.get("removed", {})}
+            answer["words"] = {"lines": mine, "removed": _this_recording(fixed.get("removed", {}), src)}
         return answer
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
@@ -758,8 +761,14 @@ class Library:
                 stored["words"].pop(old)  # the placements of long ago
             rev = self._write(folder, stored)
             with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the fix is kept whatever happens
-                lyrics.write_songbook(self.root / folder, song, placed, merged)
-            return {"key": key, "lines": merged, "removed": removed, "rev": rev}
+                lyrics.write_songbook(self.root / folder, song, placed, _this_recording(merged, src))
+            # Lines typed on another recording stay stored, never sent: this page is not their recording.
+            return {
+                "key": key,
+                "lines": _this_recording(merged, src),
+                "removed": _this_recording(removed, src),
+                "rev": rev,
+            }
 
     def _commit_words(self, folder: str, notes: list[str]) -> Callable[[dict[str, Any], lyrics.Voice], None]:
         """The words placed again, written under the lock that fixing a line takes: the band's fixes of the
@@ -777,7 +786,7 @@ class Library:
                 # Carried first: a failure here leaves the words and their fixes as they were.
                 changed = carry_fixes(stored, old, data, voice, song, notes, _source(page))
                 lyrics.write(page, data)
-                fixed = stored["words"].get(lyrics.words_key(data), {}).get("lines", {})
+                fixed = _this_recording(stored["words"].get(lyrics.words_key(data), {}).get("lines", {}), _source(page))
                 with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
                     lyrics.write_songbook(page, lyrics.page_song(page), data, fixed)
                 if not changed:
@@ -1245,7 +1254,7 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
             lyrics.write(page, data)
             if changed:
                 write_corrections(path, stored)
-            fixed = stored["words"].get(lyrics.words_key(data), {}).get("lines", {})
+            fixed = _this_recording(stored["words"].get(lyrics.words_key(data), {}).get("lines", {}), _source(page))
             with contextlib.suppress(OSError, ValueError, KeyError, TypeError):  # the words are kept whatever happens
                 lyrics.write_songbook(page, lyrics.page_song(page), data, fixed)
 
@@ -1349,29 +1358,6 @@ def _entry_order(k: str) -> tuple[int, int, str]:
     return (0, int(k), "") if k.isdigit() else (1, 0, k)
 
 
-def _source(page: Path) -> str | None:
-    """The fingerprint of the recording a page was built from (its manifest), None when unknown."""
-    try:
-        src = json.loads((page / MANIFEST).read_text(encoding="utf-8"))["settings"]["source"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    return src if isinstance(src, str) else None
-
-
-def _same_recording(entry: Any, src: str | None) -> bool:
-    """A placed line's fix, or a line typed on this recording (an unknown fingerprint on either side counts as the
-    same, as a rebuild does)."""
-    if not (isinstance(entry, dict) and entry.get("typed") is True):
-        return True
-    return entry.get("src") is None or src is None or entry["src"] == src
-
-
-def _this_recording(entries: dict[str, Any], src: str | None) -> dict[str, Any]:
-    """The band's fixes as this recording's sheet shows them: lines typed on another recording are kept in the
-    store but never block, cover or bound anything here."""
-    return {k: v for k, v in entries.items() if _same_recording(v, src)}
-
-
 def _has_typed(stored: dict[str, Any], key: str, src: str | None) -> bool:
     lines = stored["words"].get(key, {}).get("lines", {})
     return any(isinstance(v, dict) and v.get("typed") is True and _same_recording(v, src) for v in lines.values())
@@ -1455,6 +1441,8 @@ def _typed_change(
     others = lyrics.apply_edits(placed, {j: v for j, v in now.items() if j != k})["lines"]
     typed_others = [ln for ln in others if isinstance(ln, dict) and ln.get("typed")]
     if "undo" in want:
+        if old is None and not _same_recording(removed, src):
+            raise ValueError("lines: nothing to undo")  # a line taken back on another recording stays there
         back = _undone(old, removed)
         span_back = typed.span(back["lines"][0]) if isinstance(back, dict) and back.get("typed") else None
         spans = [sp for ln in typed_others if (sp := typed.span(ln)) is not None]
