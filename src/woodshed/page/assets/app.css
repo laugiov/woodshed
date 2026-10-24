@@ -920,6 +920,7 @@ body.line-open .lline:focus { background: var(--accent-soft); box-shadow: inset 
 .lline.gone .t { cursor: default; padding: 0; }
 .lline.gone .gone-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
 .lline.gone .gone-text { font-size: 16px; color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.lline.gone .gone-into { font-size: 12.5px; color: var(--muted); }
 .lline.gone .gone-why { font-size: 12.5px; color: var(--muted); border: 1px solid var(--muted); border-radius: 999px; padding: 1px 9px; }
 .lline.gone .back, .ed .back { color: var(--muted); background: none; border: 0; text-decoration: underline; font-size: 13px; padding: 0; cursor: pointer; }
 /* The line editor: the bar editor's shell, wider for a sung line, the field in the words' font. */

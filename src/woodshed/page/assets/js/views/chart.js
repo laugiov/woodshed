@@ -428,8 +428,8 @@
         h("span", { class: "t" }, fmt(gone.t)),
         h("span", { class: "gone-row" },
           h("span", { class: "gone-text", translate: "no" }, gone.text),
-          h("span", { class: "gone-why" }, joined ? W.t("joined into line {n}", { n: gone.joined + 1 }) : W.t("not in this recording")),
-          fixing ? h("button", { type: "button", class: "back", "data-testid": joined ? "line-joined-back" : "line-gone-back", onclick: () => app.lines.back(gone.index) }, W.t("Back to the placement")) : null));
+          joined ? h("span", { class: "gone-into" }, W.t("joined into line {n}", { n: gone.joined + 1 })) : h("span", { class: "gone-why" }, W.t("not in this recording")),
+          fixing ? h("button", { type: "button", class: "back", "data-testid": joined ? "line-joined-back" : "line-gone-back", "aria-label": W.t("Back to the placement: line {n}", { n: gone.index + 1 }), onclick: () => app.lines.back(gone.index) }, W.t("Back to the placement")) : null));
     }
     // The sung lines: one tab stop, the line in hand or the first; the arrows walk them (below).
     let lineStop = null;

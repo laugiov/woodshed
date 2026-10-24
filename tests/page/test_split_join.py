@@ -273,3 +273,59 @@ def test_the_chordpro_of_the_page_has_the_split_line_as_python(
         r for r in text.splitlines() if "Morning" in r and "harbour" in r
     ]
     assert problems == []
+
+
+# The review: the cursor said, never a split inside a word, the earlier fix back after a join, names.
+
+
+def test_a_split_needs_the_cursor_between_two_words_and_says_so(
+    browser: Browser,
+    served: app.AppServer,  # noqa: F811
+) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems)
+    edit(page)
+    open_line(page, 0)
+    status = page.get_by_test_id("line-status")
+    page.get_by_test_id("line-field").evaluate("(f) => f.setSelectionRange(f.value.length, f.value.length)")
+    page.keyboard.press("Shift+Enter")  # at the end: nothing to put on a second line
+    expect(status).to_have_text("Put the cursor between two words.")
+    assert field_value(page) == FIRST
+    page.get_by_test_id("line-field").evaluate(
+        "(f) => { const at = f.value.indexOf('bour'); f.setSelectionRange(at, at); }"
+    )
+    page.keyboard.press("Shift+Enter")  # inside "harbour": the break goes to the nearest gap
+    assert field_value(page) == "Morning comes in on the\nharbour road,"
+    expect(status).to_have_text("Split: 2 lines. Save places them.")
+    caret_before(page, "harbour")
+    page.keyboard.press("Shift+Enter")  # right after a break: no empty line
+    expect(status).to_have_text("Put the cursor between two words.")
+    assert field_value(page) == "Morning comes in on the\nharbour road,"
+    assert problems == []
+
+
+def test_back_to_the_placement_on_a_joined_row_gives_the_line_its_earlier_fix(
+    browser: Browser,
+    served: app.AppServer,  # noqa: F811
+) -> None:
+    problems: list[str] = []
+    page = device(browser, served, problems)
+    edit(page)
+    open_line(page, 0)
+    page.get_by_test_id("line-field").fill("Morning comes in on the harbor road,")
+    page.get_by_test_id("line-field").press("Enter")
+    expect(page.get_by_test_id("line-editor")).to_be_hidden(timeout=20000)
+    open_line(page, 0, "harbor")
+    page.get_by_test_id("line-join").click()
+    joined = page.get_by_test_id("line-joined-row")
+    expect(joined).to_have_count(1)
+    into = joined.locator(".gone-into")
+    expect(into).to_have_text("joined into line 1")
+    assert into.evaluate("(e) => getComputedStyle(e).borderTopStyle") == "none"  # said, not a button-like pill
+    back = page.get_by_test_id("line-joined-back")
+    expect(back).to_have_attribute("aria-label", "Back to the placement: line 2")
+    back.click()
+    expect(line(page, 1)).to_contain_text("radio")
+    assert words(line(page, 0)) == "Morning comes in on the harbor road,"  # the fix it had before the join
+    assert list(stored_lines(served)) == ["0"]
+    assert problems == []

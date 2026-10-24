@@ -37,6 +37,12 @@
       for (let j = i + 1; app.wordFixes()[j] && app.wordFixes()[j].gone === "joined"; j++) out.push(j);
       return out;
     }
+    // A line joined into the one before it goes with that line and every line joined into it, and back.
+    function group(i) {
+      let base = i;
+      while (base > 0 && app.wordFixes()[base] && app.wordFixes()[base].gone === "joined") base--;
+      return [base, ...held(base)];
+    }
     // The line as the library has it, as the editor asks for it: its words (a split line's lines, one a row),
     // another voice, gone, joined into the line before, or as placed.
     function asked(i) {
@@ -87,7 +93,7 @@
     // The lines joined into a line changed go with it (the library lets them go): its Undo brings them back too.
     async function commit(i, change, said, after, status) {
       const before = {};
-      for (const k of Object.keys(change)) for (const n of [+k, ...held(+k)]) before[n] = asked(n);
+      for (const k of Object.keys(change)) for (const n of [+k, ...group(+k)]) before[n] = asked(n);
       const r = await send(change);
       if (!r.ok) {
         if (status) status(r);
@@ -242,11 +248,22 @@
         field.removeAttribute("aria-invalid");
       });
       // A split at the cursor (spec 028 B): Shift+Enter or "Split at the cursor"; Save places the lines together.
+      // Never inside a word: the break goes to the nearest gap between two words (the earlier one on a tie).
+      function gapNear(v, a) {
+        const word = /\S/;
+        if (!(a > 0 && a < v.length && word.test(v[a - 1]) && word.test(v[a]))) return a;
+        let back = a;
+        while (back > 0 && word.test(v[back - 1])) back--;
+        let ahead = a;
+        while (ahead < v.length && word.test(v[ahead])) ahead++;
+        const options = [back > 0 ? back : null, ahead < v.length ? ahead : null].filter((x) => x !== null);
+        return options.length ? options.sort((x, y) => Math.abs(x - a) - Math.abs(y - a))[0] : a;
+      }
       function splitAt() {
         const v = field.value;
-        const a = field.selectionStart;
+        const a = gapNear(v, field.selectionStart);
         const left = v.slice(0, a).replace(/[ \t]+$/, "");
-        const right = v.slice(field.selectionEnd).replace(/^[ \t]+/, "");
+        const right = v.slice(a === field.selectionStart ? field.selectionEnd : a).replace(/^[ \t]+/, "");
         if (v.split("\n").length >= 4) {
           say(W.t("A line is split in four at most."), true);
         } else if (left.trim() && right.trim() && !left.endsWith("\n") && !right.startsWith("\n")) {
@@ -254,6 +271,9 @@
           field.setSelectionRange(left.length + 1, left.length + 1);
           field.removeAttribute("aria-invalid");
           grow();
+          say(W.t("Split: {n} lines. Save places them.", { n: field.value.split("\n").length }));
+        } else {
+          say(W.t("Put the cursor between two words."), true);
         }
         field.focus();
       }
@@ -341,7 +361,7 @@
               const first = extra.querySelector("button");
               if (first) first.focus();
             } }, W.t("More")),
-            entry ? h("button", { type: "button", class: "back", "data-testid": "line-back", onclick: act(null, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) })) }, W.t("Back to the placement")) : null),
+            entry ? h("button", { type: "button", class: "back", "data-testid": "line-back", "aria-label": W.t("Back to the placement: line {n}", { n: i + 1 }), onclick: act(null, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) })) }, W.t("Back to the placement")) : null),
           h("span", { class: "right" },
             h("button", { type: "button", class: "btn cancel", "data-testid": "line-cancel", onclick: () => close(true) }, W.t("Cancel")),
             h("button", { type: "button", class: "btn", "data-testid": "line-save", title: W.t("Enter"), onclick: () => save(false) }, W.t("Save")),
@@ -409,10 +429,9 @@
 
     // Back to the placement, from a row taken out of this recording, or joined into the line before (the whole
     // join taken back: the line it went to is the placement's again).
+    // The library gives the line it went to the fix it had before the join (spec 028 B).
     function back(i) {
-      let base = i;
-      while (base > 0 && app.wordFixes()[base] && app.wordFixes()[base].gone === "joined") base--;
-      commit(base, { [base]: null }, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) }), () => {
+      commit(i, { [i]: null }, () => W.t("“{words}” is the placement's again.", { words: app.lineWords(i) }), () => {
         const el = lineEl(i);
         if (el) el.focus({ preventScroll: true });
       });

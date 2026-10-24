@@ -38,6 +38,7 @@
     if (!INDEX.test(k) || !v || typeof v !== "object" || typeof v.was !== "string") return false;
     if (v.gone !== undefined) return (v.gone === "not-sung" || v.gone === "joined") && Object.keys(v).length === 2;
     if (v.voice !== undefined && v.voice !== "other") return false;
+    if (v.unjoined !== undefined && v.unjoined !== null && (v.lines === undefined || v.unjoined.unjoined !== undefined || !valid(k, v.unjoined))) return false;
     if (v.lines === undefined) return v.voice === "other";
     if (!Array.isArray(v.lines) || v.lines.length < 1 || v.lines.length > 4) return false; // more than one: a split
     return v.lines.every((ln) => !!ln && typeof ln.text === "string" && Array.isArray(ln.words) && ln.words.length > 0 &&
