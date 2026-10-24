@@ -38,6 +38,10 @@ single line, placed in the time of both; in Edit mode the line it took in shows 
 the whole split or join, and the songbook file in the page folder (`exports/*.cho`) is written again
 with the fixes.
 
+Through the library, the bar editor also offers **+ Type a line here**: a line of the words typed
+from that bar, `|` before the word on beat one of the next bar (see
+[For singers](singers.md#type-a-line-yourself)). It is how a song with no words gets its first line.
+
 Shapes, keys, the stage view and every export follow what you type, and through the library the
 band's phones get it live.
 

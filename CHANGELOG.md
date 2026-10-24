@@ -28,6 +28,12 @@ corrections and set list stay where they are.
   two lines of one part a single line. The library places them in the line's own time, the lines
   around do not move, and Undo or **Back to the placement** takes back the whole split or join. The
   songbook file of the page (`exports/*.cho`) is written again with the band's fixes after each one.
+- Type the words yourself, no model needed, in any language and for any use (paid gigs included):
+  **+ Type a line here** in Edit mode, then the line as you would write it under the bars, `|`
+  before the word on beat one (`When you walk, | I stum- ble _ on`). The words share each bar by
+  syllables, the editor reads the line back before saving, and the band sees it live. A typed line
+  covers the placed line under it while it is there. Move any word half a beat with ◀ ▶, a tap on
+  its place in the bar, or **M** from the keyboard.
 - An older woodshed opened on the same library keeps the chords, but forgets the lines fixed on the
   sheet the next time it saves a chord: update every computer that runs the library.
 

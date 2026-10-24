@@ -58,6 +58,45 @@ What the words need:
 The model that places the words is free for non-commercial use only: if your band is paid to play,
 read [the licences](how-it-works.md#models-and-licences) first.
 
+### Type a line yourself
+
+No model needed, any language, free for any use: type the line as you would write it under the bars.
+In **Edit chords and words** (or **Edit the chart** on a song with no words yet), press **+ Type a
+line here** under bars with no words, or in the bar editor of the bar the line starts on, and type:
+
+```text
+When you walk, | I stum- ble _ on
+```
+
+- The words before the first `|` start on beat one of that bar. Each `|` is a bar line: the word
+  after it falls on the next bar's beat one; `| |` is a bar with no new word.
+- The words of a bar share its beats by syllables: three short words on four beats land on beats 1,
+  2 and 3. Two syllables a beat and the words go on the "ands", up to four a beat.
+- `-` joins two syllables of one word (`stum- ble` shows "stum-ble", a chord can sit on "ble"), `_`
+  holds the syllable before it one syllable longer (at the start of a line, the words come in
+  later), and words in round brackets, `(ooh)`, are backing vocals.
+- The editor reads the line back before you save it ("Bar 5: “When” on 1, “you” on 2…"). **Enter**
+  saves, **Ctrl+Enter** (**⌘+Enter**) saves and opens a new line on the next bar.
+- Even notes in a swing feel land on the beat and its "and": the sheet is for reading, not a
+  transcription.
+
+A typed line is drawn, lit, followed on stage and exported to ChordPro like a placed one; in Edit
+mode its time says **typed**. Typed over a line the model placed, it hides that line while it is
+there (Edit mode shows it as one quiet row, "covered by a typed line"); **Take this line off** in
+its editor brings the placed line back. Two typed lines never overlap: the editor says so before
+saving. **Words back to the placement…** never takes back a typed line. Typed lines stay with the
+recording they were typed on, also when the words are placed again with the model.
+
+#### Move a word
+
+Click (or tap) the word: in the line's editor, **◀** and **▶** move it half a beat, or tap where it
+goes on the ruler of its bars. Words it overtakes move along; it never goes into the next line. With
+the keyboard, press **M** on a line in Edit mode: the editor opens on the word to move (**Enter**
+still opens it on the words). A moved word of a placed line makes it a line fixed by hand, its other
+words staying where they were. Each move has **Undo**.
+
+Typing and moving need the library (woodshed app), on any device of the band, as fixing a line does.
+
 ## Your voice type and your key
 
 <img src="../images/desk-voice.png" alt="Voice: the song's range against your voice type" width="100%">
