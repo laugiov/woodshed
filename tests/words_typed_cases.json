@@ -1,0 +1,604 @@
+{
+ "_about": "Shared by tests/test_typed_words.py (Python, lyrics typed by hand) and tests/page/test_words_by_hand.py (the page): a line typed with | bar lines, read the same on both sides. `at`: an index in song.beats, the line's first bar's beat one. `ats`: where each word starts, in song.beats indices. `beats`: beat_time cases. `syllables`: what each word weighs in its bar (a vowel group, a final silent e dropped, qu a consonant, a CJK character).",
+ "song": {
+  "beats": [
+   0.2,
+   0.7,
+   1.2,
+   1.7,
+   2.2,
+   2.7,
+   3.2,
+   3.7,
+   4.2,
+   4.7,
+   5.2,
+   5.7,
+   6.2,
+   6.7,
+   7.2,
+   7.7,
+   8.2,
+   8.7,
+   9.2,
+   9.7,
+   10.2,
+   10.8,
+   11.4,
+   12.0,
+   12.6,
+   13.2,
+   13.8,
+   14.4,
+   15.0,
+   15.6,
+   16.2,
+   16.8,
+   17.4,
+   18.0
+  ],
+  "first_beat": 2,
+  "beats_per_bar": 4,
+  "bpm": 120,
+  "bars": [
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   },
+   {
+    "chords": [
+     {
+      "pc": 0,
+      "quality": "",
+      "beats": 4
+     }
+    ]
+   }
+  ]
+ },
+ "beats": [
+  [
+   0,
+   0.2
+  ],
+  [
+   2.5,
+   1.45
+  ],
+  [
+   20,
+   10.2
+  ],
+  [
+   20.5,
+   10.5
+  ],
+  [
+   33,
+   18.0
+  ],
+  [
+   34,
+   18.6
+  ],
+  [
+   35.25,
+   19.35
+  ],
+  [
+   -0.25,
+   0.075
+  ],
+  [
+   -2,
+   0.0
+  ]
+ ],
+ "lines": [
+  {
+   "name": "four words on four beats",
+   "text": "When you walk I",
+   "at": 2,
+   "ats": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "line": "When you walk I"
+  },
+  {
+   "name": "two words: beats one and three",
+   "text": "Hey now",
+   "at": 2,
+   "ats": [
+    2,
+    4
+   ],
+   "line": "Hey now"
+  },
+  {
+   "name": "three words: beats one, two, three, as chords are shared",
+   "text": "When you walk",
+   "at": 2,
+   "ats": [
+    2,
+    3,
+    4
+   ],
+   "line": "When you walk"
+  },
+  {
+   "name": "a bar line, a syllable joined, a hold",
+   "text": "When you walk, | I stum- ble _ on",
+   "at": 2,
+   "ats": [
+    2,
+    3,
+    4,
+    6,
+    6.5,
+    7.5,
+    9
+   ],
+   "line": "When you walk, I stumble on"
+  },
+  {
+   "name": "rests before the words",
+   "text": "_ _ Oh",
+   "at": 6,
+   "ats": [
+    8
+   ],
+   "line": "Oh"
+  },
+  {
+   "name": "by syllables",
+   "text": "beautiful day",
+   "at": 2,
+   "ats": [
+    2,
+    5
+   ],
+   "line": "beautiful day"
+  },
+  {
+   "name": "Cyrillic",
+   "text": "Как дела | мой друг",
+   "at": 2,
+   "ats": [
+    2,
+    3,
+    6,
+    8
+   ],
+   "line": "Как дела мой друг"
+  },
+  {
+   "name": "Japanese: a syllable a character",
+   "text": "東京 | 夜",
+   "at": 2,
+   "ats": [
+    2,
+    6
+   ],
+   "line": "東京 夜"
+  },
+  {
+   "name": "Greek",
+   "text": "Καλημέρα κόσμε",
+   "at": 2,
+   "ats": [
+    2,
+    4.5
+   ],
+   "line": "Καλημέρα κόσμε"
+  },
+  {
+   "name": "an empty bar between",
+   "text": "a | | b",
+   "at": 2,
+   "ats": [
+    2,
+    10
+   ],
+   "line": "a b"
+  },
+  {
+   "name": "backing vocals apart",
+   "text": "(ooh) yeah (ah)",
+   "at": 2,
+   "ats": [
+    2
+   ],
+   "line": "yeah",
+   "backing": [
+    "ooh",
+    "ah"
+   ]
+  },
+  {
+   "name": "sixteen syllables: quarter beats",
+   "text": "la la la la la la la la la la la la la la la la",
+   "at": 2,
+   "ats": [
+    2.0,
+    2.25,
+    2.5,
+    2.75,
+    3.0,
+    3.25,
+    3.5,
+    3.75,
+    4.0,
+    4.25,
+    4.5,
+    4.75,
+    5.0,
+    5.25,
+    5.5,
+    5.75
+   ],
+   "line": "la la la la la la la la la la la la la la la la"
+  },
+  {
+   "name": "five syllables: half beats",
+   "text": "la la la la la",
+   "at": 2,
+   "ats": [
+    2,
+    2.5,
+    3.5,
+    4,
+    5
+   ],
+   "line": "la la la la la"
+  },
+  {
+   "name": "a hold across the bar line",
+   "text": "stay | _",
+   "at": 2,
+   "ats": [
+    2
+   ],
+   "line": "stay",
+   "ends": [
+    10
+   ]
+  },
+  {
+   "name": "the last word ends with the bar",
+   "text": "Hey now",
+   "at": 2,
+   "ats": [
+    2,
+    4
+   ],
+   "line": "Hey now",
+   "ends": [
+    4,
+    6
+   ]
+  },
+  {
+   "name": "the last bar of the song",
+   "text": "end of it",
+   "at": 30,
+   "ats": [
+    30,
+    31,
+    32
+   ],
+   "line": "end of it",
+   "ends": [
+    31,
+    32,
+    34
+   ]
+  },
+  {
+   "name": "ends before the next typed line",
+   "text": "Hey now",
+   "at": 2,
+   "until_at": 5,
+   "ats": [
+    2,
+    4
+   ],
+   "line": "Hey now",
+   "ends": [
+    4,
+    5
+   ]
+  },
+  {
+   "name": "a bar unchanged keeps its words where they were put",
+   "text": "When you walk, | I stumble on",
+   "at": 2,
+   "old": {
+    "notation": "When you walk, | I stumble",
+    "words": [
+     {
+      "text": "When",
+      "at": 2,
+      "start": 1.2,
+      "end": 1.9
+     },
+     {
+      "text": "you",
+      "at": 3.5,
+      "start": 1.95,
+      "end": 2.2
+     },
+     {
+      "text": "walk,",
+      "at": 4,
+      "start": 2.2,
+      "end": 3.1
+     },
+     {
+      "text": "I",
+      "at": 6,
+      "start": 3.2,
+      "end": 3.7
+     },
+     {
+      "text": "stumble",
+      "at": 7,
+      "start": 3.7,
+      "end": 4.2
+     }
+    ]
+   },
+   "ats": [
+    2,
+    3.5,
+    4,
+    6,
+    7,
+    9
+   ],
+   "line": "When you walk, I stumble on",
+   "kept": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "name": "too many syllables in a bar",
+   "text": "la la la la la la la la la la la la la la la la la",
+   "at": 2,
+   "error": "crowded",
+   "bar": 1
+  },
+  {
+   "name": "too many bars",
+   "text": "a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a | a",
+   "at": 2,
+   "error": "bars"
+  },
+  {
+   "name": "no words",
+   "text": " | | ",
+   "at": 2,
+   "error": "empty"
+  },
+  {
+   "name": "nothing",
+   "text": "",
+   "at": 2,
+   "error": "empty"
+  },
+  {
+   "name": "past the song's end",
+   "text": "a | b",
+   "at": 30,
+   "error": "end"
+  },
+  {
+   "name": "forty-one words",
+   "text": "la la la la la la la la la la | la la la la la la la la la la | la la la la la la la la la la | la la la la la la la la la la | la",
+   "at": 2,
+   "error": "words"
+  },
+  {
+   "name": "only holds",
+   "text": "_ _",
+   "at": 2,
+   "error": "empty"
+  },
+  {
+   "name": "a byte order mark is not a word",
+   "text": "﻿Hey now",
+   "at": 2,
+   "ats": [
+    2,
+    4
+   ],
+   "line": "Hey now",
+   "notation": "Hey now"
+  }
+ ],
+ "syllables": [
+  [
+   "walk",
+   1
+  ],
+  [
+   "beautiful",
+   3
+  ],
+  [
+   "stum-",
+   1
+  ],
+  [
+   "ble",
+   1
+  ],
+  [
+   "rhythm",
+   1
+  ],
+  [
+   "ДЕЛА",
+   2
+  ],
+  [
+   "Καλημέρα",
+   4
+  ],
+  [
+   "東京",
+   2
+  ],
+  [
+   "14",
+   1
+  ],
+  [
+   "care",
+   1
+  ],
+  [
+   "care,",
+   1
+  ],
+  [
+   "you're",
+   1
+  ],
+  [
+   "you’re",
+   1
+  ],
+  [
+   "love",
+   1
+  ],
+  [
+   "time",
+   1
+  ],
+  [
+   "smile",
+   1
+  ],
+  [
+   "qu'je",
+   1
+  ],
+  [
+   "Jude",
+   1
+  ],
+  [
+   "comes",
+   1
+  ],
+  [
+   "walked",
+   1
+  ],
+  [
+   "wanted",
+   2
+  ],
+  [
+   "roses",
+   2
+  ],
+  [
+   "places",
+   2
+  ],
+  [
+   "table",
+   2
+  ],
+  [
+   "the",
+   1
+  ],
+  [
+   "here",
+   1
+  ],
+  [
+   "café",
+   2
+  ],
+  [
+   "queen",
+   1
+  ],
+  [
+   "morning",
+   2
+  ],
+  [
+   "qu'ça",
+   1
+  ]
+ ]
+}

@@ -17,6 +17,7 @@ from typing import Any
 
 from woodshed import chords as chord_grammar
 from woodshed.errors import WoodshedError
+from woodshed.typed import KEY as TYPED_KEY
 
 CORRECTIONS_MAX = 2000  # chords picked by ear on one page: more than any song has doubts
 WORDS_BYTES = 32 * 1024  # the pasted words of one song: a long song is 3 KB
@@ -227,6 +228,13 @@ def read_corrections(path: Path) -> dict[str, Any]:
             given: dict[str, Any] = entry[part] if isinstance(entry.get(part), dict) else {}
             fuller: dict[str, Any] = whole[part] if isinstance(whole.get(part), dict) else {}
             wanted = _whole(given, fuller, joins=part == "lines")
+            # Lines typed by hand (spec 029) live in `words_more` only: woodshed 0.5.1 never sees nor drops them.
+            typed_lines = {k: v for k, v in fuller.items() if isinstance(k, str) and TYPED_KEY.fullmatch(k)}
+            for k, v in typed_lines.items():
+                try:
+                    found[part][k] = None if v is None else _checked_word_entry(k, v)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    raw[part][k] = v  # kept as it is for the next write
             for k, v in given.items():
                 if not (isinstance(k, str) and LINE_INDEX.fullmatch(k)):
                     continue
@@ -244,6 +252,9 @@ def read_corrections(path: Path) -> dict[str, Any]:
         if raw["lines"] or raw["removed"]:
             out["words_raw"][key] = raw
     return out
+
+
+MORE_ONLY = object()  # an entry woodshed 0.5.1 cannot read at all: in `words_more` only (a line typed by hand)
 
 
 def _whole(given: dict[str, Any], fuller: dict[str, Any], joins: bool) -> dict[str, Any]:
@@ -286,12 +297,15 @@ def older_word_entry(entry: Any) -> Any:
     """A fix of the words as woodshed 0.5.1 reads it (one line, or not sung), what the file's `words` holds: a
     split line as one line (its first row past 0.5.1's limits), a line joined into the one before as not sung (so
     its words are never shown twice), without the fix the line had before a join. The whole of it goes in
-    `words_more`, a section 0.5.1 keeps as it is."""
+    `words_more`, a section 0.5.1 keeps as it is; nor the line before a word was moved by hand (`prev`, spec 029). A
+    line typed by hand (spec 029) goes to `words_more` only (MORE_ONLY): 0.5.1 neither shows nor drops it."""
     if not isinstance(entry, dict):
         return entry
+    if entry.get("typed") is True:
+        return MORE_ONLY
     if entry.get("gone") == "joined":
         return {"was": entry.get("was"), "gone": "not-sung"}
-    out = {k: v for k, v in entry.items() if k != "unjoined"}
+    out = {k: v for k, v in entry.items() if k not in ("unjoined", "prev")}
     rows = out.get("lines")
     if isinstance(rows, list) and len(rows) > 1 and all(isinstance(r, dict) for r in rows):
         # A split line as one line, every row's words in it, when 0.5.1's limits allow; else its first row.
@@ -395,14 +409,18 @@ def _words_body(words: dict[str, Any], raw: dict[str, Any]) -> tuple[dict[str, A
         whole: dict[str, dict[str, Any]] = {"lines": {}, "removed": {}}
         for part in ("lines", "removed"):
             for k, v in entry[part].items():
-                out[part][k] = older_word_entry(v)
-                if out[part][k] != v:
+                older = MORE_ONLY if TYPED_KEY.fullmatch(k) else older_word_entry(v)
+                if older is MORE_ONLY:
+                    whole[part][k] = v
+                    continue
+                out[part][k] = older
+                if older != v:
                     whole[part][k] = v
         kept = raw.get(key) or {}
         for part in ("lines", "removed"):
             for k, v in (kept.get(part) or {}).items():
                 if k not in entry["lines"] and k not in entry["removed"]:
-                    out[part][k] = v
+                    (whole if TYPED_KEY.fullmatch(k) else out)[part][k] = v
         body[key] = {**out, "at": entry["at"]}
         if whole["lines"] or whole["removed"]:
             more[key] = whole
@@ -431,6 +449,8 @@ def _number(v: Any) -> bool:
 def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
     """A fix of the words as the library keeps it: the placement's text (`was`), then the line's words and
     times placed by the library, another voice, or not in this recording."""
+    if isinstance(k, str) and TYPED_KEY.fullmatch(k):
+        return _checked_typed_entry(v)
     if not isinstance(k, str) or not LINE_INDEX.fullmatch(k) or not isinstance(v, dict):
         raise ValueError("a line fix by index")
     was = v.get("was")
@@ -438,7 +458,8 @@ def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
         raise ValueError("was: the placement's text")
     if set(v) == {"was", "gone"} and v["gone"] in ("not-sung", "joined"):
         return {"was": was, "gone": v["gone"]}
-    if not set(v) <= {"was", "lines", "voice", "unjoined"} or len(v) < 2 or v.get("voice", "other") != "other":
+    keys = set(v) - {"prev"}
+    if not keys <= {"was", "lines", "voice", "unjoined"} or len(keys) < 2 or v.get("voice", "other") != "other":
         raise ValueError("a line fix")
     out: dict[str, Any] = {"was": was}
     unjoined: Any = None
@@ -476,4 +497,45 @@ def _checked_word_entry(k: Any, v: Any) -> dict[str, Any]:
         out["voice"] = "other"
     if "unjoined" in v:  # last, as the library answers it: a page compares the two as written
         out["unjoined"] = unjoined
+    if "prev" in v:  # the line before a word was moved by hand (spec 029): what Undo gives back
+        out["prev"] = None if v["prev"] is None else _checked_word_entry(k, _without_prev(v["prev"]))
+    return out
+
+
+def _without_prev(entry: Any) -> Any:
+    return {k: x for k, x in entry.items() if k != "prev"} if isinstance(entry, dict) else entry
+
+
+def _checked_typed_entry(v: Any) -> dict[str, Any]:
+    """A line typed by hand (spec 029) as the library keeps it: its notation, its recording, its words on the beats
+    with their times, and the line before its last change (`prev`, for Undo)."""
+    if not isinstance(v, dict) or set(v) - {"prev"} != {"typed", "src", "notation", "lines"} or v["typed"] is not True:
+        raise ValueError("a typed line")
+    src, notation, lines = v["src"], v["notation"], v["lines"]
+    if not (src is None or (isinstance(src, str) and len(src) <= 128)):
+        raise ValueError("src: the recording")
+    if not isinstance(notation, str) or len(notation) > 4 * WORD_TEXT_MAX:
+        raise ValueError("notation")
+    if not isinstance(lines, list) or len(lines) != 1 or not isinstance(lines[0], dict):
+        raise ValueError("lines: one line")
+    line = lines[0]
+    text, tag, backing, words = line["text"], line.get("tag", ""), line.get("backing", []), line["words"]
+    if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or not isinstance(tag, str) or len(tag) > PART_NAME_MAX:
+        raise ValueError("lines: words")
+    if not isinstance(backing, list) or not all(isinstance(b, str) and len(b) <= WORD_TEXT_MAX for b in backing):
+        raise ValueError("lines: backing vocals")
+    if not isinstance(words, list) or not 0 < len(words) <= LINE_WORDS_MAX or line.get("check") is not None:
+        raise ValueError("lines: words")
+    kept = []
+    for w in words:
+        start, end, at = w["start"], w["end"], w["at"]
+        if not (isinstance(w["text"], str) and len(w["text"]) <= WORD_TEXT_MAX and _number(at)):
+            raise ValueError("lines: words on beats")
+        if not (_number(start) and _number(end) and 0 <= start <= end < 86400):
+            raise ValueError("lines: words in time")
+        kept.append({"text": w["text"], "at": at, "start": start, "end": end})
+    out_line = {"text": text, "tag": tag, "backing": list(backing), "check": None, "words": kept}
+    out: dict[str, Any] = {"typed": True, "src": src, "notation": notation, "lines": [out_line]}
+    if "prev" in v:  # the line before its last change, for Undo
+        out["prev"] = None if v["prev"] is None else _checked_typed_entry(_without_prev(v["prev"]))
     return out

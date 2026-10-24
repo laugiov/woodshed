@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from woodshed import __version__, audio, build, corrections, lyrics, pitch, stems
+from woodshed import __version__, audio, build, corrections, lyrics, pitch, stems, typed
 from woodshed.build import DATA_BLOCK, folder_name, page_revision
 from woodshed.cache import cache_dir
 from woodshed.corrections import (
@@ -54,6 +54,7 @@ from woodshed.corrections import (
     LINE_INDEX,
     LINE_PIECES_MAX,
     LINE_WORDS_MAX,
+    PART_NAME_MAX,
     UNSAFE,
     WORD_FIXES_MAX,
     WORD_TEXT_MAX,
@@ -62,6 +63,8 @@ from woodshed.corrections import (
     _checked_corrections,
     _checked_edits,
     _checked_word_entry,
+    _number,
+    _without_prev,
 )
 from woodshed.errors import WoodshedError
 from woodshed.fnv import fnv1a as _fnv1a
@@ -98,6 +101,7 @@ SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
 CORRECTIONS_BYTES = 64 * 1024
 DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a huge one is not
+EMPTY_PLACEMENT = {"version": 1, "language": "", "text": "", "lines": [], "chords": []}  # a page with no words placed
 VOICES_KEPT = 2  # pages whose voice heard before is kept in memory for fixing lines (about a megabyte each)
 TYPES = {
     ".flac": "audio/flac",
@@ -198,8 +202,12 @@ class Library:
             # Refused at the start, and still older now: a new analysis since clears it.
             info["stale"] = manifest.parent.name in self.stale and _older(manifest)
             info["folder"] = manifest.parent.name  # the real folder, never a name read from a file
-            info["words"] = (manifest.parent / lyrics.LYRICS).is_file()
-            band = self._stored(manifest.parent.name)["band"]
+            stored = self._stored(manifest.parent.name)
+            # Words placed, or lines typed by hand on this recording (spec 029) with none placed.
+            info["words"] = (manifest.parent / lyrics.LYRICS).is_file() or _has_typed(
+                stored, lyrics.words_key(EMPTY_PLACEMENT), _source(manifest.parent)
+            )
+            band = stored["band"]
             if band:
                 info["band"] = band
             left = self._left_to_check(manifest.parent)
@@ -491,7 +499,9 @@ class Library:
             if not isinstance(words, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", words):
                 raise ValueError("words: the placement the fixes belong to")
             fixed = stored["words"].get(words, {})
-            answer["words"] = {"lines": fixed.get("lines", {}), "removed": fixed.get("removed", {})}
+            src = _source(self.root / folder)  # lines typed on another recording are not this one's (spec 029)
+            mine = {k: v for k, v in fixed.get("lines", {}).items() if _same_recording(v, src)}
+            answer["words"] = {"lines": mine, "removed": fixed.get("removed", {})}
         return answer
 
     def set_corrections(self, data: Any) -> dict[str, Any]:
@@ -613,8 +623,13 @@ class Library:
         return voice
 
     def _placement(self, folder: str) -> dict[str, Any]:
+        """The words placed on a page; with none placed, the empty placement (lines typed by hand go under its
+        key, spec 029)."""
+        path = self.root / folder / lyrics.LYRICS
+        if not path.exists():
+            return dict(EMPTY_PLACEMENT)
         try:
-            data = json.loads((self.root / folder / lyrics.LYRICS).read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise ValueError("page: a page with its words placed") from exc
         if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("lines"), list):
@@ -643,11 +658,29 @@ class Library:
             # An Undo names the line as this device left it: another device's fix since is not taken back.
             changed = [k for k, v in checked["expect"].items() if entry["lines"].get(k) != v]
             if changed:
-                raise LineChanged(sorted(changed, key=int))
+                raise LineChanged(sorted(changed, key=_entry_order))
             now = dict(entry["lines"])
             changes: dict[str, Any] = {}
             lines_of = placed["lines"]
-            asked = sorted(checked["lines"], key=int)
+            # Lines typed by hand and words moved by hand (spec 029) first: no alignment runs for them.
+            src = _source(self.root / folder)
+            for k in sorted(checked["lines"], key=_entry_order):
+                want = checked["lines"][k]
+                if typed.KEY.fullmatch(k):
+                    changes[k] = _typed_change(placed, now, k, want, song, src, entry["removed"].get(k))
+                elif isinstance(want, dict) and "undo" in want:  # a word moved by hand, undone
+                    changes[k] = _undone(now.get(k), None)
+                elif isinstance(want, dict) and "timed" in want:  # the others exactly as they were
+                    if int(k) >= len(lines_of):
+                        raise ValueError("lines: by the index of a placed line")
+                    changes[k] = _placed_moved(placed, _this_recording(now, src), int(k), want["timed"][0], song)
+                else:
+                    continue
+                if changes[k] is None:
+                    now.pop(k, None)
+                else:
+                    now[k] = changes[k]
+            asked = sorted((k for k in checked["lines"] if k not in changes), key=int)
             if any(int(k) >= len(lines_of) for k in asked):
                 raise ValueError("lines: by the index of a placed line")
             # A joined line taken back (from its row) takes back the whole join: the line it went to gets the fix it
@@ -700,7 +733,7 @@ class Library:
                 i, want = int(k), checked["lines"][k]
                 own = lines_of[i]
                 held = _held_by(now, i)
-                others = {j: v for j, v in now.items() if j != k}
+                others = {j: v for j, v in _this_recording(now, src).items() if j != k}
                 lines = lyrics.edited_lines(placed, others)
                 whole = lyrics.joined(lines_of, i, len(held))
                 texts = want["text"].split("\n")
@@ -742,7 +775,7 @@ class Library:
                 stored = self._stored(folder)
                 song = self._page_song(page) or lyrics.page_song(page)
                 # Carried first: a failure here leaves the words and their fixes as they were.
-                changed = carry_fixes(stored, old, data, voice, song, notes)
+                changed = carry_fixes(stored, old, data, voice, song, notes, _source(page))
                 lyrics.write(page, data)
                 fixed = stored["words"].get(lyrics.words_key(data), {}).get("lines", {})
                 with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
@@ -1157,6 +1190,7 @@ def carry_fixes(
     voice: lyrics.Voice | None,
     song: dict[str, Any],
     notes: list[str],
+    src: str | None = None,
 ) -> bool:
     """The band's fixes of the words placed before carried to the words placed now (lyrics.carry_edits), into
     `stored`; the ones left out told in `notes`. Fixes already made on the new placement win. Returns whether
@@ -1165,6 +1199,8 @@ def carry_fixes(
         return False
     old_key, new_key = lyrics.words_key(old), lyrics.words_key(new)
     fixed = stored["words"].get(old_key, {}).get("lines")
+    # Lines typed by hand keep their beats: carried only within the recording they were typed on (spec 029).
+    fixed = {k: v for k, v in (fixed or {}).items() if _same_recording(v, src)}
     if not fixed or new_key == old_key:
         return False
     carried, left = lyrics.carry_edits(old, new, fixed, voice, song)
@@ -1192,6 +1228,8 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
         path = page.parent / CORRECTIONS_DIR / f"{page.name}.json"
         try:
             old = json.loads((page / lyrics.LYRICS).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            old = dict(EMPTY_PLACEMENT)  # lines typed by hand only (spec 029)
         except (OSError, ValueError):
             old = None
         if not path.exists():  # a page out of a library, or with nothing corrected
@@ -1201,7 +1239,9 @@ def lyrics_commit(page: Path, notes: list[str]) -> Callable[[dict[str, Any], lyr
             return
         with corrections_lock(path):  # the app on the same library waits, and reads the file again after
             stored = read_corrections(path)
-            changed = isinstance(old, dict) and carry_fixes(stored, old, data, voice, lyrics.page_song(page), notes)
+            changed = isinstance(old, dict) and carry_fixes(
+                stored, old, data, voice, lyrics.page_song(page), notes, _source(page)
+            )
             lyrics.write(page, data)
             if changed:
                 write_corrections(path, stored)
@@ -1224,9 +1264,18 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("lines: fixes by line")
     out: dict[str, Any] = {}
     for k, v in lines.items():
+        if typed.KEY.fullmatch(k):  # a line typed by hand (spec 029)
+            out[k] = None if v is None else _checked_typed(v)
+            continue
         if not LINE_INDEX.fullmatch(k):
             raise ValueError("lines: by the index of a placed line")
         if v is None or v == {"gone": "not-sung"} or v == {"gone": "joined"}:
+            out[k] = v
+            continue
+        if isinstance(v, dict) and set(v) == {"timed"}:  # a word moved by hand
+            out[k] = {"timed": _checked_timed(v["timed"])}
+            continue
+        if v == {"undo": True}:  # that move undone
             out[k] = v
             continue
         if not isinstance(v, dict) or not set(v) <= {"text", "voice"} or not isinstance(v.get("text"), str):
@@ -1248,7 +1297,7 @@ def _checked_words(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("expect: the lines as this device knows them")
     checked_expect = {}
     for k, v in expect.items():
-        if not isinstance(k, str) or not LINE_INDEX.fullmatch(k):
+        if not isinstance(k, str) or not (LINE_INDEX.fullmatch(k) or typed.KEY.fullmatch(k)):
             raise ValueError("expect: by the index of a placed line")
         checked_expect[k] = None if v is None else _checked_word_entry(k, v)
     return {"key": key, "lines": out, "expect": checked_expect}
@@ -1289,6 +1338,212 @@ def _check_joins(entries: dict[str, Any], lines: list[Any]) -> None:
             raise ValueError("lines: lines of one part only are joined")
         if not (lines[j].get("sung") and lines[i].get("sung")):
             raise ValueError("lines: lines sung where the words were placed are joined")
+
+
+# Lines typed by hand (spec 029): read by the library from the notation (woodshed.typed), kept in the store of the
+# band's fixes of the words under a key "t" + 8 hex digits, with their recording's fingerprint.
+
+
+def _entry_order(k: str) -> tuple[int, int, str]:
+    """The placed lines by index, then the typed ones."""
+    return (0, int(k), "") if k.isdigit() else (1, 0, k)
+
+
+def _source(page: Path) -> str | None:
+    """The fingerprint of the recording a page was built from (its manifest), None when unknown."""
+    try:
+        src = json.loads((page / MANIFEST).read_text(encoding="utf-8"))["settings"]["source"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return src if isinstance(src, str) else None
+
+
+def _same_recording(entry: Any, src: str | None) -> bool:
+    """A placed line's fix, or a line typed on this recording (an unknown fingerprint on either side counts as the
+    same, as a rebuild does)."""
+    if not (isinstance(entry, dict) and entry.get("typed") is True):
+        return True
+    return entry.get("src") is None or src is None or entry["src"] == src
+
+
+def _this_recording(entries: dict[str, Any], src: str | None) -> dict[str, Any]:
+    """The band's fixes as this recording's sheet shows them: lines typed on another recording are kept in the
+    store but never block, cover or bound anything here."""
+    return {k: v for k, v in entries.items() if _same_recording(v, src)}
+
+
+def _has_typed(stored: dict[str, Any], key: str, src: str | None) -> bool:
+    lines = stored["words"].get(key, {}).get("lines", {})
+    return any(isinstance(v, dict) and v.get("typed") is True and _same_recording(v, src) for v in lines.values())
+
+
+def _checked_timed(timed: Any) -> list[list[float]]:
+    """[[word, beat]]: one word put on a beat (an index in song["beats"], half beats), as the page asks."""
+    if not isinstance(timed, list) or len(timed) != 1 or not isinstance(timed[0], list) or len(timed[0]) != 2:
+        raise ValueError("timed: one word and its beat")
+    wi, at = timed[0]
+    if not isinstance(wi, int) or isinstance(wi, bool) or not 0 <= wi < LINE_WORDS_MAX:
+        raise ValueError("timed: a word of the line")
+    if not _number(at) or abs(at) > 1e6 or (at * 2) != int(at * 2):
+        raise ValueError("timed: a beat, in half beats")
+    return [[wi, at]]
+
+
+def _checked_typed(v: Any) -> dict[str, Any]:
+    """{"typed": {"text", "at"[, "tag"]}} or {"timed": [[word, beat]]}: a line typed in the notation from the
+    beat one `at` of its first bar, or one of its words moved. No time: the library computes them."""
+    if not isinstance(v, dict) or len(v) != 1:
+        raise ValueError("lines: a typed line, or a word of it moved")
+    if "timed" in v:
+        return {"timed": _checked_timed(v["timed"])}
+    if v == {"undo": True}:
+        return v
+    line = v.get("typed")
+    if not isinstance(line, dict) or not {"text", "at"} <= set(line) <= {"text", "at", "tag"}:
+        raise ValueError("typed: the words and the beat the line starts on")
+    text, at, tag = line["text"], line["at"], line.get("tag", "")
+    if not isinstance(text, str) or len(text) > WORD_TEXT_MAX or "\n" in text or "\r" in text:
+        raise ValueError(f"text: one line, {WORD_TEXT_MAX} characters at most")
+    if not isinstance(at, int) or isinstance(at, bool) or abs(at) > 1_000_000:
+        raise ValueError("at: the beat the line starts on")
+    if not isinstance(tag, str) or len(tag) > PART_NAME_MAX:
+        raise ValueError(f"tag: a part's name, {PART_NAME_MAX} characters at most")
+    return {"typed": {"text": UNSAFE.sub("", text).strip(), "at": at, "tag": UNSAFE.sub("", tag).strip()}}
+
+
+def _undone(cur: Any, removed: Any) -> Any:
+    """Undo of the last change made to a line: the entry as it was before (None: the placement's, or no line),
+    or a typed line taken off, back."""
+    if isinstance(cur, dict) and "prev" in cur:
+        return cur["prev"]
+    if cur is None and isinstance(removed, dict) and removed.get("typed") is True:
+        return _without_prev(removed)
+    raise ValueError("lines: nothing to undo")
+
+
+def _room(lines: list[Any], me: Any, start: float, song: dict[str, Any]) -> tuple[float, float]:
+    """Where a line's words may go: after the end of the sung line before it, before the start of the next."""
+    lo, hi = 0.0, typed.beat_time(song, int(song["first_beat"]) + len(song["bars"]) * int(song["beats_per_bar"]))
+    for ln in lines:
+        if ln is me or not isinstance(ln, dict) or not ln.get("sung"):
+            continue
+        sp = typed.span(ln)
+        if sp is None:
+            continue
+        if sp[0] < start:
+            lo = max(lo, sp[1])
+        else:
+            hi = min(hi, sp[0])
+    return lo, hi
+
+
+def _typed_change(
+    placed: dict[str, Any],
+    now: dict[str, Any],
+    k: str,
+    want: Any,
+    song: dict[str, Any],
+    src: str | None,
+    removed: Any = None,
+) -> dict[str, Any] | None:
+    """A typed line's change as the library stores it: read from the notation, one of its words moved, or its last
+    change undone. Each change keeps the entry before it (`prev`) for Undo."""
+    if want is None:
+        return None
+    old = now.get(k)
+    now = _this_recording(now, src)
+    others = lyrics.apply_edits(placed, {j: v for j, v in now.items() if j != k})["lines"]
+    typed_others = [ln for ln in others if isinstance(ln, dict) and ln.get("typed")]
+    if "undo" in want:
+        back = _undone(old, removed)
+        span_back = typed.span(back["lines"][0]) if isinstance(back, dict) and back.get("typed") else None
+        spans = [sp for ln in typed_others if (sp := typed.span(ln)) is not None]
+        if span_back is not None and any(a < span_back[1] and span_back[0] < b for a, b in spans):
+            raise ValueError(typed.OVERLAP)  # another device typed a line there since: as a save would refuse
+        return back  # type: ignore[no-any-return]
+    if "timed" in want:
+        if not isinstance(old, dict) or not old.get("typed"):
+            raise ValueError("lines: no typed line to move a word of")
+        line = old["lines"][0]
+        mine = next(
+            ln for ln in lyrics.apply_edits(placed, now)["lines"] if isinstance(ln, dict) and ln.get("key") == k
+        )
+        lo, hi = _room([*others, mine], mine, typed.span(mine)[0], song)  # type: ignore[index]
+        wi, at = want["timed"][0]
+        if wi >= len(line["words"]):
+            raise ValueError("timed: a word of the line")
+        moved = _moved(line["words"], wi, at, song, lo, hi)
+        notation = typed.notation_after_move(old["notation"], line["words"], moved, song)
+        return {**old, "notation": notation, "lines": [{**line, "words": moved}], "prev": _without_prev(old)}
+    asked = want["typed"]
+    per, first = int(song["beats_per_bar"]), int(song["first_beat"])
+    if (asked["at"] - first) % per or not 0 <= typed.bar_of(song, asked["at"]) < len(song["bars"]):
+        raise ValueError("at: the beat one of a bar of the song")
+    keep = (
+        {"notation": old["notation"], "words": old["lines"][0]["words"]}
+        if isinstance(old, dict) and old.get("typed")
+        else None
+    )
+    try:
+        line = typed.typed_line(asked["text"], asked["at"], song, keep)
+        s0 = line["words"][0]["start"]
+        spans = [sp for ln in typed_others if (sp := typed.span(ln)) is not None]
+        if any(a <= s0 < b for a, b in spans):
+            raise ValueError(typed.OVERLAP)
+        nxt = min((a for a, _ in spans if a > s0), default=None)
+        if nxt is not None:
+            line = typed.typed_line(asked["text"], asked["at"], song, keep, nxt)
+            if any(w["start"] >= nxt for w in line["words"]):
+                raise ValueError(typed.OVERLAP)
+    except typed.TypedError as exc:
+        raise ValueError(str(exc)) from exc
+    if len(line["words"]) > LINE_WORDS_MAX or len(line["text"]) > WORD_TEXT_MAX:
+        raise ValueError(f"text: {LINE_WORDS_MAX} words at most")
+    out_line = {
+        "text": line["text"],
+        "tag": asked["tag"],
+        "backing": line["backing"],
+        "check": None,
+        "words": line["words"],
+    }
+    prev = _without_prev(old) if isinstance(old, dict) else None
+    return {"typed": True, "src": src, "notation": line["notation"], "lines": [out_line], "prev": prev}
+
+
+def _moved(words: list[Any], wi: int, at: float, song: dict[str, Any], lo: float, hi: float) -> list[dict[str, Any]]:
+    try:
+        return typed.move(words, wi, at, song, lo, hi)
+    except typed.TypedError as exc:
+        raise ValueError(
+            {"next": typed.NEXT, "before": typed.BEFORE}.get(exc.code, "timed: a word of the line")
+        ) from exc
+
+
+def _placed_moved(
+    placed: dict[str, Any], now: dict[str, Any], i: int, timed: list[Any], song: dict[str, Any]
+) -> dict[str, Any]:
+    """A placed line with one word moved by hand: 028's fixed line, its other words' times as they were. A split
+    line (spec 028 B) moves its words in the line editor; a join keeps what taking it back needs."""
+    cur = now.get(str(i))
+    if isinstance(cur, dict) and isinstance(cur.get("lines"), list) and len(cur["lines"]) > 1:
+        raise ValueError("lines: the words of a split line move in the line editor")
+    lines = lyrics.edited_lines(placed, now)  # one a placed line; the lines typed by hand beside them
+    lines += [ln for ln in lyrics.apply_edits(placed, now)["lines"] if isinstance(ln, dict) and ln.get("typed")]
+    line = lines[i]
+    if not isinstance(line, dict) or not line.get("sung") or typed.span(line) is None:
+        raise ValueError("lines: a line sung on the sheet")
+    wi, at = timed
+    if wi >= len(line["words"]):
+        raise ValueError("timed: a word of the line")
+    lo, hi = _room(lines, line, typed.span(line)[0], song)  # type: ignore[index]
+    words = [{"text": w["text"], "start": w["start"], "end": w["end"]} for w in line["words"]]
+    moved = [{"text": w["text"], "start": w["start"], "end": w["end"]} for w in _moved(words, wi, at, song, lo, hi)]
+    fixed = {"text": line["text"], "backing": list(line.get("backing") or []), "words": moved, "check": None}
+    other = {"voice": "other"} if line.get("voice") == "other" else {}
+    prev = _without_prev(cur)
+    if isinstance(cur, dict) and "lines" in cur:  # its fix with the word moved: another voice, a join kept
+        return {**_without_prev(cur), "lines": [{**cur["lines"][0], "words": moved, "check": None}], "prev": prev}
+    return {"was": placed["lines"][i]["text"], "lines": [fixed], **other, "prev": prev}
 
 
 class LineChanged(PermissionError):

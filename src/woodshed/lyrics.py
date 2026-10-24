@@ -1044,7 +1044,9 @@ def apply_edits(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]
         if e.get("voice") == "other":
             ln["voice"] = "other"
         ln["edited"] = True
-    return _split_rows({**data, "lines": lines}, entries)
+    from woodshed import typed  # the lines typed by hand (spec 029), after the rows, over those they cover
+
+    return typed.with_typed(_split_rows({**data, "lines": lines}, entries), entries)
 
 
 def _split_rows(data: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
@@ -1095,6 +1097,8 @@ def edited_lines(data: dict[str, Any], entries: dict[str, Any]) -> list[Any]:
     line again, holding its pieces' words. The windows of the lines around a fix are read from these."""
     out: list[Any] = []
     for row in apply_edits(data, entries)["lines"]:
+        if isinstance(row, dict) and row.get("typed"):
+            continue  # a line typed by hand (spec 029) is no line of the placement
         if isinstance(row, dict) and row.get("piece") and out and isinstance(out[-1], dict):
             out[-1]["words"] = [*out[-1]["words"], *row["words"]]
             out[-1]["sung"] = bool(out[-1].get("sung") or row["sung"])
@@ -1131,8 +1135,12 @@ def carry_edits(
 
     out: dict[str, Any] = {}
     left = 0
-    joins = {j for k in entries for j in held_by(index(k)) if entries[k].get("gone") != "joined"}
-    for key in sorted(entries, key=index):
+    typed_keys = [k for k in entries if not k.isdigit() and k.startswith("t")]
+    for key in typed_keys:  # typed by hand (spec 029): on the beats, as they were
+        out[key] = dict(entries[key])
+    placed = {k: v for k, v in entries.items() if k not in typed_keys}
+    joins = {j for k in placed for j in held_by(index(k)) if placed[k].get("gone") != "joined"}
+    for key in sorted(placed, key=index):
         e, i = entries[key], index(key)
         if e.get("gone") == "joined":
             left += i not in joins  # a join whose line is not there any more: nothing to carry it by
