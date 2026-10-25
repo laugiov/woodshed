@@ -643,7 +643,7 @@
     Words: "Paroles",
     "+ Add the words": "+ Ajouter les paroles",
     // Tapping along, the two paths of the words dialog (spec 029-2: views/words.js, views/tap.js)
-    "Lay them by tapping along": "Les poser en tapant la mesure",
+    "Lay them by tapping along": "Les caler en tapant le début des lignes",
     "Place them on the voice": "Les placer sur la voix",
     "Place them again on the voice": "Les placer de nouveau sur la voix",
     "No model, any language, free for any use, paid gigs included. Play the song and tap Space at each line's start.":
@@ -651,26 +651,28 @@
     "MMS, a speech model by Meta, downloaded once (1.2 GB), for non-commercial use only (CC BY-NC 4.0). The words stay in your library.":
       "MMS, un modèle de parole de Meta, téléchargé une seule fois (1,2 Go), pour un usage non commercial seulement (CC BY-NC 4.0). Les paroles restent dans ta bibliothèque.",
     "This library does not use the speech model: paste the words, then tap along.":
-      "Cette bibliothèque n'utilise pas le modèle de parole : colle les paroles, puis tape la mesure.",
+      "Cette bibliothèque n'utilise pas le modèle de parole : colle les paroles, puis tape le début des lignes.",
     "This library does not use the speech model: type the words instead.":
       "Cette bibliothèque n'utilise pas le modèle de parole : tape plutôt les paroles toi-même.",
-    "Replaces the line you laid by tapping along.": "Remplace la ligne posée en tapant la mesure.",
-    "Replaces the {n} lines you laid by tapping along.": "Remplace les {n} lignes posées en tapant la mesure.",
+    "Replaces the line you laid by tapping along.": "Remplace la ligne calée en tapant.",
+    "Replaces the {n} lines you laid by tapping along.": "Remplace les {n} lignes calées en tapant.",
     "To lay them by tapping along (no model), open the song from the library (woodshed app).":
-      "Pour les poser en tapant la mesure (sans modèle), ouvre le morceau depuis la bibliothèque (woodshed app).",
+      "Pour les caler en tapant le début des lignes (sans modèle), ouvre le morceau depuis la bibliothèque (woodshed app).",
     "Reading the words…": "Lecture des paroles…",
     "No sung line found: one line per sung line.": "Aucune ligne chantée trouvée : une ligne par ligne chantée.",
     "Line {k} of {n}": "Ligne {k} sur {n}",
-    "Tap Space or the pedal as each line starts. Escape stops.":
-      "Tape Espace ou la pédale au début de chaque ligne. Échap arrête.",
-    "Tap: the line starts": "Tape : la ligne commence",
+    "Tap Space or the pedal as each line starts. Escape finishes and keeps the lines.":
+      "Tape Espace ou la pédale au début de chaque ligne. Échap termine et garde les lignes.",
+    "Tap: the line starts": "Top : la ligne commence",
     "1 line laid by tapping along: move a word to its beat where it falls wrong.":
-      "1 ligne posée en tapant la mesure : déplace un mot sur son temps là où il tombe mal.",
+      "1 ligne calée en tapant : déplace un mot sur son temps là où il tombe mal.",
     "{n} lines laid by tapping along: move a word to its beat where it falls wrong.":
-      "{n} lignes posées en tapant la mesure : déplace un mot sur son temps là où il tombe mal.",
-    "1 line not laid.": "1 ligne non posée.",
-    "{n} lines not laid.": "{n} lignes non posées.",
-    "Tapping along": "Taper la mesure",
+      "{n} lignes calées en tapant : déplace un mot sur son temps là où il tombe mal.",
+    "1 line not laid.": "1 ligne non calée.",
+    "{n} lines not laid.": "{n} lignes non calées.",
+    "Tapping along": "Calage des lignes",
+    "That tap is outside the song's bars: it was not counted.":
+      "Ce top tombe hors des mesures du morceau : il n'est pas compté.",
 
     // The library's rows, set list and messages (home/home.js)
     "The library was restarted: reload this page.": "La bibliothèque a redémarré : recharge cette page.",

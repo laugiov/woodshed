@@ -105,6 +105,34 @@ def test_the_touch_button_taps_and_escape_leaves_with_the_lines_tapped(
     assert problems == []
 
 
+def test_a_press_held_on_the_button_is_one_tap(browser: Browser, library: Callable[[str], app.AppServer]) -> None:
+    srv = library("sections")
+    problems: list[str] = []
+    page = device(browser, srv, problems)
+    start_tapping(page)
+    expect(page.get_by_test_id("tap-along")).to_contain_text("Escape finishes and keeps the lines.")
+    at_beat(page, 4)
+    page.get_by_test_id("tap-button").hover()
+    page.mouse.down()
+    page.wait_for_timeout(700)  # held, while the music moves on
+    at_beat(page, 8)
+    page.mouse.up()  # its click is the same tap
+    expect(page.get_by_test_id("tap-count")).to_have_text("Line 2 of 3")
+    assert problems == []
+
+
+def test_a_tap_outside_the_songs_bars_is_said(browser: Browser, library: Callable[[str], app.AppServer]) -> None:
+    srv = library("sections")
+    problems: list[str] = []
+    page = device(browser, srv, problems)
+    start_tapping(page)
+    page.evaluate("Object.defineProperty(Woodshed.app.transport, 'time', { get: () => 9999, configurable: true })")
+    page.keyboard.press("Space")
+    expect(page.get_by_test_id("tap-note")).to_have_text("That tap is outside the song's bars: it was not counted.")
+    expect(page.get_by_test_id("tap-count")).to_have_text("Line 1 of 3")
+    assert problems == []
+
+
 def test_escape_before_any_tap_leaves_and_lays_nothing(
     browser: Browser, library: Callable[[str], app.AppServer]
 ) -> None:
@@ -180,17 +208,20 @@ def test_in_french(browser: Browser, library: Callable[[str], app.AppServer]) ->
     problems: list[str] = []
     page = device(browser, srv, problems, locale="fr-FR")
     open_words(page)
-    expect(page.get_by_test_id("words-tap")).to_have_text("Les poser en tapant la mesure")
+    expect(page.get_by_test_id("words-tap")).to_have_text("Les caler en tapant le début des lignes")
     expect(page.get_by_test_id("words-place")).to_have_text("Les placer sur la voix")
     page.get_by_test_id("words-text").fill("la la la\nli li li")
     page.get_by_test_id("words-tap").click()
     expect(page.get_by_test_id("tap-count")).to_have_text("Ligne 1 sur 2")
+    expect(page.get_by_test_id("tap-button")).to_have_text("Top\u00a0: la ligne commence")
+    expect(page.get_by_test_id("tap-along")).to_have_attribute("aria-label", "Calage des lignes")
+    expect(page.get_by_test_id("tap-along")).to_contain_text("Échap termine et garde les lignes.")
     until(page, "Woodshed.app.store.get().playing === true")
     page.evaluate("Woodshed.app.togglePlay()")
     at_beat(page, 4)
     page.keyboard.press("Space")
     page.keyboard.press("Escape")
     toast = page.get_by_test_id("toast")
-    expect(toast).to_contain_text("1 ligne posée en tapant la mesure\u00a0: déplace un mot")
-    expect(toast).to_contain_text("1 ligne non posée")
+    expect(toast).to_contain_text("1 ligne calée en tapant\u00a0: déplace un mot")
+    expect(toast).to_contain_text("1 ligne non calée")
     assert problems == []

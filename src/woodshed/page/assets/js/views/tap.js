@@ -15,39 +15,55 @@
     const { store } = app;
     let on = null; // {text, lines, taps} while tapping along
     let panel = null;
-    let pressed = 0; // the last pointer press on the button: its click is the same tap
+    let pressed = false; // a pointer press on the button handled: its click, however late, is the same tap
+    let note = ""; // a tap not counted, said in the panel
 
-    function draw() {
-      const { lines, taps } = on;
-      const k = Math.min(taps.length, lines.length - 1);
-      const next = lines[k + 1];
+    // The panel built once (the button stays the same element under a held finger), its texts drawn again.
+    function build() {
+      const button = h(
+        "button",
+        {
+          type: "button", class: "btn primary tap-button", "data-testid": "tap-button",
+          onpointerdown: (e) => {
+            e.preventDefault(); // the tap is now, not when the finger lifts
+            pressed = true;
+            mark();
+          },
+          onclick: () => {
+            if (pressed) pressed = false;
+            else mark(); // a keyboard or a screen reader presses it
+          },
+        },
+      );
       clear(
         panel,
         h(
           "div",
           { class: "tap-head" },
-          h("strong", { class: "tap-count", "data-testid": "tap-count", "aria-live": "polite" }, W.t("Line {k} of {n}", { k: k + 1, n: lines.length })),
-          h("span", { class: "hint" }, W.t("Tap Space or the pedal as each line starts. Escape stops.")),
-          h("button", { type: "button", class: "btn", "data-testid": "tap-done", onclick: () => finish() }, W.t("Done")),
+          h("strong", { class: "tap-count", "data-testid": "tap-count", "aria-live": "polite" }),
+          h("span", { class: "hint tap-hint" }),
+          h("button", { type: "button", class: "btn tap-done", "data-testid": "tap-done", onclick: () => finish() }),
         ),
-        h("p", { class: "tap-line", "data-testid": "tap-line", translate: "no" }, lines[k].text),
-        next ? h("p", { class: "tap-next", translate: "no" }, next.text) : null,
-        h(
-          "button",
-          {
-            type: "button", class: "btn primary tap-button", "data-testid": "tap-button",
-            onpointerdown: (e) => {
-              e.preventDefault(); // the tap is now, not when the finger lifts
-              pressed = Date.now();
-              mark();
-            },
-            onclick: () => {
-              if (Date.now() - pressed > 600) mark(); // a keyboard or a screen reader presses it
-            },
-          },
-          W.t("Tap: the line starts"),
-        ),
+        h("p", { class: "tap-line", "data-testid": "tap-line", translate: "no" }),
+        h("p", { class: "tap-next", translate: "no" }),
+        h("p", { class: "tap-note warn", "data-testid": "tap-note", role: "status" }),
+        button,
       );
+    }
+
+    function draw() {
+      const { lines, taps } = on;
+      const k = Math.min(taps.length, lines.length - 1);
+      const next = lines[k + 1];
+      const put = (sel, text) => (panel.querySelector(sel).textContent = text);
+      panel.setAttribute("aria-label", W.t("Tapping along"));
+      put(".tap-count", W.t("Line {k} of {n}", { k: k + 1, n: lines.length }));
+      put(".tap-hint", W.t("Tap Space or the pedal as each line starts. Escape finishes and keeps the lines."));
+      put(".tap-done", W.t("Done"));
+      put(".tap-line", lines[k].text);
+      put(".tap-next", next ? next.text : "");
+      put(".tap-note", note);
+      put(".tap-button", W.t("Tap: the line starts"));
     }
 
     // A tap: the beat sounding now, snapped; a tap no later than the one before is a double tap, dropped.
@@ -55,9 +71,13 @@
       if (!on) return;
       const at = W.typedWords.snap(W.typedWords.beatAt(app.song.song, app.transport.time));
       const meta = app.song.song;
-      if (at < 0 || W.typedWords.barOf(meta, at) >= app.song.bars.length) return; // before the first bar, after the last
+      if (at < 0 || W.typedWords.barOf(meta, at) >= app.song.bars.length) {
+        note = W.t("That tap is outside the song's bars: it was not counted.");
+        return draw();
+      }
       const last = on.taps[on.taps.length - 1];
       if (last !== undefined && at <= last) return;
+      note = "";
       on.taps.push(at);
       if (on.taps.length >= on.lines.length) return finish();
       draw();
@@ -113,8 +133,11 @@
     function start(text, lines) {
       if (on) leave();
       on = { text, lines, taps: [] };
+      note = "";
+      pressed = false;
       panel = h("section", { class: "tap-along", "data-testid": "tap-along", "aria-label": W.t("Tapping along") });
       document.body.appendChild(panel);
+      build();
       draw();
       window.addEventListener("keydown", onKey, true);
       window.addEventListener("keyup", onKeyUp, true);

@@ -547,6 +547,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 .tap-head .hint { flex: 1 1 200px; margin: 0; }
 .tap-line { margin: 10px 0 2px; font-size: 24px; font-weight: 700; overflow-wrap: anywhere; }
 .tap-next { margin: 0 0 10px; color: var(--muted); overflow-wrap: anywhere; }
+.tap-note { margin: 0 0 8px; color: var(--warn); }
+.tap-note:empty, .tap-next:empty { display: none; }
 .tap-button { display: block; width: 100%; min-height: 72px; font-size: 20px; touch-action: manipulation; }
 .words-dialog .cmd { font-family: var(--font-mono); font-size: 13px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }

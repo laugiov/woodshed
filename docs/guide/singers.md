@@ -72,11 +72,12 @@ tap along or type the words instead (no model), and read [the licences](how-it-w
 dropped, words in brackets as backing vocals), closes the dialog and plays the song. A panel shows the
 line to come: tap **Space**, your pedal (it sends Space, Right arrow or Page Down) or the big **Tap**
 button on a phone or tablet the moment the line starts. **Escape** (or **Done**) stops: the lines
-tapped so far are laid, the others are not.
+tapped so far are laid, the others are not. A tap outside the song's bars is said and not counted.
 
 - Each tap snaps to the nearest quarter beat.
-- A line's words take one beat per syllable from the tap (half beats, or quarter beats, when the line
-  is crowded before the next tap); `_` holds a word one more syllable, as when you type a line.
+- A line's words take one beat per syllable from the tap, or, when the line is crowded before the next
+  tap, the longest step in quarter beats that fits (five syllables over four beats: three quarters of a
+  beat each); `_` holds a word one more syllable, as when you type a line.
 - One **Undo** takes the whole layout back. Laying the words again replaces only the lines the last
   layout laid: a line you typed by hand stays, and a new line that would be sung over it is left out.
 - Then move the words that fall wrong, as below. In a swing feel, "half a beat" is the straight half:
