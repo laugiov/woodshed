@@ -278,7 +278,7 @@ def test_the_band_phones_are_let_in_from_the_library_page(browser: Browser, serv
     expect(phone.get_by_test_id("network-switch")).to_have_count(0)
     expect(phone.get_by_test_id("add")).to_be_hidden()
     expect(phone.get_by_test_id("song-row").first).to_be_visible()
-    expect(phone.get_by_test_id("add-words")).to_have_count(0)  # the songs have their words, or no parts yet
+    expect(phone.get_by_test_id("add-words")).to_have_count(0)  # words are placed from the computer
     switch.click()
     expect(switch).to_have_attribute("aria-checked", "false")
     expect(page.get_by_test_id("network-qr")).to_have_count(0)
@@ -577,7 +577,7 @@ def test_a_song_page_says_what_each_band_mode_does(browser: Browser, server: app
 
 
 @pytest.mark.parametrize("can_upload", [True, False])
-def test_add_the_words_is_offered_on_every_device_of_the_band(
+def test_add_the_words_is_offered_only_where_words_can_be_placed(
     browser: Browser, server: app.AppServer, can_upload: bool
 ) -> None:
     context = browser.new_context(locale="en-US")
@@ -590,7 +590,7 @@ def test_add_the_words_is_offered_on_every_device_of_the_band(
     try:
         page.goto(server.url)
         expect(page.get_by_test_id("song-row").first).to_be_visible()
-        expect(page.get_by_test_id("add-words")).to_have_count(2)  # tapping along: any device (spec 029-2)
+        expect(page.get_by_test_id("add-words")).to_have_count(2 if can_upload else 0)
     finally:
         context.close()  # the page polls the library: nothing may answer it after the test
 

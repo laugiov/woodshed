@@ -279,8 +279,13 @@
       }
       modelOff = data.words_model === false;
       elsewhere = data.can_upload === false;
-      if (elsewhere) app.store.set({ wordsElsewhere: true });
-      if (dialog && (modelOff || elsewhere)) fill();
+      if (elsewhere) {
+        // A phone of the band plays, leads and follows; words are added from the computer (round 4).
+        headerBtn.hidden = true;
+        app.store.set({ wordsElsewhere: true });
+        if (dialog && dialog.open) dialog.close();
+      }
+      if (dialog && modelOff) fill();
     }
 
     // The dialog's content, said again in the other language with what it holds kept: the paste,

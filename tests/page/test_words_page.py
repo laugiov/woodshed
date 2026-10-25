@@ -115,6 +115,5 @@ def test_a_phone_of_the_band_is_not_offered_to_add_words(
         if page.evaluate("window.Woodshed && window.Woodshed.ready === true"):
             break
         page.wait_for_timeout(25)
-    page.get_by_test_id("words-header").click()  # a phone taps along; the model runs on the computer only
-    expect(page.get_by_test_id("words-tap")).to_be_visible()
-    expect(page.get_by_test_id("words-place")).to_have_count(0)
+    expect(page.get_by_test_id("words-header")).to_be_hidden()  # no button that leads to a refusal
+    expect(page.get_by_test_id("words-open")).to_have_count(0)

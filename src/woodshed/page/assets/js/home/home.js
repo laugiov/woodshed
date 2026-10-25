@@ -228,8 +228,9 @@
       if (song.words) tags.push(h("span", { class: "tag on" }, W.t("Words")));
       if (song.doubts) tags.push(h("span", { class: "tag warn" }, song.doubts === 1 ? W.t("1 to check") : W.t("{n} to check", { n: song.doubts })));
     }
-    // The one Words dialog (spec 029-2): tapping along needs no singer's track and no model, any device may.
-    if (song && song.complete && !song.words && !working)
+    // The one Words dialog (spec 029-2): tapping along needs no singer's track. Not on a phone of the band: it
+    // plays, leads and follows, words are added from the computer (round 4).
+    if (canUpload && song && song.complete && !song.words && !working)
       tags.push(h("a", { class: "tag add", href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words")));
     const t = titled(song ? song.title : job.name);
     const band = (song && song.band) || {};
