@@ -10,6 +10,8 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-25
+
 ### Added
 
 - In the Lyrics view, a line that opens on a chord still sounding from before shows it, small and
@@ -244,7 +246,8 @@ corrections and set list stay where they are.
   print for the music stand. A song's folder can be zipped and sent: it opens offline.
 - English or French, dark or light.
 
-[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/laugiov/woodshed/releases/tag/v0.6.0
 [0.5.1]: https://github.com/laugiov/woodshed/releases/tag/v0.5.1
 [0.5.0]: https://github.com/laugiov/woodshed/releases/tag/v0.5.0
 [0.4.0]: https://github.com/laugiov/woodshed/releases/tag/v0.4.0
