@@ -226,6 +226,7 @@
     }
 
     // The row under Listen to (views/desk.js gives it its place): the switch and what it is doing.
+    let row = null; // the switch row's own elements, kept across redraws
     function renderRow() {
       const s = store.get();
       const st = s.pitchStatus || status(s);
@@ -267,14 +268,31 @@
         tap: W.t("Ready: tap the page to hear it."),
         failed: W.t("The recording could not be changed to this key."),
       }[st.state];
-      clear(
-        box,
-        h("button", { type: "button", class: "btn pitch-switch", "aria-pressed": String(on), "data-testid": "pitch-switch", onclick: () => app.setPitch(!on) },
-          W.t("Play the recording {shift}", { shift: shift(s.transpose) }), " ", h("span", { class: "key-name" }, "(" + W.t("in {key}", { key: keyName }) + ")"),
-          h("b", { class: "state", "aria-hidden": "true" }, on ? W.t("On") : W.t("Off"))),
-        h("span", { class: "pitch-line", "aria-live": "polite", "data-testid": "pitch-line", title: st.state === "failed" ? st.why : null }, line),
-        st.state === "failed" ? h("button", { type: "button", class: "btn", "data-testid": "pitch-retry", onclick: () => app.retryPitch() }, W.t("Retry")) : null,
-      );
+      // The same button, said again in place: a press caught by a redraw (button down, row drawn
+      // again, button up) would land on no button and be lost.
+      if (!row || !box.contains(row.button)) {
+        row = {
+          label: document.createTextNode(""),
+          keyName: h("span", { class: "key-name" }),
+          state: h("b", { class: "state", "aria-hidden": "true" }),
+          line: h("span", { class: "pitch-line", "aria-live": "polite", "data-testid": "pitch-line" }),
+          retry: h("button", { type: "button", class: "btn", "data-testid": "pitch-retry", onclick: () => app.retryPitch() }),
+        };
+        row.button = h("button", { type: "button", class: "btn pitch-switch", "data-testid": "pitch-switch", onclick: () => app.setPitch(!app.pitchFollows()) },
+          row.label, " ", row.keyName, row.state);
+        clear(box, row.button, row.line);
+      }
+      row.button.setAttribute("aria-pressed", String(on));
+      const text = (node, value) => node.textContent !== value && (node.textContent = value); // a node pressed stays
+      text(row.label, W.t("Play the recording {shift}", { shift: shift(s.transpose) }));
+      text(row.keyName, "(" + W.t("in {key}", { key: keyName }) + ")");
+      text(row.state, on ? W.t("On") : W.t("Off"));
+      text(row.line, line);
+      if (st.state === "failed") row.line.title = st.why;
+      else row.line.removeAttribute("title");
+      text(row.retry, W.t("Retry"));
+      if (st.state === "failed") row.retry.isConnected || box.appendChild(row.retry);
+      else row.retry.remove();
     }
     app.renderPitch = renderRow;
 

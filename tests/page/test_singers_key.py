@@ -99,6 +99,25 @@ def test_the_bassist_turns_it_on_and_the_track_is_swapped_in_place(browser: Brow
     assert problems == []
 
 
+def test_a_click_on_the_switch_sticks_while_the_row_is_said_again(browser: Browser, server: app.AppServer) -> None:
+    # The row is said again at each library poll and when a key settles: a press caught in between
+    # (button down, row redrawn, button up) must still turn it on.
+    problems: list[str] = []
+    page = opened(browser, server.url + "pop.woodshed/index.html", problems)
+    page.evaluate("Woodshed.app.setInstrument('bass'); Woodshed.app.transposeTo(2)")
+    switch = page.get_by_test_id("pitch-switch")
+    expect(switch).to_have_attribute("aria-pressed", "false")
+    expect(page.get_by_test_id("key-note")).to_contain_text("the recording plays in C")  # the row moves down once
+    page.evaluate("addEventListener('pointerdown', (e) => (window.pressed = e.target.closest('button')), true)")
+    switch.hover()
+    page.mouse.down()
+    assert page.evaluate("window.pressed && window.pressed.dataset.testid") == "pitch-switch"
+    page.evaluate("Woodshed.app.renderPitch()")  # what a poll or the settled key does meanwhile
+    page.mouse.up()
+    expect(switch).to_have_attribute("aria-pressed", "true")
+    assert problems == []
+
+
 def test_a_singer_gets_it_at_once_and_a_choice_made_here_wins(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     page = opened(browser, server.url + "pop.woodshed/index.html", problems)

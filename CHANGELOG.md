@@ -45,6 +45,12 @@ corrections and set list stay where they are.
 - An older woodshed opened on the same library keeps the chords, but forgets the lines fixed on the
   sheet the next time it saves a chord: update every computer that runs the library.
 
+### Fixed
+
+- The switch that plays the recording in the chart's key takes every press: a press made just as
+  the page updated its line (a key settling, the library saying where it is) was sometimes lost and
+  the switch stayed off.
+
 ## [0.5.1] - 2026-10-24
 
 ### Changed
