@@ -397,7 +397,8 @@ def _bar_notation(texts: Sequence[str], ats: Sequence[float], song: dict[str, An
 def tapped_lines(lines: Sequence[tuple[str, str]], taps: Sequence[float], song: dict[str, Any]) -> list[dict[str, Any]]:
     """The lines (text, part name) laid from the taps, one tap a line from the first (snapped to a quarter beat): a
     line starts on its tap and owns the beats up to the next tap (the last one two bars at most). Its syllables take
-    one beat each from the tap, or a half, or a quarter, the coarsest that fits; more than that, evenly in time. A
+    one beat each from the tap, or the longest step of quarter beats that fits (5 over 4 beats: 3/4 each); more
+    than four a beat, evenly in time. A
     word starts on its first syllable; `_` holds the word before it one syllable more. Lines after the last tap are
     not laid. Every time computed from the beats."""
     per = int(song["beats_per_bar"])
@@ -432,7 +433,9 @@ def tapped_lines(lines: Sequence[tuple[str, str]], taps: Sequence[float], song: 
         if len(texts) > MAX_WORDS:
             raise TypedError("words")
         size = len(units)
-        grid = next((g for g in (1.0, 0.5, 0.25) if size * g <= span_ + 1e-9), span_ / size)
+        # A beat a syllable at most (a long gap leaves a rest), else the longest quarter-beat step that fits.
+        step = min(1.0, math.floor(span_ / size * QUARTER + 1e-9) / QUARTER)
+        grid = step if step >= 1 / QUARTER else span_ / size
         pos = [at + j * grid for j in range(size + 1)]
         starts: list[float] = []
         hold_end: list[float] = []

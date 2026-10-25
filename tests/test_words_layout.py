@@ -45,7 +45,13 @@ def test_each_tapped_line_starts_on_its_tap_and_spreads_its_syllables_one_a_beat
     assert all(w["start"] == typed.beat_time(CHART, w["at"]) for ln in got for w in ln["words"])
 
 
-def test_a_line_with_more_syllables_than_beats_takes_halves_then_quarters_then_even_time() -> None:
+def test_a_crowded_line_takes_the_longest_quarter_beat_step_that_fits_then_even_time() -> None:
+    five = typed.tapped_lines([("one two three four five", ""), ("next", "")], [0, 4], CHART)[0]
+    assert [w["at"] for w in five["words"]] == [0, 0.75, 1.5, 2.25, 3]  # 4 / 5 rounded down to a quarter beat
+    seven = typed.tapped_lines([("a b c d e f g", ""), ("next", "")], [0, 6], CHART)[0]
+    assert [w["at"] for w in seven["words"]] == [k * 0.75 for k in range(7)]
+    three = typed.tapped_lines([("a b c", ""), ("next", "")], [0, 8], CHART)[0]
+    assert [w["at"] for w in three["words"]] == [0, 1, 2]  # a beat a syllable at most: a long gap leaves a rest
     six = typed.tapped_lines([("one two three four five six", ""), ("next", "")], [0, 4], CHART)[0]
     assert [w["at"] for w in six["words"]] == [0, 0.5, 1, 1.5, 2, 2.5]
     eight = typed.tapped_lines([("a b c d e f g h", ""), ("next", "")], [0, 2.5], CHART)[0]
@@ -107,6 +113,29 @@ def test_laying_again_replaces_only_its_own_lines(library: app.AppServer) -> Non
     assert len(again["laid"]) == 2 and again["left"] == 1  # the last line would be sung over the hand-typed one
     assert set(again["lines"]) == {"t00000001", *again["laid"]}
     assert again["lines"]["t00000001"]["notation"] == "la la"
+
+
+def test_a_word_moved_by_hand_on_a_laid_line_makes_it_the_bands(library: app.AppServer) -> None:
+    (library.library.root / PAGE / lyrics.LYRICS).unlink()  # no placed line around
+    key = lyrics.words_key({"lines": []})
+    _, first = lay(library, TEXT, [2, 10, 24], key)
+    moved = first["laid"][0]
+    status, answer = fix(library, {moved: {"timed": [[1, 3.5]]}}, key=key)
+    assert status == 200, answer
+    assert "by" not in answer["lines"][moved]
+    _, again = lay(library, "one two\nthree four", [12, 30], key)
+    assert moved not in again["gone"] and moved in again["lines"]  # laying again never takes a hand fix
+
+
+def test_laying_again_and_again_keeps_only_the_last_layout_replaced(library: app.AppServer) -> None:
+    text = "\n".join(f"la {k}" for k in range(60))
+    taps = [k * 0.75 for k in range(60)]
+    for _ in range(10):
+        status, answer = lay(library, text, taps)
+        assert status == 200, answer
+    stored = test_word_fixes.stored(library)["words_more"]
+    removed = next(iter(stored.values()))["removed"]
+    assert len([k for k in removed if k.startswith("t")]) == 60  # the layout before the last, for its Undo
 
 
 def test_a_layout_is_undone_in_one_step(library: app.AppServer, monkeypatch: pytest.MonkeyPatch) -> None:

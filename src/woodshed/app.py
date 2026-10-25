@@ -670,6 +670,11 @@ class Library:
             src = _source(self.root / folder)
             if "layout" in checked:  # a whole text laid by tapping along (spec 029-2): one change, one Undo
                 changes, told = _layout_changes(placed, now, src, checked["layout"], song, entry)
+                # Only the layout replaced now is kept for its Undo: the ones replaced before it are dropped.
+                older = {
+                    k for k, e in _this_recording(entry["removed"], src).items() if (e or {}).get("by") == "layout"
+                }
+                entry = {**entry, "removed": {k: v for k, v in entry["removed"].items() if k not in older}}
                 return {**self._keep_words(folder, stored, key, entry, changes, song, placed, src), **told}
 
             def removal_first(k: str) -> tuple[int, tuple[int, int, str]]:
@@ -1572,7 +1577,8 @@ def _typed_change(
             raise ValueError("timed: a word of the line")
         moved = _moved(line["words"], wi, at, song, lo, hi)
         notation = typed.notation_after_move(old["notation"], line["words"], moved, song)
-        return {**old, "notation": notation, "lines": [{**line, "words": moved}], "prev": _without_prev(old)}
+        mine_now = {k: v for k, v in old.items() if k != "by"}  # moved by hand: the band's line, no layout replaces it
+        return {**mine_now, "notation": notation, "lines": [{**line, "words": moved}], "prev": _without_prev(old)}
     asked = want["typed"]
     per, first = int(song["beats_per_bar"]), int(song["first_beat"])
     if (asked["at"] - first) % per or not 0 <= typed.bar_of(song, asked["at"]) < len(song["bars"]):
