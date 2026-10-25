@@ -60,6 +60,16 @@ SAMPLE = """
 """
 
 
+def caught_up(follower: Page, leader: Page, timeout: float = 10) -> None:
+    """The follower shows where the leader plays (the devices of the test share one clock)."""
+    deadline = time.monotonic() + timeout
+    shows = "([t, at]) => Math.abs(Woodshed.debug().time - (t + Date.now() / 1000 - at)) < 0.25"
+    while not follower.evaluate(shows, leader.evaluate("[Woodshed.app.transport.time, Date.now() / 1000]")):
+        if time.monotonic() > deadline:
+            raise AssertionError(f"the follower does not show the leader's place after {timeout} s")
+        follower.wait_for_timeout(50)
+
+
 # The protocol's own cases (states, answers, cancels) run in Chromium only: the browser's part (sound, taps,
 # timing) is covered in both browsers by the takeover tests. The page job's time budget is the reason.
 CHROMIUM_ONLY = pytest.mark.only_browser("chromium")
@@ -180,6 +190,9 @@ def test_the_lead_goes_round_the_band_five_times_and_never_stops(browser: Browse
         leading.wait_for_timeout(300)
         followers = [p for p in devices if p is not taker and p.evaluate("Woodshed.band.mode()") == "follow"]
         for p in followers:
+            # The seek back to bar 5 shows on the follower before it is sampled: a loaded browser can draw
+            # it late, and the sampler would take that seek for a jump of the takeover.
+            caught_up(p, leading)
             p.evaluate(SAMPLE)
         button = taker.get_by_test_id("band-lead")
         button.tap() if taker is not laptop else button.click()
