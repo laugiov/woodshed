@@ -133,3 +133,11 @@ def test_the_revision_is_read_from_the_disk_only_when_the_file_changed(
 def test_the_skins_files_are_served_with_their_type(server: app.AppServer, path: str, kind: str) -> None:  # noqa: F811
     status, headers, _ = request(server, "GET", "/app/assets/" + path)
     assert status == 200 and {k.lower(): v for k, v in headers.items()}["content-type"] == kind
+
+
+def test_a_name_edited_by_hand_that_cannot_be_shown_goes_with_the_next_save(server: app.AppServer) -> None:  # noqa: F811
+    setlist = server.library.root / app.SETLIST
+    setlist.write_text(json.dumps({"songs": ["One.woodshed"], "title": "bad‮name"}), encoding="utf-8")
+    assert get(server, "/api/setlist")["title"] is None
+    post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
+    assert "title" not in json.loads(setlist.read_text(encoding="utf-8"))

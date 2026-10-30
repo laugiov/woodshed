@@ -205,6 +205,7 @@ class Library:
         self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
         self.set_stamp: tuple[int, int] | None = None  # setlist.json's (mtime, size) when set_hash was read
         self.set_hash = ""
+        self.set_name: str | None = None  # the set's name as read with set_hash
         self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
         self.on_band: Callable[[str, int], None] | None = None  # told when band choices changed (Live.corrected)
         self.on_reload: Callable[[str], None] | None = None  # told when a page's data changed (Live.page_updated)
@@ -448,8 +449,12 @@ class Library:
         return [n for n in names if isinstance(n, str)] if isinstance(names, list) else None
 
     def set_title(self) -> str | None:
-        """The set's name; None without one, or when the file's (edited by hand) cannot be shown."""
-        doc = self._set_doc()
+        """The set's name; None without one, or when the file's (edited by hand) cannot be shown. Read again only
+        when the file changed (set_rev), the library pages ask every 1.5 s."""
+        return self.set_name if self.set_rev() else None
+
+    @staticmethod
+    def _shown_title(doc: dict[str, Any] | None) -> str | None:
         try:
             return normalise_set_title(doc.get("title")) if doc is not None else None
         except ValueError:
@@ -463,7 +468,13 @@ class Library:
             stat = path.stat()
             stamp = (stat.st_mtime_ns, stat.st_size)
             if stamp != self.set_stamp:
-                self.set_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+                raw = path.read_bytes()
+                try:
+                    doc = json.loads(raw.decode("utf-8"))
+                except ValueError:
+                    doc = None
+                self.set_name = self._shown_title(doc if isinstance(doc, dict) else None)
+                self.set_hash = hashlib.sha256(raw).hexdigest()[:16]
                 self.set_stamp = stamp
         except OSError:
             return ""
@@ -505,12 +516,15 @@ class Library:
                     doc["title"] = title
                 else:
                     doc.pop("title", None)
+            elif "title" in doc and self._shown_title(doc) is None:
+                doc.pop("title")  # a name edited by hand that cannot be shown: gone with the next save
             tmp = self.root / f".{SETLIST}.{secrets.token_hex(4)}"
             try:
                 tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
                 tmp.replace(self.root / SETLIST)
             finally:
                 tmp.unlink(missing_ok=True)
+            self.set_stamp = None  # read again: a save in the same instant may keep the time and the size
             # A note is written from the set list: it is the set's note for that song, gone with it.
             cleared = {folder: rev for folder in left if (rev := self._clear_note(folder)) is not None}
         if self.on_band is not None:

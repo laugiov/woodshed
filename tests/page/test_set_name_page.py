@@ -162,3 +162,12 @@ def test_the_library_slots_carry_the_name_for_a_skin(page: Page, server: app.App
     expect(page.locator('.set-name .decor[data-slot="set-head"]')).to_have_attribute("data-set-title", NAME)
     expect(page.locator(".decor")).to_have_count(4)  # page, library-head, welcome, set-head: all hidden by the base
     assert page.evaluate("[...document.querySelectorAll('.decor')].every(e => getComputedStyle(e).display === 'none')")
+
+
+def test_a_save_shows_what_another_device_changed_meanwhile(page: Page, server: app.AppServer) -> None:
+    opened(page, server)
+    page.route("**/api/songs", lambda route: route.abort())  # the poll does not see it: only the save's answer can
+    server.library.set_setlist({"title": NAME})  # another device names the set
+    page.get_by_test_id("set-remove").first.click()  # this one takes a song out of the set, at the same time
+    expect(page.get_by_test_id("set-name")).to_have_text(NAME, timeout=3000)
+    assert server.library.setlist() == [] and server.library.set_title() == NAME

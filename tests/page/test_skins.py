@@ -183,6 +183,11 @@ def test_the_style_menu_by_keyboard_and_the_app_s_keys_wait(browser: Browser, pa
     expect(menu).to_be_hidden()
     expect(page.get_by_test_id("style")).to_be_focused()  # the keyboard keeps its place
     page.keyboard.press("Enter")
+    page.keyboard.press("Tab")
+    expect(menu).to_be_hidden()
+    assert page.evaluate("document.activeElement.dataset.testid") == "theme"  # on from the style button
+    page.get_by_test_id("style").focus()
+    page.keyboard.press("Enter")
     page.keyboard.press("ArrowDown")
     page.keyboard.press("Enter")
     expect(page.locator("html")).to_have_attribute("data-skin", "spotlight")
@@ -210,9 +215,12 @@ def test_the_style_menu_on_a_phone(browser: Browser, pages_root: str, width: int
         assert box is not None and box["height"] >= 44
     style = page.get_by_test_id("style").bounding_box()
     assert style is not None and style["width"] >= 44 and style["height"] >= 44
-    assert menu.evaluate("m => m.scrollHeight <= m.clientHeight || getComputedStyle(m).overflowY === 'auto'")
-    assert menu.evaluate("m => m.getBoundingClientRect().bottom <= innerHeight")
+    sheet = page.locator(".style-menu")
+    assert sheet.evaluate("m => m.scrollHeight <= m.clientHeight || getComputedStyle(m).overflowY === 'auto'")
+    assert sheet.evaluate("m => m.getBoundingClientRect().bottom <= innerHeight")
     if width <= 600:
+        page.keyboard.press("ArrowUp")  # from the current skin round to the close button, a phone's way out
+        expect(page.get_by_role("button", name="Close")).to_be_focused()
         page.get_by_role("button", name="Close").tap()
         expect(menu).to_be_hidden()
 
@@ -223,7 +231,7 @@ def test_the_style_menu_in_french(browser: Browser, pages_root: str) -> None:
     expect(page.get_by_test_id("style")).to_have_attribute("aria-label", "Style" + NBSP + ": woodshed")
     page.get_by_test_id("style").click()
     expect(page.get_by_role("menuitemradio", name="Pleins feux")).to_be_visible()
-    expect(page.get_by_role("menu")).to_contain_text("Seulement sur cet appareil.")
+    expect(page.locator(".style-menu")).to_contain_text("Seulement sur cet appareil.")
 
 
 # What no skin changes (R11, R23), and a skin from a folder on disk (A14).

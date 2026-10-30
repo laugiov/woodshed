@@ -49,13 +49,16 @@
         else {
           // The library cleared the note of a song out of the set: dropped here too, no flash of it on a re-add.
           for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
+          // The whole answer: the library kept what this save did not send (another device's name, say).
           setlist = answer.songs;
+          setName = typeof answer.title === "string" ? answer.title : null;
           setRev = answer.rev;
         }
       } catch (err) {
         toast(W.t("The set list was not saved."));
       }
       renderSet({ again: true });
+      renderSetName();
       if (shown) render(shown);
     });
     return saving;
@@ -126,8 +129,11 @@
       if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
       else if (!r.ok) toast(W.t("The set's name was not saved: {why}", { why: W.t(answer.error) }));
       else {
+        // The whole answer, as for the songs: another device's change to the set comes with it.
         setName = answer.title || null;
+        if (Array.isArray(answer.songs)) setlist = answer.songs;
         setRev = answer.rev; // its own save: the next poll does not read it again
+        renderSet({ again: true });
       }
     } catch (err) {
       toast(W.t("The set's name was not saved."));

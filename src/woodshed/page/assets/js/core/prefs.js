@@ -111,9 +111,10 @@
         el("span", { class: "style-name" }, el("b", { translate: "no" }, say(s.name)), el("small", {}, say(s.description))),
         el("span", { class: "tick", "aria-hidden": "true" }, s.id === current ? "✓" : "")));
     const close = el("button", { type: "button", class: "btn ghost menu-close", "aria-label": say("Close") }, "✕");
-    const box = el("div", { class: "style-menu", role: "menu", "aria-label": say("Style") },
-      el("div", { class: "menu-h" }, el("span", { class: "label" }, say("Style")), close),
-      ...items,
+    // The menu holds the skins only; its heading, close button and note sit around it.
+    const box = el("div", { class: "style-menu" },
+      el("div", { class: "menu-h" }, el("span", { class: "label", "aria-hidden": "true" }, say("Style")), close),
+      el("div", { class: "style-items", role: "menu", "aria-label": say("Style") }, ...items),
       el("p", { class: "menu-foot" }, say("Only on this device. Light or dark: the button beside it.")));
     const scrim = el("div", { class: "style-scrim", "aria-hidden": "true" });
     const pickWith = (item, e) => {
@@ -128,19 +129,24 @@
     const keys = (e) => {
       e.stopPropagation();
       if (e.type !== "keydown") return;
-      const at = items.indexOf(document.activeElement);
+      // The arrows go round the skins, and the close button where it shows (a phone).
+      const stops = close.offsetParent ? [...items, close] : items;
+      const at = stops.indexOf(document.activeElement);
       const go = (k) => {
         e.preventDefault();
-        items[(k + items.length) % items.length].focus();
+        stops[(k + stops.length) % stops.length].focus();
       };
       if (e.key === "ArrowDown") go(at + 1);
-      else if (e.key === "ArrowUp") go(at < 0 ? items.length - 1 : at - 1);
+      else if (e.key === "ArrowUp") go(at < 0 ? stops.length - 1 : at - 1);
       else if (e.key === "Home") go(0);
-      else if (e.key === "End") go(items.length - 1);
+      else if (e.key === "End") go(stops.length - 1);
       else if (e.key === "Escape") {
         e.preventDefault();
         closeMenu(true);
-      } else if (e.key === "Tab") closeMenu(false);
+      } else if (e.key === "Tab") {
+        button.focus(); // Tab goes on from the style button, not from an item taken away
+        closeMenu(false);
+      }
     };
     const outside = (e) => {
       if (!box.contains(e.target) && !button.contains(e.target) && e.target !== scrim) closeMenu(false);
