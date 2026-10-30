@@ -95,6 +95,14 @@
   let naming = false; // the name is being typed: nothing draws over it
   let reading = false;
   const tabTitle = () => (document.title = setName ? setName + " · woodshed" : W.t("Library · woodshed"));
+  // A place a skin may draw in (skins/skins.js lists them); the set's name for a skin to print, absent without one.
+  const decorSlot = (name) => h("span", { class: "decor", "data-slot": name, "aria-hidden": "true" }, h("i"), h("i"));
+  const slotNames = () => {
+    for (const el of document.querySelectorAll(".decor")) {
+      if (setName) el.setAttribute("data-set-title", setName);
+      else el.removeAttribute("data-set-title");
+    }
+  };
   function renderSetName() {
     if (naming) return;
     tabTitle();
@@ -104,10 +112,12 @@
       $("setNameBox"),
       setName
         ? h("div", { class: "set-name" },
+            decorSlot("set-head"),
             h("h2", { "data-testid": "set-name", translate: "no" }, setName),
             h("button", { type: "button", class: "btn ghost rename", "data-testid": "set-rename", "aria-label": W.t("Rename the set"), title: W.t("Rename the set"), onclick: start }, "✎"))
         : h("button", { type: "button", class: "btn ghost add-name", "data-testid": "set-name-add", onclick: start }, W.t("+ Name the set")),
     );
+    slotNames();
   }
   async function saveSetName(name) {
     try {

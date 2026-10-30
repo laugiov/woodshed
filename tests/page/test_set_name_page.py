@@ -151,3 +151,14 @@ def test_the_saver_reads_its_own_name_once(page: Page, server: app.AppServer) ->
     expect(page.get_by_test_id("set-name")).to_have_text(NAME)
     page.wait_for_timeout(3500)  # two polls with the revision of its own save: nothing read again
     assert page.evaluate("window.setReads") == 0
+
+
+def test_the_library_slots_carry_the_name_for_a_skin(page: Page, server: app.AppServer) -> None:
+    opened(page, server)
+    head = page.locator('.decor[data-slot="library-head"]')
+    assert head.get_attribute("data-set-title") is None  # no name: absent, a skin draws no empty tape
+    server.library.set_setlist({"title": NAME})
+    expect(head).to_have_attribute("data-set-title", NAME, timeout=5000)
+    expect(page.locator('.set-name .decor[data-slot="set-head"]')).to_have_attribute("data-set-title", NAME)
+    expect(page.locator(".decor")).to_have_count(4)  # page, library-head, welcome, set-head: all hidden by the base
+    assert page.evaluate("[...document.querySelectorAll('.decor')].every(e => getComputedStyle(e).display === 'none')")

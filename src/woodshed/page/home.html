@@ -10,6 +10,7 @@
 <script src="/app/assets/js/core/prefs.js"></script>
 </head>
 <body>
+<span class="decor" data-slot="page" aria-hidden="true"><i></i><i></i></span>
 <div class="wrap home" id="wrap">
   <header class="head home-head">
     <div class="song">
@@ -17,7 +18,7 @@
     </div>
     <div class="home-title">
       <div>
-        <h1>Your songs</h1>
+        <div class="title-row"><h1>Your songs</h1><span class="decor" data-slot="library-head" aria-hidden="true"><i></i><i></i></span></div>
         <div class="facts" id="summary" data-testid="summary"></div>
       </div>
       <div class="home-tools">
@@ -32,6 +33,7 @@
       <section class="drop" id="drop" data-testid="drop">
         <input type="file" id="files" multiple hidden data-testid="file-input"
           accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.aif,.aiff,.wma,.wv,.ac3,.mp4,.m4v,.mov,.mkv,.webm,.avi,.mpg">
+        <span class="decor" data-slot="welcome" aria-hidden="true"><i></i><i></i></span>
         <svg class="drop-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
         <div class="drop-text">
           <h2 class="drop-title">Start with a song</h2>

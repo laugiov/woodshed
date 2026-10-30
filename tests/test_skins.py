@@ -20,7 +20,16 @@ APP_CSS = ASSETS / "app.css"
 COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\((?![^)]*var\()[^)]*\)|\b(?:black|white)\b")
 COLOUR_TOKENS = ("bg", "panel", "sheet", "dock", "ink", "muted", "line", "accent", "accent-soft", "accent-ink",
                  "warn", "warn-soft", "wave")  # fmt: skip
-SLOTS = ("page", "library-head", "set-head", "welcome", "song-head", "player")
+
+
+def registry_slots() -> list[str]:
+    text = (SKINS / "skins.js").read_text(encoding="utf-8")
+    found = re.search(r"slots: \[([^\]]*)\]", text)
+    assert found is not None
+    return re.findall(r'"([a-z-]+)"', found.group(1))
+
+
+SLOTS = tuple(registry_slots())
 
 
 # A small reader for the page's own CSS: enough for its format (no nested rules, no strings with braces).
@@ -364,3 +373,13 @@ def test_a_faint_palette_is_told_why() -> None:
     assert any(p.startswith("muted on") for p in palette_problems("t", faint, base))
     close = {**skin_tokens(GOOD, "t")["light"], "warn": "#7a1f1f", "accent": "#a0261d"}
     assert any("colour-blind" in p for p in palette_problems("t", close, base))
+
+
+def test_every_decor_slot_of_the_pages_is_listed_once() -> None:
+    """A slot added to a page is one element and one line in skins.js: a skin can only draw where the list says."""
+    in_markup = []
+    for name in ("body.html", "home.html"):
+        in_markup += re.findall(r'class="decor" data-slot="([a-z-]+)"', (PAGE / name).read_text(encoding="utf-8"))
+    home = (ASSETS / "js" / "home" / "home.js").read_text(encoding="utf-8")
+    in_markup += re.findall(r'decorSlot\("([a-z-]+)"\)', home)
+    assert set(in_markup) == set(SLOTS) and len(set(SLOTS)) == len(SLOTS)

@@ -667,6 +667,7 @@
       store.set({ canFix: app.canFixWords() }); // the lines of the words can be fixed from here
       const [set, songs] = await Promise.all([api("/api/setlist"), api("/api/songs")]);
       if (set.ok && Array.isArray(set.data.songs)) setlist = set.data.songs;
+      if (set.ok && typeof set.data.title === "string") store.set({ setName: set.data.title }); // for a skin (spec 030)
       if (songs.ok && Array.isArray(songs.data.songs)) for (const x of songs.data.songs) titles[x.folder] = x.title;
       $("nextSong").addEventListener("click", (e) => {
         e.preventDefault();

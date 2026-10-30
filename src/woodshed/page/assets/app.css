@@ -91,6 +91,19 @@
 .net-addr { font-family: var(--font-mono, monospace); font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
 .home [data-testid="phones"] .hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
 
+/* Decor slots (spec 030): empty places a skin may draw in, hidden unless it does; never on stage, never on paper,
+   never on a narrow screen where they would crowd the controls; still under reduced motion. */
+.decor { display: none; }
+.decor[data-slot="page"] { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+:root[data-stage] .decor { display: none !important; }
+@media print { .decor { display: none !important; } }
+@media (max-width: 600px) { .decor[data-slot="player"] { display: none !important; } }
+@media (max-width: 380px) { .decor[data-slot="library-head"] { display: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .decor, .decor::before, .decor::after, .decor *, .decor *::before, .decor *::after { animation: none !important; }
+}
+.title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+
 /* The library home page: the songs in the main column, the set and the band's phones beside them. */
 .home.wrap { max-width: 1240px; padding-block: 18px 40px; gap: 18px; grid-template-columns: minmax(0, 1fr); }
 .home h2 { margin: 0; }
@@ -476,6 +489,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
   .dshape.next b { font-size: 16px; }
 }
 @media (max-width: 900px) and (max-height: 500px) { .dock-shapes:not([hidden]) { display: none; } }
+.dock-play { display: flex; align-items: center; gap: 12px; } /* the play button, and the player's decor slot */
 .dock-in { max-width: 1220px; margin: 0 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; }
 .play { width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 20px; cursor: pointer; display: grid; place-items: center; }
 .wavebox { display: grid; gap: 3px; min-width: 0; }
