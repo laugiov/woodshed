@@ -908,12 +908,16 @@ def test_a_claim_that_saw_the_last_word_just_before_it_wins(server: app.AppServe
 
 def test_a_claim_says_when_its_place_was_true(server: app.AppServer) -> None:
     """Held on the way, a claim's place is older than its arrival: `at` (the library's clock) says when."""
-    state = post(server, "/api/live", live(lead=True, at=time.time() - 1.0))[1]
-    assert state["at"] == pytest.approx(time.time() - 1.0, abs=0.3)
-    state = post(server, "/api/live", live(lead=True, at=time.time() + 100))[1]
-    assert state["at"] == pytest.approx(time.time(), abs=0.3)  # never in the future
-    state = post(server, "/api/live", live(lead=True, at=time.time() - 100))[1]
-    assert state["at"] == pytest.approx(time.time() - 5, abs=0.3)  # 5 s at most
+    # The library's clock is read between `before` and `after`: a slow machine never shifts what is compared.
+    sent = time.time() - 1.0
+    state = post(server, "/api/live", live(lead=True, at=sent))[1]
+    assert state["at"] == pytest.approx(sent, abs=0.01)
+    before = time.time()
+    state = post(server, "/api/live", live(lead=True, at=before + 100))[1]
+    assert before <= state["at"] <= time.time()  # never in the future
+    before = time.time()
+    state = post(server, "/api/live", live(lead=True, at=before - 100))[1]
+    assert before - 5 <= state["at"] <= time.time() - 5  # 5 s at most
     assert post(server, "/api/live", live(lead=True, at="soon"))[0] == 400
     assert post(server, "/api/live", live(lead=True, seen=-1))[0] == 400
 
