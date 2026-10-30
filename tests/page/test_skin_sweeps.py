@@ -39,7 +39,8 @@ COLOURS_SEEN = """() => {
   const out = {};
   const seen = (c) => c && c !== 'transparent' && !/^rgba\\(.*, 0\\)$/.test(c);
   for (const e of document.querySelectorAll('body *')) {
-    if (e.closest('.decor, svg.qr, canvas, .dots, .swatch') || !e.checkVisibility({ visibilityProperty: true })) continue;
+    if (e.closest('.decor, svg.qr, canvas, .dots, .swatch')) continue;
+    if (!e.checkVisibility({ visibilityProperty: true })) continue;
     const s = getComputedStyle(e);
     if (s.visibility === 'hidden' || s.display === 'none') continue;
     const key = e.tagName + '#' + e.id + '.' + String(e.className).trim().replace(/\\s+/g, '.')
@@ -170,18 +171,22 @@ TEXTS = """() => {
     return out.map(Math.round);
   };
   return [...document.querySelectorAll('body *')].flatMap((e) => {
-    if (e.closest('.decor, [hidden], .menu, .pop, .style-menu, svg') || e.matches('input, select, textarea, option')) return [];
+    if (e.closest('.decor, [hidden], .menu, .pop, .style-menu, svg')) return [];
+    if (e.matches('input, select, textarea, option')) return [];
     if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) return [];
     const s = getComputedStyle(e);
     let o = 1;
     for (let a = e; a; a = a.parentElement) o *= parseFloat(getComputedStyle(a).opacity);
     if (o < 1 || e.closest(':disabled') || s.visibility === 'hidden') return []; // a control said off on purpose
     const r = e.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > innerHeight - 2 || r.right < 0 || r.left > innerWidth - 2) return [];
+    if (r.width < 4 || r.height < 4) return [];
+    if (r.bottom < 0 || r.top > innerHeight - 2 || r.right < 0 || r.left > innerWidth - 2) return [];
     const c = rgba(s.color);
     if (!c || c[3] < 1) return [];
-    const large = parseFloat(s.fontSize) >= 24 || (parseFloat(s.fontSize) >= 18.66 && parseInt(s.fontWeight) >= 700);
-    return [{ name: e.tagName + '#' + e.id + '.' + String(e.className).trim() + ' "' + e.textContent.trim().slice(0, 24) + '"',
+    const size = parseFloat(s.fontSize);
+    const large = size >= 24 || (size >= 18.66 && parseInt(s.fontWeight) >= 700);
+    const name = e.tagName + '#' + e.id + '.' + String(e.className).trim();
+    return [{ name: name + ' "' + e.textContent.trim().slice(0, 24) + '"',
       color: c.slice(0, 3), back: behind(e), large, box: [r.left, r.top, r.right, r.bottom] }];
   });
 }"""
@@ -201,7 +206,7 @@ def faint_texts(page: Page) -> list[str]:
         if t["back"] is not None:
             worst = contrast(colour, hex_of(t["back"]))
         else:  # on the page, over a skin's texture: the pixels around it, the median (a neighbour's letters aside)
-            left, top, right, bottom = (int(round(v)) for v in t["box"])
+            left, top, right, bottom = (round(v) for v in t["box"])
             x0, y0 = max(0, left - 3), max(0, top - 3)
             x1, y1 = min(width - 1, right + 2), min(height - 1, bottom + 2)
             ring = np.concatenate([pixels[y0, x0:x1], pixels[y1, x0:x1], pixels[y0:y1, x0], pixels[y0:y1, x1]])
@@ -217,7 +222,7 @@ def faint_texts(page: Page) -> list[str]:
 
 # What reads below the floor on main already, in the base, kept as it was (R12): the accent as text on its own tint
 # in the light theme, 4.2 (the current step's number, "Nothing to check by ear"). Skins are held to the floor.
-FAINT_ALLOWED = {("woodshed", "light"): [r'^SPAN#\.n "Step \d"', r'^SPAN#\.okfact ']}
+FAINT_ALLOWED = {("woodshed", "light"): [r'^SPAN#\.n "Step \d"', r"^SPAN#\.okfact "]}
 
 
 def accepted(found: list[str], skin: str, theme: str) -> list[str]:
@@ -243,10 +248,11 @@ def test_the_contrast_sweep_catches_a_faint_text(browser: Browser, pages_root: s
 
 def test_the_png_reader_reads_what_the_browser_draws(browser: Browser, pages_root: str) -> None:
     page = song_page(browser, pages_root, "dark")
-    page.add_style_tag(content="body::after { content: ''; position: fixed; inset: 0; z-index: 99; background: #12ab34; }")
+    page.add_style_tag(
+        content="body::after { content: ''; position: fixed; inset: 0; z-index: 99; background: #12ab34; }"
+    )
     pixels = png_pixels(page.screenshot())
     assert hex_of(pixels[450, 720]) == "#12ab34" and pixels.shape == (900, 1440, 3)
-
 
 
 @pytest.mark.parametrize("skin", ["woodshed", *SHIPPED])

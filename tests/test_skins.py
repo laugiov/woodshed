@@ -452,7 +452,10 @@ def test_every_skin_font_is_licensed_and_pinned() -> None:
 
 def test_the_skins_stay_light() -> None:
     """Every page folder carries a copy (R26)."""
-    size = lambda folder: sum(p.stat().st_size for p in folder.rglob("*") if p.is_file())  # noqa: E731
+
+    def size(folder: Path) -> int:
+        return sum(p.stat().st_size for p in folder.rglob("*") if p.is_file())
+
     for folder in SKINS.iterdir():
         if folder.is_dir() and folder.name != "_fonts":
             assert size(folder) <= 60 * 1024, folder.name
