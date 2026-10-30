@@ -272,7 +272,6 @@ def skin_problems(skin: str, css: str) -> list[str]:
     """Everything a skin does that the contract does not allow, or leaves out."""
     tokens_known = set(base_tokens()["light"])
     problems = []
-    scope = SCOPE.format(id=re.escape(skin))
     token_selectors = {
         f':root[data-skin="{skin}"]': "light",
         f'[data-skin-probe="{skin}"]': "light",
@@ -306,14 +305,13 @@ def skin_problems(skin: str, css: str) -> list[str]:
                     problems.append(f"no such decor slot: {m.group('slot')}")
                 elif any(p.startswith("--") for p, _ in decls):
                     problems.append(f"{one}: tokens are set on the skin's scope, not on a slot")
-    del scope
     for theme, values in themes.items():
         for name in COLOUR_TOKENS:
-            value = values.get(name)
-            if value is None:
+            got = values.get(name)
+            if got is None:
                 problems.append(f"{theme}: --{name} missing")
-            elif not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
-                problems.append(f"{theme}: --{name} is not a plain colour ({value})")
+            elif not re.fullmatch(r"#[0-9a-fA-F]{6}", got):
+                problems.append(f"{theme}: --{name} is not a plain colour ({got})")
     return problems
 
 
