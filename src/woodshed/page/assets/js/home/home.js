@@ -50,6 +50,7 @@
           // The library cleared the note of a song out of the set: dropped here too, no flash of it on a re-add.
           for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
           setlist = answer.songs;
+          setRev = answer.rev;
         }
       } catch (err) {
         toast(W.t("The set list was not saved."));
@@ -71,6 +72,105 @@
       const moved = document.querySelector('[data-set-song="' + CSS.escape(folder) + '"] [data-testid="set-place"]');
       if (moved) moved.focus(); // the keyboard goes with the song
     });
+  }
+  // The set's name (spec 030): "Les Imprévus · saison 2026-2027", over the set, in the tab, on paper. Kept by
+  // the rules of the library (app.normalise_set_title), checked on the same cases.
+  const SET_NAME_MAX = 80; // characters (code points)
+  function normaliseSetName(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") throw new Error("The set's name has a character that cannot be shown.");
+    let kept = "";
+    for (const ch of value.normalize("NFC")) {
+      if (/[\t\n\r]|\p{Zs}/u.test(ch)) kept += " ";
+      else if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ch)) throw new Error("The set's name has a character that cannot be shown.");
+      else kept += ch;
+    }
+    const name = kept.split(" ").filter(Boolean).join(" ");
+    if ([...name].length > SET_NAME_MAX) throw new Error("The set's name is 80 characters at most.");
+    return name || null;
+  }
+  W.setName = { normalise: normaliseSetName };
+  let setName = null;
+  let setRev = null; // the set list's revision as last read or saved here: null until the first read
+  let naming = false; // the name is being typed: nothing draws over it
+  let reading = false;
+  const tabTitle = () => (document.title = setName ? setName + " · woodshed" : W.t("Library · woodshed"));
+  function renderSetName() {
+    if (naming) return;
+    tabTitle();
+    if (setRev === null) return; // not read yet: no "+ Name the set" flashing before the name
+    const start = () => startNaming();
+    clear(
+      $("setNameBox"),
+      setName
+        ? h("div", { class: "set-name" },
+            h("h2", { "data-testid": "set-name", translate: "no" }, setName),
+            h("button", { type: "button", class: "btn ghost rename", "data-testid": "set-rename", "aria-label": W.t("Rename the set"), title: W.t("Rename the set"), onclick: start }, "✎"))
+        : h("button", { type: "button", class: "btn ghost add-name", "data-testid": "set-name-add", onclick: start }, W.t("+ Name the set")),
+    );
+  }
+  async function saveSetName(name) {
+    try {
+      const r = await fetch("/api/setlist", { method: "POST", headers: { "X-Woodshed-Token": token, "Content-Type": "application/json" }, body: JSON.stringify({ title: name }) });
+      const answer = await r.json();
+      if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
+      else if (!r.ok) toast(W.t("The set's name was not saved: {why}", { why: W.t(answer.error) }));
+      else {
+        setName = answer.title || null;
+        setRev = answer.rev; // its own save: the next poll does not read it again
+      }
+    } catch (err) {
+      toast(W.t("The set's name was not saved."));
+    }
+  }
+  function startNaming() {
+    naming = true;
+    const input = h("input", { type: "text", class: "set-name-input", value: setName || "", placeholder: W.t("The band, the gig, the season"), "aria-label": W.t("Name of the set"), "data-testid": "set-name-input" });
+    let done = false;
+    const finish = async (keep) => {
+      if (done) return;
+      done = true;
+      if (keep) {
+        let name = setName;
+        try {
+          name = normaliseSetName(input.value);
+        } catch (err) {
+          toast(W.t(err.message));
+          name = setName;
+        }
+        if (name !== setName) await saveSetName(name);
+      }
+      naming = false;
+      renderSetName();
+      const back = $("setNameBox").querySelector("button");
+      if (back && (!document.activeElement || document.activeElement === document.body)) back.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.isComposing) return; // Enter picks a word in an input method, it does not save
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    clear($("setNameBox"), h("div", { class: "set-name" }, input), h("p", { class: "set-name-tip" }, W.t("Shown on the phones and on the printed set.")));
+    input.focus();
+  }
+  // The set as the library keeps it: read at the start, and again when the poll says it changed (another
+  // device of the band, another woodshed on the library, a hand edit).
+  function readSet() {
+    if (reading) return;
+    reading = true;
+    fetch("/api/setlist", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setlist = Array.isArray(d.songs) ? d.songs : [];
+        setName = typeof d.title === "string" ? d.title : null;
+        setRev = typeof d.rev === "string" ? d.rev : "";
+        renderSet();
+        renderSetName();
+        if (shown) render(shown); // the rows drawn before the set list came say "In the set" now
+      })
+      .catch(() => {})
+      .finally(() => (reading = false));
   }
   // A set of 40 songs is over an hour: hours and minutes.
   const setLength = (t) => {
@@ -331,6 +431,8 @@
     }
     const same = shown && JSON.stringify(shown) === JSON.stringify(data);
     shown = data;
+    // The set changed elsewhere: read again, unless its name is being typed here (read after).
+    if (data.set && setRev !== null && data.set.rev !== setRev && !naming) readSet();
     if (!same) render(data); // redrawn only when something changed: a link under the pointer or the focus stays
   }
 
@@ -443,22 +545,15 @@
     if (canUpload) upload([...e.dataTransfer.files]);
   });
 
-  fetch("/api/setlist", { cache: "no-store" })
-    .then((r) => r.json())
-    .then((d) => {
-      setlist = Array.isArray(d.songs) ? d.songs : [];
-      renderSet();
-      if (shown) render(shown); // the rows drawn before the set list came say "In the set" now
-    })
-    .catch(() => {});
+  readSet();
   refresh();
   setInterval(() => (busy || document.visibilityState === "visible") && refresh(), 1500);
   W.onLang.push(() => {
     $("toast").hidden = true; // said in the other language
-    document.title = W.t("Library · woodshed");
     if (shown) render(shown);
     renderSet();
+    renderSetName();
   });
-  document.title = W.t("Library · woodshed");
+  tabTitle();
   W.ready = true;
 })();

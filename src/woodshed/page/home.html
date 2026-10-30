@@ -54,9 +54,10 @@
     </main>
 
     <aside class="home-side">
-      <section class="panel side-panel" data-testid="set-panel">
-        <div class="set-head"><h2 class="label">Set list</h2><span class="facts" id="setSummary" data-testid="set-summary"></span>
-          <button class="btn ghost" id="printSet" type="button" hidden data-testid="set-print">Print the set</button></div>
+      <section class="panel side-panel" data-testid="set-panel" aria-label="Set list">
+        <div class="set-head"><p class="label" data-testid="set-label">Set list</p><span class="facts" id="setSummary" data-testid="set-summary"></span>
+          <button class="btn ghost" id="printSet" type="button" hidden data-testid="set-print">Print the set</button>
+          <div class="set-name-box" id="setNameBox"></div></div>
         <ol class="setlist" id="setlist" data-testid="setlist"></ol>
         <p class="hint" id="setEmpty">No set yet: add songs with <b>+ Set</b> in your songs. On a song page,
           <b>N</b> goes to the next song of the set, and the band follows the device that leads.</p>

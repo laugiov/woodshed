@@ -18,6 +18,19 @@
 .set-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
 .set-head .label { margin: 0; }
 .set-head #printSet { margin-left: auto; }
+/* The set's name (spec 030): under the label, the panel's heading; named and renamed in place. */
+.set-name-box { flex-basis: 100%; order: 3; min-width: 0; }
+.set-name { display: flex; align-items: center; gap: 8px; margin: 2px 0; min-width: 0; }
+.set-name h2 { flex: 1 1 auto; min-width: 0; margin: 0; font-family: var(--font-chord); font-weight: 600; font-size: 24px; line-height: 1.15; color: var(--ink); overflow-wrap: anywhere; }
+.set-name .rename { flex: none; width: 32px; height: 32px; justify-content: center; padding: 0; opacity: 0; }
+.set-name:hover .rename, .set-name .rename:focus-visible { opacity: 1; }
+.set-name-input { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--accent); background: var(--bg); color: var(--ink); font-family: var(--font-chord); font-size: 22px; font-weight: 600; }
+.set-name-tip { margin: 4px 0; font-size: 12.5px; color: var(--muted); }
+.btn.ghost.add-name { padding-left: 0; color: var(--accent); }
+@media (pointer: coarse) {
+  .set-name .rename { opacity: 1; width: 44px; height: 44px; }
+  .btn.ghost.add-name { min-height: 44px; font-size: 15px; }
+}
 .home .setlist { list-style: none; margin: 0; padding: 0; display: grid; }
 .home .setlist li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; gap: 0 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--line); }
 .home .setlist li:first-child { border-top: 0; }
@@ -54,6 +67,9 @@
   .home [data-testid="set-panel"] { border: 0; padding: 0; }
   .home .set-n { text-align: left; }
   .home .set-head .label, .home #setSummary { font-size: 16pt; color: #000; }
+  .home .set-name-box { order: -1; }
+  .home .set-name h2 { font-size: 24pt; color: #000; }
+  .home .rename, .home .add-name, .home .set-name-tip { display: none !important; }
   .home .setlist { gap: 0; }
   .home .setlist li { break-inside: avoid; border-top: 0; border-bottom: 1px solid #999; border-radius: 0; padding: 3pt 0; grid-template-columns: 2.2em minmax(0, 1fr); align-items: baseline; line-height: 1.2; }
   .home .set-n { color: #000; font-size: 18pt; }

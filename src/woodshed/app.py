@@ -17,6 +17,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import errno
+import hashlib
 import http.client
 import ipaddress
 import json
@@ -35,6 +36,7 @@ import sys
 import threading
 import time
 import traceback
+import unicodedata
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
@@ -102,6 +104,7 @@ LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SETLIST = "setlist.json"  # in the library: the order the band plays the songs in
 SETLIST_MAX = 500
 SETLIST_BYTES = 256 * 1024  # 500 long titles
+SET_TITLE_MAX = 80  # characters (code points) in the set's name
 CORRECTIONS_BYTES = 64 * 1024
 DRAIN_MAX = 1024 * 1024  # a body a little too big is read before the refusal, a huge one is not
 EMPTY_PLACEMENT = {"version": 1, "language": "", "text": "", "lines": [], "chords": []}  # a page with no words placed
@@ -109,6 +112,7 @@ VOICES_KEPT = 2  # pages whose voice heard before is kept in memory for fixing l
 TYPES = {
     ".flac": "audio/flac",
     ".woff2": "font/woff2",
+    ".svg": "image/svg+xml",
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".html": "text/html; charset=utf-8",
@@ -156,6 +160,29 @@ class JobReporter(Reporter):
         self.job.percent = int(fraction * 100)
 
 
+def normalise_set_title(value: Any) -> str | None:
+    """The set's name as kept (spec 030): NFC, white space (tabs and new lines included) collapsed to one space and
+    trimmed; None when nothing is left. A control or format character, or a name over SET_TITLE_MAX characters, is
+    refused. The page applies the same rules (home/home.js), on the same cases (tests/set_name_cases.json)."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("title: the set's name, as text")
+    kept = []
+    for ch in unicodedata.normalize("NFC", value):
+        category = unicodedata.category(ch)
+        if ch in "\t\n\r" or category == "Zs":
+            kept.append(" ")
+        elif category in ("Cc", "Cf", "Zl", "Zp"):
+            raise ValueError("title: a character that cannot be shown")
+        else:
+            kept.append(ch)
+    name = " ".join(w for w in "".join(kept).split(" ") if w)
+    if len(name) > SET_TITLE_MAX:
+        raise ValueError("title: 80 characters at most")  # SET_TITLE_MAX
+    return name or None
+
+
 class Library:
     """A folder of songs: uploads in `songs/`, one page folder per song next to it."""
 
@@ -176,6 +203,8 @@ class Library:
         self.revisions: dict[str, int] = {}  # page folder -> how many times its corrections changed
         self.stale: set[str] = set()  # pages the start could not give this version's code (update_pages)
         self.page_songs: dict[str, tuple[int, dict[str, Any] | None]] = {}  # folder -> (index.html stamp, song)
+        self.set_stamp: tuple[int, int] | None = None  # setlist.json's (mtime, size) when set_hash was read
+        self.set_hash = ""
         self.on_bars: Callable[[str], None] | None = None  # told when a page's bar lines moved (Live.bars_moved)
         self.on_band: Callable[[str, int], None] | None = None  # told when band choices changed (Live.corrected)
         self.on_reload: Callable[[str], None] | None = None  # told when a page's data changed (Live.page_updated)
@@ -400,36 +429,85 @@ class Library:
         except (ValueError, KeyError, TypeError, AttributeError):
             return None
 
-    def _set_names(self) -> list[str] | None:
-        """The set as saved, pages removed since included: [] without a set list, None if it cannot be read
-        (then nothing is cleared on its account)."""
+    def _set_doc(self) -> dict[str, Any] | None:
+        """setlist.json as saved, keys woodshed does not know included: an empty set without one, None if it cannot
+        be read."""
         try:
             data = json.loads((self.root / SETLIST).read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return []
+            return {"songs": []}
         except (OSError, ValueError):
             return None
-        names = data.get("songs") if isinstance(data, dict) else None
+        return data if isinstance(data, dict) else None
+
+    def _set_names(self) -> list[str] | None:
+        """The set as saved, pages removed since included: [] without a set list, None if it cannot be read
+        (then nothing is cleared on its account)."""
+        doc = self._set_doc()
+        names = doc.get("songs") if doc is not None else None
         return [n for n in names if isinstance(n, str)] if isinstance(names, list) else None
+
+    def set_title(self) -> str | None:
+        """The set's name; None without one, or when the file's (edited by hand) cannot be shown."""
+        doc = self._set_doc()
+        try:
+            return normalise_set_title(doc.get("title")) if doc is not None else None
+        except ValueError:
+            return None
+
+    def set_rev(self) -> str:
+        """A fingerprint of setlist.json, "" without one: another woodshed, a restart or a hand edit changes it too.
+        Read again only when the file's time or size changed (the library pages ask every 1.5 s)."""
+        path = self.root / SETLIST
+        try:
+            stat = path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+            if stamp != self.set_stamp:
+                self.set_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+                self.set_stamp = stamp
+        except OSError:
+            return ""
+        return self.set_hash
+
+    def setlist_state(self) -> dict[str, Any]:
+        return {"songs": self.setlist(), "title": self.set_title(), "rev": self.set_rev()}
 
     def setlist(self) -> list[str]:
         """The set, as page folders in order; songs removed since are left out."""
         pages = {p["folder"] for p in self.pages()}
         return list(dict.fromkeys(n for n in self._set_names() or [] if n in pages))
 
-    def set_setlist(self, data: Any) -> list[str]:
-        names = data.get("songs") if isinstance(data, dict) else None
-        if not isinstance(names, list) or len(names) > SETLIST_MAX or not all(isinstance(n, str) for n in names):
-            raise ValueError("songs: a list of page folders")
-        pages = {p["folder"] for p in self.pages()}
-        unknown = [n for n in names if n not in pages]
-        if unknown or len(set(names)) != len(names):
-            raise ValueError("songs: each page of the library once at most")
-        with self.lock:
-            left = [n for n in self._set_names() or [] if n not in names]
+    def set_setlist(self, data: Any) -> dict[str, Any]:
+        """Saves the set's songs, its name, or both; what is not sent is kept (and keys woodshed does not know)."""
+        if not isinstance(data, dict) or not {"songs", "title"} & data.keys():
+            raise ValueError("songs: a list of page folders, or title: the set's name")
+        names = data.get("songs")
+        if "songs" in data:
+            if not isinstance(names, list) or len(names) > SETLIST_MAX or not all(isinstance(n, str) for n in names):
+                raise ValueError("songs: a list of page folders")
+            pages = {p["folder"] for p in self.pages()}
+            unknown = [n for n in names if n not in pages]
+            if unknown or len(set(names)) != len(names):
+                raise ValueError("songs: each page of the library once at most")
+        title = normalise_set_title(data["title"]) if "title" in data else None
+        # Another woodshed on the library waits (a hidden lock file beside the set list).
+        with self.lock, corrections_lock(self.root / f".{SETLIST}"):
+            doc = self._set_doc()
+            if doc is None and "songs" not in data:
+                raise WoodshedError("the set list cannot be read: save the set's songs again first")
+            doc = doc or {}
+            left = [n for n in self._set_names() or [] if n not in (names or [])] if "songs" in data else []
+            if "songs" in data:
+                doc["songs"] = names
+            doc.setdefault("songs", [])
+            if "title" in data:
+                if title:
+                    doc["title"] = title
+                else:
+                    doc.pop("title", None)
             tmp = self.root / f".{SETLIST}.{secrets.token_hex(4)}"
             try:
-                tmp.write_text(json.dumps({"songs": names}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+                tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
                 tmp.replace(self.root / SETLIST)
             finally:
                 tmp.unlink(missing_ok=True)
@@ -438,7 +516,7 @@ class Library:
         if self.on_band is not None:
             for folder, rev in cleared.items():
                 self.on_band(folder, rev)  # the open pages read the song again
-        return list(names)
+        return self.setlist_state()
 
     def _clear_note(self, folder: str) -> int | None:
         """Under the lock: the band's note on a song taken away; its new revision, or None if it had none."""
@@ -861,6 +939,7 @@ class Library:
         # What the library separates new songs with: the home page's "Guitar and keys apart" starts there.
         separation = new_page_model(self.opts).key
         state = {"songs": self.pages(), "jobs": jobs, "separates": separates, "separation": separation}
+        state["set"] = {"rev": self.set_rev(), "title": self.set_title()}  # a library sees a new set or name
         return {**state, "words_model": self.words_model}
 
     def reserve(self, name: str) -> Path:
@@ -1990,7 +2069,7 @@ class Handler(BaseHTTPRequestHandler):
             # cannot read the answer, and the Host check stops DNS rebinding.
             self._json(HTTPStatus.OK, {"token": self.server.token, "boot": self.server.live.boot})
         elif path == "/api/setlist":
-            self._json(HTTPStatus.OK, {"songs": self.server.library.setlist()})
+            self._json(HTTPStatus.OK, self.server.library.setlist_state())
         elif path == "/api/pitch":
             try:
                 page = parse_qs(urlsplit(self.path).query).get("page", [""])[0]
@@ -2164,7 +2243,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.main.set_door(data["on"])
                 self._json(HTTPStatus.OK, self.server.main.network_state())
             else:
-                self._json(HTTPStatus.OK, {"songs": self.server.library.set_setlist(data)})
+                self._json(HTTPStatus.OK, self.server.library.set_setlist(data))
         except ModelOff as exc:  # not the 409 of the PermissionErrors below, nor the token's 403
             self._json(HTTPStatus.FORBIDDEN, {"error": str(exc), "code": "no-words-model"})
         except NotLeader as exc:

@@ -286,11 +286,11 @@ def test_the_home_lists_the_addresses_for_the_phones_only_on_the_network(server:
 
 
 def test_the_set_list_keeps_its_order_and_forgets_removed_pages(server: app.AppServer) -> None:
-    assert json.loads(request(server, "GET", "/api/setlist")[2]) == {"songs": []}
+    assert json.loads(request(server, "GET", "/api/setlist")[2])["songs"] == []
     status, answer = post(server, "/api/setlist", {"songs": ["Two.woodshed", "One.woodshed"]})
-    assert status == 200 and answer == {"songs": ["Two.woodshed", "One.woodshed"]}
+    assert status == 200 and answer["songs"] == ["Two.woodshed", "One.woodshed"]
     (server.library.root / "Two.woodshed" / "woodshed.json").unlink()  # the page is gone
-    assert json.loads(request(server, "GET", "/api/setlist")[2]) == {"songs": ["One.woodshed"]}
+    assert json.loads(request(server, "GET", "/api/setlist")[2])["songs"] == ["One.woodshed"]
 
 
 def test_a_song_leaving_the_set_takes_its_note_with_it(server: app.AppServer) -> None:
@@ -301,7 +301,7 @@ def test_a_song_leaving_the_set_takes_its_note_with_it(server: app.AppServer) ->
     try:
         follower.next()
         status, answer = post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
-        assert status == 200 and answer == {"songs": ["Two.woodshed"]}
+        assert status == 200 and answer["songs"] == ["Two.woodshed"]
         one = server.library.corrections("One.woodshed", "a1")
         assert one["band"] == {"transpose": 2, "key": "D"}  # the note was the set's; the band's key stays
         assert server.library.corrections("Two.woodshed", "a1")["band"] == {"note": "capo 2"}  # still in the set
