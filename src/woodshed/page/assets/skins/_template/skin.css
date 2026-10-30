@@ -1,0 +1,54 @@
+/* A new skin (docs/skins.md): copy this folder to skins/<id>/, replace "example" by <id> everywhere, set the
+   colours for both themes, add one line to skins.js and one @import to skins.css, then run
+   `pytest tests/test_skins.py tests/page/test_skin_sweeps.py`: it says what is missing, too faint or out of place.
+   Not loaded by the pages: this folder is a model. */
+
+/* Fonts, if any: one file each in skins/_fonts/ (latin subset, OFL or Apache, LICENSE-<font>.txt beside, its hash
+   in scripts/vendored.sha256), never a remote URL.
+@font-face { font-family: "Example Display"; font-display: block; src: url("../_fonts/ExampleDisplay.woff2") format("woff2"); }
+*/
+
+/* Light theme. Every colour is a plain #rrggbb; the tests hold text to 4.5:1 on every surface. */
+:root[data-skin="example"], [data-skin-probe="example"] {
+  --bg: #e6eae7; /* the page behind everything */
+  --panel: #f7f9f6; /* panels: the set list, the desk, the menus */
+  --sheet: #fdfefc; /* the chart, buttons, inputs */
+  --dock: #fbfcfa; /* the player at the bottom */
+  --ink: #131816; /* text */
+  --muted: #59635e; /* quieter text: labels, facts */
+  --line: #ccd4cf; /* borders */
+  --accent: #0c7a68; /* the current bar, the choice made, links; also text */
+  --accent-soft: #d3ebe5; /* its tint: the current bar's background */
+  --accent-ink: #ffffff; /* text on the accent */
+  --warn: #a65207; /* "check by ear": at least 10 apart from the accent for the colour-blind */
+  --warn-soft: #fbedd9; /* its tint */
+  --wave: #9fb3aa; /* the waveform */
+  /* Optional: the base's value applies when a line is left out. */
+  --radius: 10px; /* panels; 24px at most */
+  --radius-sm: 8px; /* buttons, inputs; every other radius is a fraction of these two; 24px at most */
+  --shadow-color: 0 0 0; /* shadows and scrims, as "r g b" */
+  --shadow-panel: none; /* a panel's shadow */
+  --dock-image: none; /* the player's background: gradients only (no url() in a token) */
+  --dock-image-size: auto;
+  --font-display: var(--font-chord); /* titles, section names, the set's name: never a chord or a word */
+  --display-scale: 1; /* under 1 for a wide display font */
+  --digits: initial; /* time and tempo: a font, or initial to keep each one's own */
+  --digits-scale: 1;
+}
+
+/* Dark theme: every colour again. */
+:root[data-skin="example"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="example"] {
+  --bg: #0d1210; --panel: #151b18; --sheet: #19201d; --dock: #121815;
+  --ink: #e5ebe7; --muted: #94a19a; --line: #2a342f;
+  --accent: #3cc4a9; --accent-soft: #15372f; --accent-ink: #0a1210;
+  --warn: #f0a546; --warn-soft: #3a2a14; --wave: #3d5049;
+}
+
+/* Decor slots (skins.js lists them): page, library-head, set-head, welcome, song-head, player. Hidden unless drawn
+   here; never on stage, on paper, the player under 600px, the library-head under 380px. Images beside this file.
+   The slot's data for ::before/::after: attr(data-set-title), attr(data-song-title) (absent when empty: draw a
+   name's decoration under [data-set-title] only). Motion only under [data-playing], transform and opacity only.
+:root[data-skin="example"] .decor[data-slot="player"] { display: block; width: 52px; height: 52px; background: url("disc.svg") center / contain no-repeat; }
+:root[data-skin="example"][data-playing] .decor[data-slot="player"] { animation: example-spin 2s linear infinite; }
+@keyframes example-spin { to { transform: rotate(360deg); } }
+*/

@@ -123,3 +123,13 @@ def test_the_revision_is_read_from_the_disk_only_when_the_file_changed(
     for _ in range(3):
         server.library.set_rev()
     assert not reads  # a stat each time, no read
+
+
+@pytest.mark.parametrize(
+    ("path", "kind"),
+    [("skins/mixtape80/cassette.svg", "image/svg+xml"), ("skins/_fonts/VT323.woff2", "font/woff2"),
+     ("skins/skins.css", "text/css; charset=utf-8")],
+)  # fmt: skip
+def test_the_skins_files_are_served_with_their_type(server: app.AppServer, path: str, kind: str) -> None:  # noqa: F811
+    status, headers, _ = request(server, "GET", "/app/assets/" + path)
+    assert status == 200 and {k.lower(): v for k, v in headers.items()}["content-type"] == kind

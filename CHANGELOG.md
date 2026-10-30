@@ -10,6 +10,19 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+### Added
+
+- Six looks for the whole app, chosen from the new **Style** button next to the theme button, on each
+  device: **woodshed**, **Spotlight** (the most contrast, black on white for an outdoor gig in the sun,
+  white and yellow on black for a dark stage, nothing else on screen), **Disco 70** (a mirror ball
+  that turns while the song plays), **Mixtape 80** (a cassette whose reels turn, with the set's name on
+  its label), **Grunge 90** (a CD that spins, flannel and photocopies) and **Y2K** (an MP3 player and an
+  equaliser that dances). Each has its light and dark theme; the chords and the words keep their
+  fonts and their contrast in all of them, the stage view and the printed set stay plain.
+- Name the set: **+ Name the set** on the library's set list ("Les Imprévus · season 2026-2027"). The
+  name heads the set on every library open on the band's devices at once, the printed set and the
+  browser's tab.
+
 ## [0.6.0] - 2026-10-25
 
 ### Added

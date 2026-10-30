@@ -136,6 +136,7 @@
 .home .options[open] { grid-column: 1 / -1; }
 .home .options label { display: inline-flex; gap: 6px; align-items: center; margin: 8px 18px 0 0; }
 .home .options input[type=number] { width: 6em; }
+.home .options select, .home .options input[type=number] { padding: 3px 6px; border-radius: calc(var(--radius-sm) * .75); border: 1px solid var(--line); background: var(--sheet); color: var(--ink); font: inherit; }
 .home.first .drop { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 56px 24px; gap: 12px; border-width: 2px; background: var(--panel); font-size: 15.5px; }
 .home.first .drop-mark { width: 48px; height: 48px; padding: 10px; border-radius: 50%; background: var(--accent-soft); }
 .home.first .drop-title { display: block; font-family: var(--font-display); font-weight: 600; font-size: calc(30px * var(--display-scale)); color: var(--ink); }

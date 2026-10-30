@@ -16,7 +16,7 @@
 :root[data-skin="grunge90"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="grunge90"] {
   --bg: #121210; --panel: #1a1a17; --sheet: #20201c; --dock: #161613;
   --ink: #e9e5da; --muted: #a39d8f; --line: #36342d;
-  --accent: #e0564a; --accent-soft: #3a1714; --accent-ink: #160605;
+  --accent: #ec6f63; --accent-soft: #3a1714; --accent-ink: #160605;
   --warn: #e8b04a; --warn-soft: #3a2a14; --wave: #505044;
   --dock-image: repeating-linear-gradient(90deg, rgba(0,0,0,.35) 0 6px, transparent 6px 14px, rgba(0,0,0,.2) 14px 16px, transparent 16px 28px), linear-gradient(#b23a2e 0 2px, #c4453a 2px 4px, #1c1a17 4px 6px, #c4453a 6px 8px);
 }

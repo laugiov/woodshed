@@ -54,6 +54,10 @@ Line up the evening's songs, with each one's key, tempo and length, the set's to
 per song ("capo 2, starts on the chorus"; it belongs to the set and goes when the song leaves it),
 and print it. At the end of a song, the pedal (or `N`) takes the whole band to the next one.
 
+**+ Name the set** gives it a name ("Les Imprévus · season 2026-2027"): every library open on the
+band's devices shows it at once, and so do the printed set and the browser's tab. Some styles write it
+on their cassette or CD too.
+
 The singer's key for the band is in [For singers](singers.md#keep-the-key-for-the-band).
 
 ## Phones on the music stand

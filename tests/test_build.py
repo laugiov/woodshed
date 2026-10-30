@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -406,3 +407,16 @@ def test_a_refresh_stamps_this_version_and_keeps_the_analysis_version(
     assert meta["version"] == "0.4.0"  # the analysis is the same: still said as found by 0.4.0
     assert meta.get("analysis") == expected  # the page's own revision first, else the manifest's, else unknown
     jsonschema.validate(data["song"], song.schema())
+
+
+def test_a_page_made_before_the_skins_gets_them_from_a_refresh(tmp_path: Path, pop_song: tuple[Path, Song]) -> None:
+    wav, result = pop_song
+    page = build.build(result, wav, tmp_path / "out")
+    shutil.rmtree(page / "assets" / "skins")  # as 0.6.0 left it
+    index = page / "index.html"
+    index.write_text(index.read_text(encoding="utf-8").replace("skins/skins", "gone/gone"), encoding="utf-8")
+    assert build.refresh_code(page)
+    assert (page / "assets" / "skins" / "skins.css").is_file()
+    assert (page / "assets" / "skins" / "mixtape80" / "cassette.svg").is_file()
+    assert (page / "assets" / "skins" / "_fonts" / "VT323.woff2").is_file()
+    assert 'href="assets/skins/skins.css"' in index.read_text(encoding="utf-8")

@@ -123,3 +123,9 @@ The keyboard does what it says.
 The page speaks English or French (your browser's language at first), dark by default or light for
 a sunny room: two buttons at the top, remembered, and switched without stopping the music. Chord
 names, titles and words are never translated.
+
+The **Style** button beside them (four small squares) changes the whole look, on this device only:
+**woodshed**, **Spotlight** (the most contrast: black on white in the sun, white and yellow on black on
+a dark stage), **Disco 70**, **Mixtape 80**, **Grunge 90** and **Y2K**. Each works dark or light. The
+chords and the words keep their fonts in every style; stage mode and the printout stay plain, and
+nothing moves if your system asks for less motion.

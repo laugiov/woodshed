@@ -247,10 +247,12 @@ def palette_problems(name: str, t: dict[str, str], base: dict[str, str]) -> list
     """R22 and R23: what is too faint or too close in one theme of a skin."""
     text = 7.0 if name in STRICT else 4.5
     pairs = [(f, g, text) for f in ("ink", "muted", "warn") for g in ("bg", "panel", "sheet", "dock")]
-    ui = 4.5 if name in STRICT else 3.0
+    # The accent is text too ("Step 1", "▶ hear", the current part): as legible as text, on its tint no worse than
+    # the base's (4.2 in light, a look kept as it was).
+    tint = min(text, contrast(base["accent"], base["accent-soft"]))
     pairs += [("accent-ink", "accent", text), ("ink", "accent-soft", text), ("muted", "accent-soft", text),
               ("warn", "warn-soft", text), ("ink", "warn-soft", text),
-              ("accent", "panel", ui), ("accent", "sheet", ui)]  # fmt: skip
+              ("accent", "panel", text), ("accent", "sheet", text), ("accent", "accent-soft", tint)]  # fmt: skip
     pairs += [("wave", g, min(contrast(base["wave"], base[s]) for s in ("panel", "dock"))) for g in ("panel", "dock")]
     bad = [
         f"{f} on {g}: {contrast(t[f], t[g]):.2f} < {floor:.2f}"
@@ -443,7 +445,8 @@ def test_every_skin_font_is_licensed_and_pinned() -> None:
         assert f"src/woodshed/page/assets/skins/_fonts/{font.name}" in pinned
     used = set()
     for css in SKINS.glob("*/skin.css"):
-        used |= set(re.findall(r'url\("\.\./_fonts/([^"]+)"\)', css.read_text(encoding="utf-8")))
+        text = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8"), flags=re.S)
+        used |= set(re.findall(r'url\("\.\./_fonts/([^"]+)"\)', text))
     assert used == {f.name for f in fonts}  # no font shipped for nothing, none missing
 
 
@@ -464,3 +467,12 @@ def test_every_page_loads_the_skins() -> None:
         app_css = text.index(f'href="{prefix}app.css"')
         assert text.index(f'href="{prefix}skins/skins.css"') > app_css  # after the base: a skin's tokens win
         assert text.index(f'src="{prefix}skins/skins.js"') < text.index(f'src="{prefix}js/core/prefs.js"')
+
+
+def test_the_template_lists_every_token_a_skin_may_set() -> None:
+    """A new token reaches skin authors: the template is the list they copy."""
+    template = (SKINS / "_template" / "skin.css").read_text(encoding="utf-8")
+    assert skin_problems("example", template) == []
+    assert set(blocks(template)[':root[data-skin="example"]']) == set(base_tokens()["light"]) - {
+        "font-chord", "font-body", "font-mono", "font-music",  # the base's fonts: a skin uses --font-display
+    }  # fmt: skip

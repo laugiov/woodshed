@@ -31,6 +31,8 @@ Chords, words and a part for each musician, on your own computer. Free, offline,
   play along with your own instrument taken out of the record.
 - **The singer's key, for everyone.** The chart, the shapes and the recording itself move to the key
   that suits the voice.
+- **Your band's look.** Name the set, then pick a style: the practice room, a 70s, 80s, 90s or 2000s
+  one, or Spotlight, the most contrast for a gig in the sun or a dark stage.
 - **The whole band on their phones.** One computer leads, every phone follows to the bar: stage
   mode, a set list, and exports for OnSong, MuseScore or the music stand.
 

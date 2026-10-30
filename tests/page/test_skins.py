@@ -3,12 +3,13 @@ what the page tells a skin (playing, stage, the names)."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 from playwright.sync_api import Browser, Page, expect
 
-from tests.page.conftest import built
+from tests.page.conftest import built, with_close_calls
 
 NBSP = chr(0xA0)  # French typography: before ":"
 
@@ -223,3 +224,53 @@ def test_the_style_menu_in_french(browser: Browser, pages_root: str) -> None:
     page.get_by_test_id("style").click()
     expect(page.get_by_role("menuitemradio", name="Pleins feux")).to_be_visible()
     expect(page.get_by_role("menu")).to_contain_text("Seulement sur cet appareil.")
+
+
+# What no skin changes (R11, R23), and a skin from a folder on disk (A14).
+
+SKINS_SHIPPED = ["spotlight", "disco70", "mixtape80", "grunge90", "y2k"]
+LOGO = """() => { const l = document.querySelector('[data-testid="logo"]');
+  return [l.outerHTML, getComputedStyle(l).fontFamily, getComputedStyle(l).fontSize]; }"""
+DOUBTS = """() => [...document.querySelectorAll('.doubt, .lline.check .wt')].map(e => { const s = getComputedStyle(e);
+  return [e.textContent, s.textDecorationLine, s.textDecorationStyle]; })"""
+
+
+def with_skin(browser: Browser, folder: Path, skin: str | None, **context: Any) -> Page:
+    ctx = browser.new_context(locale="en-US", **context)
+    if skin:
+        ctx.add_init_script(f"localStorage.setItem('woodshed:skin', '{skin}')")
+    page = ctx.new_page()
+    page.goto((folder / "index.html").as_uri())
+    page.wait_for_function("window.Woodshed && window.Woodshed.ready === true")
+    page.evaluate("document.fonts.ready")
+    return page
+
+
+def test_the_logo_and_the_doubt_marks_are_the_same_in_every_skin(browser: Browser, pages_root: str) -> None:
+    folder = with_close_calls("pickup", True, pages_root)
+    base = with_skin(browser, folder, None)
+    logo, doubts = base.evaluate(LOGO), base.evaluate(DOUBTS)
+    assert doubts and all(line == "underline" and style == "dotted" for _, line, style in doubts)
+    for skin in SKINS_SHIPPED:
+        page = with_skin(browser, folder, skin)
+        assert page.evaluate(LOGO) == logo, skin
+        assert page.evaluate(DOUBTS) == doubts, skin  # said by their text and a dotted line, not by colour alone
+
+
+def test_a_skin_from_a_folder_on_disk_loads_its_fonts_and_pictures(browser: Browser, pages_root: str) -> None:
+    problems: list[str] = []
+    page = with_skin(browser, built("pop", True, pages_root), "mixtape80", viewport={"width": 1280, "height": 800})
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    assert page.url.startswith("file://")
+    assert page.evaluate("document.fonts.check('20px Audiowide') && document.fonts.check('20px VT323')")
+    assert page.evaluate("[...document.fonts].filter(f => f.status === 'loaded').map(f => f.family).join()").count(
+        "Audiowide"
+    )
+    pictures = page.evaluate(
+        """() => Promise.all([...document.querySelectorAll('.decor')].map(e => getComputedStyle(e).backgroundImage)
+          .flatMap(b => [...b.matchAll(/url\\("([^"]+)"\\)/g)].map(m => m[1]))
+          .map(src => new Promise(ok => { const i = new Image(); i.onload = () => ok([src, true]);
+            i.onerror = () => ok([src, false]); i.src = src; })))"""
+    )
+    assert len(pictures) >= 2 and all(loaded for _, loaded in pictures), pictures
+    assert problems == []

@@ -54,6 +54,11 @@ The rules the checks enforce, and the ones they can't:
 - **English** in code, comments, docs and messages. The page itself speaks English and French: a
   text it shows goes through `W.t("...")` with its French in `core/i18n-fr.js` (a test checks it),
   and the song's own text (title, chords, words) is marked `translate="no"`.
+- **The page draws with tokens only**: colours, fonts, radii and shadows come from the custom
+  properties at the top of `assets/app.css`, so every skin reaches a new feature without being
+  touched. A new need is a new token with a default derived from the others; `tests/test_skins.py`
+  and `tests/page/test_skin_sweeps.py` fail on a literal colour, radius or font. Making a skin:
+  [docs/skins.md](docs/skins.md).
 - **Audio quality is never traded for speed**: no mono, no lossy re-encoding, no truncated notes.
 - Python 3.10 to 3.14, typed (`mypy --strict`), formatted with `ruff`.
 

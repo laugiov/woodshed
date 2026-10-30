@@ -373,6 +373,28 @@ Song Name.woodshed/
 - Beside them, `page: {version, analysis}`: the woodshed version and analysis revision (`analysis.REVISION`) that wrote the page code, stamped by `build._page_html` at a build and at a refresh. The song's `meta.version` and `meta.analysis` say which woodshed found its chords and with which revision; `meta.analysis` is optional (pages analysed before it existed lack it, and a refresh takes it from the manifest's `settings.analysis`). The page footer compares the two: same, still current, older analysis (add the song again), or just the versions when a revision is unknown.
 - The model in `src/woodshed/model.py` is plain data with no audio library, so exporters and the songbook do not load librosa.
 
+### Skins
+
+A skin changes the look of every page, never its layout or its behaviour (`docs/skins.md` for making one).
+
+- **Tokens.** The page draws with custom properties only: the colours, fonts, radii, shadows and a few
+  display tokens at the top of `assets/app.css` (`:root`, and `:root[data-theme="dark"]`). Every radius is a
+  multiple of `--radius` or `--radius-sm`, every shadow and scrim `rgb(var(--shadow-color) / a)`.
+  `tests/test_skins.py` fails on a literal colour, radius or font in the stylesheet, the scripts or the markup;
+  `tests/page/test_skin_sweeps.py` renders the pages under two palettes of sentinel colours (a colour that does
+  not change comes from no token) and measures every text against the pixels behind it, in every skin and theme.
+- **A skin** is `assets/skins/<id>/skin.css` (and its SVG images): tokens under `:root[data-skin="<id>"]` and
+  `[...][data-theme="dark"]`, and drawings in decor slots, nothing else (the test reads it). Fonts live once in
+  `assets/skins/_fonts/`, pinned. `skins/skins.css` imports each skin for the screen only (`@import … screen`),
+  so paper always gets the base; `skins/skins.js` lists them for the style menu, and the slots.
+- **Decor slots** are empty `<span class="decor" data-slot="…">` elements (`page`, `library-head`, `set-head`,
+  `welcome`, `song-head`, `player`), hidden by the base, never shown on stage, on paper or where a phone has no
+  room. `views/decor.js` writes `data-playing` and `data-stage` on `<html>` and the set's and song's names on the
+  slots, for a skin's `attr()`.
+- **The choice** is per device: `core/prefs.js` reads `woodshed:skin` in `<head>` and sets `data-skin` before the
+  page is drawn, and builds the style menu (keyboard, touch, the page's shortcuts held while it is open). The
+  swatches read each skin's colours through its probe selector (`[data-skin-probe="<id>"]`).
+
 ### Page revision
 
 `page_revision()` hashes every shipped file under `page/` (names and bytes) and keeps 16 hex characters. It goes into the manifest. If the page code changes, even without a version bump (an update from git), the page gets the new code without a new analysis: `refresh_code` writes `index.html` again from the data it carries and replaces `assets/`, and `woodshed app` does it for every page when it starts. Only data of another format (`SCHEMA_VERSION`, `VIEW_VERSION`, pinned by a test against the schemas) needs a rebuild. An optional field that no reader requires (such as `meta.analysis`, or `parts.vocal.regions`) may be added without a version bump: the test's hash is updated with the reason, since the schema is not a frozen external contract.
@@ -546,6 +568,16 @@ flowchart LR
 - Uploads are limited to 2 GB and need free disk space for the tracks.
 - The **set list** is `setlist.json` in the library: the order the band plays songs in. The home page shows each song's key (the band's key when there is one), tempo and length, the total, and the leader's note; `@media print` prints the set alone. A note is written from the set list, so it is the set's: `set_setlist` clears the note of every song that leaves the set (under the library's lock, a new revision pushed to the open pages), `set_band` keeps no note for a song out of the set (the same lock, so a note saved while its song leaves the set does not stay), and the start clears notes left on songs out of the set by 0.4.0 (`clear_notes_out_of_the_set`, called by `serve` once it holds the port, next to `clear_cut_uploads`: a second start refused as "already running" touches nothing). Only a missing `setlist.json` is an empty set: one that cannot be read or parsed clears nothing, and a library on a read-only disk starts with a line on stderr.
 - Started again while it runs: the port is taken, and if woodshed answers there (`running_here`, a GET of `/api/token` that never goes through a proxy), `serve` opens the browser on the running one and returns, touching nothing in the library. The uploads cut short by a stop are cleared only once this app holds the port (`Library.clear_cut_uploads`): the running one may be receiving one.
+
+### The set list and its name
+
+`setlist.json` in the library holds the set's songs and, optionally, its name (`{"title": …, "songs": […]}`; keys
+woodshed does not know are kept). `POST /api/setlist` saves either or both; a name is normalised the same way in
+Python and on the page (`app.normalise_set_title`, `W.setName.normalise`, shared cases in
+`tests/set_name_cases.json`). Writes take a hidden lock file (`.setlist.json.lock`) as well as the process lock.
+The polled `/api/songs` carries `set: {rev, title}`, `rev` a fingerprint of the file read again only when its
+time or size changed, so a library sees a name given on another device, by another woodshed or by hand within
+a poll; a name being typed is never overwritten.
 
 ### Security model
 
