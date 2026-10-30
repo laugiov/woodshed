@@ -10,6 +10,8 @@ from playwright.sync_api import Browser, Page, expect
 
 from tests.page.conftest import built
 
+NBSP = chr(0xA0)  # French typography: before ":"
+
 # A skin that draws every slot and turns every part of it: what the base does with any skin.
 FIXTURE = """
 :root[data-skin="t"] .decor { display: block; width: 40px; height: 40px; background: var(--accent); }
@@ -103,3 +105,121 @@ def test_the_slots_carry_the_names_a_skin_may_print(browser: Browser, pages_root
     expect(player).to_have_attribute("data-set-title", "Les Imprévus")
     page.evaluate("Woodshed.app.store.set({ setName: '' })")
     assert player.get_attribute("data-set-title") is None  # absent, not empty: a skin draws nothing
+
+
+# Choosing a skin (R17 to R20): per device, before the page is drawn, from a menu beside the theme button.
+
+
+def pick(page: Page, name: str) -> None:
+    page.get_by_test_id("style").click()
+    page.get_by_role("menuitemradio", name=name).click()
+
+
+def test_a_skin_is_chosen_kept_and_shown_before_the_next_page_is_drawn(browser: Browser, pages_root: str) -> None:
+    problems: list[str] = []
+    page = song_page(browser, pages_root)
+    page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
+    redraws = page.evaluate_handle(
+        "() => { const n = { count: 0 }; addEventListener('woodshed:theme', () => n.count++); return n; }"
+    )
+    style = page.get_by_test_id("style")
+    expect(style).to_have_attribute("aria-label", "Style: woodshed")
+    pick(page, "Spotlight")
+    expect(page.locator("html")).to_have_attribute("data-skin", "spotlight")
+    assert redraws.evaluate("n => n.count") == 1  # the waveform draws itself in the skin's colours
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(0, 0, 0)"  # dark by default
+    expect(style).to_have_attribute("aria-label", "Style: Spotlight")
+    page.add_init_script(
+        "document.addEventListener('DOMContentLoaded',"
+        " () => { window.skinAtLoad = document.documentElement.dataset.skin; });"
+    )
+    page.reload()
+    assert page.evaluate("window.skinAtLoad") == "spotlight"  # set in <head>: no frame of the base
+    pick(page, "woodshed")
+    expect(page.locator("html")).not_to_have_attribute("data-skin", "spotlight")
+    assert page.evaluate("document.documentElement.hasAttribute('data-skin')") is False
+    assert problems == []
+
+
+def test_a_skin_that_is_gone_gives_the_base(browser: Browser, pages_root: str) -> None:
+    context = browser.new_context(locale="en-US")
+    context.add_init_script("localStorage.setItem('woodshed:skin', 'gone-since')")
+    page = context.new_page()
+    page.goto((built("pop", True, pages_root) / "index.html").as_uri())
+    page.wait_for_function("window.Woodshed && window.Woodshed.ready === true")
+    assert page.evaluate("document.documentElement.hasAttribute('data-skin')") is False
+    expect(page.get_by_test_id("style")).to_have_attribute("aria-label", "Style: woodshed")
+
+
+def test_paper_never_sees_a_skin(browser: Browser, pages_root: str) -> None:
+    page = song_page(browser, pages_root)
+    pick(page, "Spotlight")  # black, in the dark theme
+    page.emulate_media(media="print")
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+    assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()") == "#0c7a68"
+
+
+def test_the_style_menu_by_keyboard_and_the_app_s_keys_wait(browser: Browser, pages_root: str) -> None:
+    page = song_page(browser, pages_root)
+    page.get_by_test_id("style").focus()
+    page.keyboard.press("Enter")
+    menu = page.get_by_role("menu", name="Style")
+    expect(menu).to_be_visible()
+    items = menu.get_by_role("menuitemradio")
+    expect(items.first).to_be_focused()  # the current skin
+    expect(items.first).to_have_attribute("aria-checked", "true")
+    page.keyboard.press("ArrowDown")
+    expect(items.nth(1)).to_be_focused()
+    page.keyboard.press("ArrowUp")
+    page.keyboard.press("ArrowUp")  # round to the last
+    expect(items.last).to_be_focused()
+    for key in ("s", "l", "n", "2"):  # stage, loop, next song, step 2: none while the menu is open
+        page.keyboard.press(key)
+    assert page.evaluate("Woodshed.app.store.get().stage") is False
+    assert page.evaluate("Woodshed.app.store.get().loopOn") is False
+    expect(menu).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    expect(page.get_by_test_id("style")).to_be_focused()  # the keyboard keeps its place
+    page.keyboard.press("Enter")
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("Enter")
+    expect(page.locator("html")).to_have_attribute("data-skin", "spotlight")
+    expect(menu).to_be_hidden()
+
+
+def test_a_pointer_pick_leaves_no_focus_behind(browser: Browser, pages_root: str) -> None:
+    page = song_page(browser, pages_root)
+    pick(page, "Spotlight")
+    assert page.evaluate("document.activeElement === document.body")  # a pedal's Space plays the song
+    page.get_by_test_id("style").click()
+    page.mouse.click(5, 400)  # outside: closed, nothing chosen
+    expect(page.get_by_role("menu")).to_be_hidden()
+    expect(page.locator("html")).to_have_attribute("data-skin", "spotlight")
+
+
+@pytest.mark.parametrize(("width", "height"), [(390, 844), (640, 360)])
+def test_the_style_menu_on_a_phone(browser: Browser, pages_root: str, width: int, height: int) -> None:
+    page = song_page(browser, pages_root, viewport={"width": width, "height": height}, has_touch=True, is_mobile=True)
+    page.get_by_test_id("style").tap()
+    menu = page.get_by_role("menu", name="Style")
+    expect(menu).to_be_visible()
+    for item in menu.get_by_role("menuitemradio").all():
+        box = item.bounding_box()
+        assert box is not None and box["height"] >= 44
+    style = page.get_by_test_id("style").bounding_box()
+    assert style is not None and style["width"] >= 44 and style["height"] >= 44
+    assert menu.evaluate("m => m.scrollHeight <= m.clientHeight || getComputedStyle(m).overflowY === 'auto'")
+    assert menu.evaluate("m => m.getBoundingClientRect().bottom <= innerHeight")
+    if width <= 600:
+        page.get_by_role("button", name="Close").tap()
+        expect(menu).to_be_hidden()
+
+
+def test_the_style_menu_in_french(browser: Browser, pages_root: str) -> None:
+    page = song_page(browser, pages_root)
+    page.get_by_test_id("lang-fr").click()
+    expect(page.get_by_test_id("style")).to_have_attribute("aria-label", "Style" + NBSP + ": woodshed")
+    page.get_by_test_id("style").click()
+    expect(page.get_by_role("menuitemradio", name="Pleins feux")).to_be_visible()
+    expect(page.get_by_role("menu")).to_contain_text("Seulement sur cet appareil.")

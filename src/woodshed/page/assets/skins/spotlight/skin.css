@@ -1,0 +1,16 @@
+/* Spotlight: the most contrast woodshed can give. Light for sunlight (an outdoor gig), dark for a dark stage: every
+   text pair 7:1 (WCAG AAA), the accent 4.5:1. No decor, no texture, no motion; the base's fonts, the most legible. */
+:root[data-skin="spotlight"], [data-skin-probe="spotlight"] {
+  --bg: #ffffff; --panel: #ffffff; --sheet: #ffffff; --dock: #ffffff;
+  --ink: #000000; --muted: #333333; --line: #6b6b6b;
+  --accent: #0038a8; --accent-soft: #dce6ff; --accent-ink: #ffffff;
+  --warn: #7a2e00; --warn-soft: #ffe6d1; --wave: #8c8c8c;
+  --shadow-panel: 0 0 0 1px #000000;
+}
+:root[data-skin="spotlight"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="spotlight"] {
+  --bg: #000000; --panel: #000000; --sheet: #0a0a0a; --dock: #000000;
+  --ink: #ffffff; --muted: #d6d6d6; --line: #7a7a7a;
+  --accent: #ffd400; --accent-soft: #3d3300; --accent-ink: #000000;
+  --warn: #5cc8ff; --warn-soft: #08283a; --wave: #6e6e6e;
+  --shadow-panel: 0 0 0 1px #ffffff;
+}

@@ -7,6 +7,12 @@
     // Choices kept in the browser (core/prefs.js)
     "Switch to the dark theme": "Passer au thème sombre",
     "Switch to the light theme": "Passer au thème clair",
+    "Style": "Style",
+    "Style: {skin}": "Style : {skin}",
+    "Only on this device. Light or dark: the button beside it.": "Seulement sur cet appareil. Clair ou sombre : le bouton à côté.",
+    "The practice room": "La salle de répétition",
+    "Spotlight": "Pleins feux",
+    "Most contrast: sunlight or a dark stage": "Contraste maximal : plein soleil ou scène noire",
     Language: "Langue",
 
     // The song page (body.html)

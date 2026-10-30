@@ -212,7 +212,7 @@ a.tag.add:hover { border-style: solid; background: var(--sheet); }
 .pending { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft); color: var(--ink); font-size: 15px; }
 
 /* Layout: the chart is the music stand (hero, left); the instrument desk sits on the right; the player is pinned to the bottom like any audio app. */
-:root {
+:root, [data-skin-probe="woodshed"] {
   --bg: #e6eae7;
   --panel: #f7f9f6;
   --sheet: #fdfefc;
@@ -249,7 +249,7 @@ a.tag.add:hover { border-style: solid; background: var(--sheet); }
     --wave: #3d5049; --dock: #121815; color-scheme: dark;
   }
 }
-:root[data-theme="dark"] {
+:root[data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="woodshed"] {
   --bg: #0d1210; --panel: #151b18; --sheet: #19201d; --ink: #e5ebe7; --muted: #94a19a; --line: #2a342f;
   --accent: #3cc4a9; --accent-soft: #15372f; --accent-ink: #0a1210; --warn: #f0a546; --warn-soft: #3a2a14;
   --wave: #3d5049; --dock: #121815; color-scheme: dark;
@@ -293,6 +293,34 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 3
 /* The viewer's choices, top right of the page; the logo row is as tall, so the title never runs under them. */
 .prefs { position: absolute; top: 0; right: 0; display: inline-flex; gap: 6px; }
 .btn.icon { padding: 4px 9px; font-size: 15px; line-height: 1.2; }
+/* The style menu (spec 030): the skins, each with a swatch read from the skin itself through its probe. */
+.style-btn .dots { display: inline-grid; grid-template-columns: repeat(2, 7px); gap: 2px; }
+.style-btn .dots i, .swatch i { display: block; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); }
+.style-btn .dots i { width: 7px; height: 7px; border-radius: calc(var(--radius-sm) * .25); }
+.dots i:nth-child(1), .swatch i:nth-child(1) { background: var(--bg); }
+.dots i:nth-child(2), .swatch i:nth-child(2) { background: var(--panel); }
+.dots i:nth-child(3), .swatch i:nth-child(3) { background: var(--accent); }
+.dots i:nth-child(4), .swatch i:nth-child(4) { background: var(--ink); }
+.prefs { z-index: 30; }
+.style-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 31; width: 300px; max-height: calc(100dvh - 80px); overflow: auto; padding: 6px; display: grid; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 14px 40px rgb(var(--shadow-color) / 0.28); }
+.style-menu .menu-h { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 4px 10px; min-height: 30px; }
+.style-menu .menu-close { display: none; }
+.style-item { display: grid; grid-template-columns: 54px minmax(0, 1fr) 18px; gap: 12px; align-items: center; min-height: 52px; padding: 8px 10px; border: 1px solid transparent; border-radius: calc(var(--radius) * .7); background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.style-item:hover { background: var(--sheet); }
+.style-item[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.style-item b { display: block; font-size: 15px; }
+.style-item small { display: block; font-size: 12.5px; color: var(--muted); }
+.style-item .tick { color: var(--accent); font-weight: 700; }
+.swatch { display: grid; grid-template-columns: 1fr 1fr; width: 54px; height: 36px; overflow: hidden; border: 1px solid var(--line); border-radius: calc(var(--radius-sm) * .75); }
+.swatch i { border: 0; }
+.style-menu .menu-foot { margin: 4px 0 0; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.style-scrim { display: none; }
+@media (max-width: 600px) {
+  /* A phone: a sheet at the bottom, over a scrim, with its own close button. */
+  .style-scrim { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(var(--shadow-color) / 0.45); }
+  .style-menu { position: fixed; top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: calc(100dvh - 16px); }
+  .style-menu .menu-close { display: inline-flex; min-width: 44px; min-height: 44px; justify-content: center; }
+}
 /* A finger needs 44 px: the theme and language buttons on a touch screen. */
 @media (pointer: coarse) {
   .btn.icon, .seg-ctl.lang button { min-height: 44px; min-width: 44px; }
@@ -895,7 +923,12 @@ body.following #playBtn { opacity: 0.45; }
 
 /* Touch screens: the language and theme buttons are 44 px, so the brand row keeps room for them
    (after the .brandrow rule above, which it overrides). */
-@media (pointer: coarse) { .brandrow { min-height: 46px; padding-right: 160px; } }
+@media (pointer: coarse) { .brandrow { min-height: 46px; padding-right: 214px; } }
+/* A narrow phone: the four controls take their own row above the logo. */
+@media (pointer: coarse) and (max-width: 380px) {
+  .brandrow { padding-right: 0; flex-wrap: wrap; }
+  .prefs { position: static; order: -1; width: 100%; justify-content: flex-end; margin-bottom: 6px; }
+}
 
 /* Editing the chart (views/editor.js): the strip, the bars as editors, the bar editor. */
 .edit-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel)); font-size: 14px; }

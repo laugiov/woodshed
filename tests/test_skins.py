@@ -383,3 +383,79 @@ def test_every_decor_slot_of_the_pages_is_listed_once() -> None:
     home = (ASSETS / "js" / "home" / "home.js").read_text(encoding="utf-8")
     in_markup += re.findall(r'decorSlot\("([a-z-]+)"\)', home)
     assert set(in_markup) == set(SLOTS) and len(set(SLOTS)) == len(SLOTS)
+
+
+# The skins woodshed ships (A4 to A6, R25, R26).
+
+
+def registry() -> list[dict[str, str]]:
+    text = (SKINS / "skins.js").read_text(encoding="utf-8")
+    return [
+        {"id": i, "name": n, "description": d}
+        for i, n, d in re.findall(r'\{ id: "([a-z0-9]+)", name: "([^"]+)", description: "([^"]+)" \}', text)
+    ]
+
+
+SHIPPED = sorted(p.parent.name for p in SKINS.glob("*/skin.css") if not p.parent.name.startswith("_"))
+
+
+def test_the_registry_the_folders_and_the_imports_agree() -> None:
+    ids = [s["id"] for s in registry()]
+    assert ids[0] == "woodshed" and len(set(ids)) == len(ids)  # the base first, each once
+    assert sorted(ids[1:]) == SHIPPED
+    imports = re.findall(r'@import url\("([a-z0-9]+)/skin\.css"\) screen;', (SKINS / "skins.css").read_text("utf-8"))
+    assert sorted(imports) == SHIPPED  # each for the screen only: paper never sees a skin
+
+
+@pytest.mark.parametrize("skin", SHIPPED)
+def test_a_shipped_skin_keeps_the_contract(skin: str) -> None:
+    assert skin_problems(skin, (SKINS / skin / "skin.css").read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize("skin", SHIPPED)
+def test_a_shipped_skin_is_legible_and_its_colours_keep_their_meaning(skin: str) -> None:
+    tokens = skin_tokens((SKINS / skin / "skin.css").read_text(encoding="utf-8"), skin)
+    base = base_tokens()
+    assert {t: palette_problems(skin, tokens[t], base[t]) for t in ("light", "dark")} == {"light": [], "dark": []}
+
+
+def test_every_skin_says_its_name_in_french() -> None:
+    french = (ASSETS / "js" / "core" / "i18n-fr.js").read_text(encoding="utf-8")
+    said = [s[k] for s in registry() for k in ("name", "description") if s["id"] != "woodshed" or k == "description"]
+    assert [t for t in said if f'"{t}":' not in french] == []
+
+
+FONT_LICENCES = ("OFL", "Apache License")
+
+
+def test_every_skin_font_is_licensed_and_pinned() -> None:
+    pinned = (Path(__file__).parents[1] / "scripts" / "vendored.sha256").read_text(encoding="utf-8")
+    fonts = sorted((SKINS / "_fonts").glob("*.woff2"))
+    for font in fonts:
+        licence = SKINS / "_fonts" / f"LICENSE-{font.stem}.txt"
+        assert licence.is_file(), font.name
+        assert any(word in licence.read_text(encoding="utf-8") for word in FONT_LICENCES), licence.name
+        assert f"src/woodshed/page/assets/skins/_fonts/{font.name}" in pinned
+    used = set()
+    for css in SKINS.glob("*/skin.css"):
+        used |= set(re.findall(r'url\("\.\./_fonts/([^"]+)"\)', css.read_text(encoding="utf-8")))
+    assert used == {f.name for f in fonts}  # no font shipped for nothing, none missing
+
+
+def test_the_skins_stay_light() -> None:
+    """Every page folder carries a copy (R26)."""
+    size = lambda folder: sum(p.stat().st_size for p in folder.rglob("*") if p.is_file())  # noqa: E731
+    for folder in SKINS.iterdir():
+        if folder.is_dir() and folder.name != "_fonts":
+            assert size(folder) <= 60 * 1024, folder.name
+    if (SKINS / "_fonts").is_dir():
+        assert size(SKINS / "_fonts") <= 200 * 1024
+    assert size(SKINS) <= 450 * 1024
+
+
+def test_every_page_loads_the_skins() -> None:
+    for name, prefix in (("template.html", "assets/"), ("home.html", "/app/assets/")):
+        text = (PAGE / name).read_text(encoding="utf-8")
+        app_css = text.index(f'href="{prefix}app.css"')
+        assert text.index(f'href="{prefix}skins/skins.css"') > app_css  # after the base: a skin's tokens win
+        assert text.index(f'src="{prefix}skins/skins.js"') < text.index(f'src="{prefix}js/core/prefs.js"')
