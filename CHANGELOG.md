@@ -10,6 +10,8 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-30
+
 ### Added
 
 - Six looks for the whole app, chosen from the new **Style** button next to the theme button, on each
@@ -259,7 +261,8 @@ corrections and set list stay where they are.
   print for the music stand. A song's folder can be zipped and sent: it opens offline.
 - English or French, dark or light.
 
-[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/laugiov/woodshed/releases/tag/v0.7.0
 [0.6.0]: https://github.com/laugiov/woodshed/releases/tag/v0.6.0
 [0.5.1]: https://github.com/laugiov/woodshed/releases/tag/v0.5.1
 [0.5.0]: https://github.com/laugiov/woodshed/releases/tag/v0.5.0
