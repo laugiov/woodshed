@@ -315,6 +315,10 @@ def skin_problems(skin: str, css: str) -> list[str]:
                 elif any(p.startswith("--") for p, _ in decls):
                     problems.append(f"{one}: tokens are set on the skin's scope, not on a slot")
     for theme, values in themes.items():
+        for name in ("radius", "radius-sm"):  # every other radius is a multiple: 999px would make arcs of rows
+            got = values.get(name)
+            if got is not None and not (re.fullmatch(r"\d+px", got) and int(got[:-2]) <= 24):
+                problems.append(f"{theme}: --{name} is a length of 24px at most ({got})")
         for name in COLOUR_TOKENS:
             got = values.get(name)
             if got is None:
@@ -361,6 +365,7 @@ def test_a_skin_that_keeps_the_contract_passes() -> None:
         (GOOD + ':root[data-skin="other"] .decor[data-slot="page"] { display: block; }', "outside the skin"),
         (GOOD + ':root[data-skin="t"] .decor[data-slot="nowhere"] { display: block; }', "no such decor slot"),
         (GOOD + ':root[data-skin="t"] { color: red; }', "only tokens here"),
+        (GOOD + ':root[data-skin="t"] { --radius-sm: 999px; }', "24px at most"),
     ],
 )
 def test_a_skin_that_breaks_the_contract_is_told_why(broken: str, said: str) -> None:

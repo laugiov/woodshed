@@ -1,0 +1,56 @@
+/* Disco 70: mirror balls, 45s, sunset stripes. Tokens for light and dark, then the decor slots. */
+@font-face { font-family: "Righteous"; font-display: block; src: url("../_fonts/Righteous.woff2") format("woff2"); }
+
+:root[data-skin="disco70"], [data-skin-probe="disco70"] {
+  --bg: #f3e6c4; --panel: #fbf3dc; --sheet: #fffaea; --dock: #f6ebcf;
+  --ink: #2b1a0e; --muted: #67492f; --line: #e0cc9e;
+  --accent: #a8420a; --accent-soft: #f6d9bf; --accent-ink: #ffffff;
+  --warn: #1d5f6e; --warn-soft: #d4e8ea; --wave: #baa071;
+  --dock-image: linear-gradient(#e8a13a 0 3px, #d9762b 3px 6px, #a8420a 6px 9px, #6e3417 9px 12px, transparent 12px);
+  --radius: 16px; --radius-sm: 16px;
+  --shadow-panel: 0 2px 0 #e0cc9e;
+  --display-scale: .9;
+  --font-display: "Righteous", var(--font-chord);
+}
+:root[data-skin="disco70"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="disco70"] {
+  --bg: #1a120b; --panel: #231811; --sheet: #2a1d14; --dock: #1e150e;
+  --ink: #f8ead2; --muted: #c4a988; --line: #4a3423;
+  --accent: #ff9f1c; --accent-soft: #4a2a0c; --accent-ink: #1a0f02;
+  --warn: #5fd0c8; --warn-soft: #12332f; --wave: #6b4a2c;
+  --dock-image: linear-gradient(#e8a13a 0 3px, #d9762b 3px 6px, #b5470b 6px 9px, #6e3417 9px 12px, transparent 12px);
+  --shadow-panel: 0 0 0 1px #4a3423;
+}
+
+/* The page: a setting sun in the bottom-left corner, away from every control (the slot is turned half a turn). */
+:root[data-skin="disco70"] .decor[data-slot="page"] { display: block; background: url("sunset.svg") right top / 460px no-repeat; opacity: .5; transform: rotate(180deg); }
+:root[data-skin="disco70"][data-theme="dark"] .decor[data-slot="page"] { opacity: .3; }
+@media (max-width: 900px), (max-height: 600px) { :root[data-skin="disco70"] .decor[data-slot="page"] { background-size: 200px; } }
+/* The library: a mirror ball hanging beside the title. */
+:root[data-skin="disco70"] .decor[data-slot="library-head"] {
+  display: block; position: relative; width: 50px; height: 50px; flex: none; margin-top: -10px; background: url("ball.svg") center / contain no-repeat;
+}
+:root[data-skin="disco70"] .decor[data-slot="library-head"]::before {
+  content: ""; position: absolute; left: 24px; bottom: 100%; width: 2px; height: 22px; background: var(--muted);
+}
+/* The set: a 45 beside its name. */
+:root[data-skin="disco70"] .decor[data-slot="set-head"] { display: block; width: 32px; height: 32px; flex: none; background: url("single.svg") center / contain no-repeat; }
+/* The song: three racing stripes under the title. */
+:root[data-skin="disco70"] .decor[data-slot="song-head"] {
+  display: block; width: 190px; height: 12px; margin: 6px 0 2px; border-radius: 999px;
+  background: linear-gradient(#e8a13a 0 33%, #d9762b 33% 66%, #a8420a 66%);
+}
+/* The player: the mirror ball turning while it plays, its sparkles blinking. */
+:root[data-skin="disco70"] .decor[data-slot="player"] {
+  display: block; position: relative; width: 52px; height: 52px; flex: none;
+}
+:root[data-skin="disco70"] .decor[data-slot="player"] i:first-child {
+  position: absolute; inset: 0; background: url("ball.svg") center / contain no-repeat;
+}
+:root[data-skin="disco70"] .decor[data-slot="player"] i:last-child {
+  position: absolute; right: -4px; top: -2px; width: 12px; height: 12px; opacity: 0;
+  background: radial-gradient(circle, #fff 0 1.5px, transparent 2px), linear-gradient(transparent 45%, #fff 45% 55%, transparent 55%), linear-gradient(90deg, transparent 45%, #fff 45% 55%, transparent 55%);
+}
+:root[data-skin="disco70"][data-playing] .decor[data-slot="player"] i:first-child { animation: d70-turn 4s linear infinite; }
+:root[data-skin="disco70"][data-playing] .decor[data-slot="player"] i:last-child { animation: d70-spark 1.2s ease-in-out infinite; }
+@keyframes d70-turn { to { transform: rotate(360deg); } }
+@keyframes d70-spark { 50% { opacity: 1; } }

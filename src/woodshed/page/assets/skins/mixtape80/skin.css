@@ -1,0 +1,65 @@
+/* Mixtape 80: cassettes, vinyl, neon. Tokens for light and dark, then the decor slots. */
+@font-face { font-family: "Audiowide"; font-display: block; src: url("../_fonts/Audiowide.woff2") format("woff2"); }
+@font-face { font-family: "VT323"; font-display: block; src: url("../_fonts/VT323.woff2") format("woff2"); }
+@font-face { font-family: "Permanent Marker"; font-display: block; src: url("../_fonts/PermanentMarker.woff2") format("woff2"); }
+
+:root[data-skin="mixtape80"], [data-skin-probe="mixtape80"] {
+  --bg: #efe5cf; --panel: #faf4e4; --sheet: #fffaf0; --dock: #f6eedb;
+  --ink: #241a14; --muted: #67554a; --line: #dccdb0;
+  --accent: #b8235f; --accent-soft: #f5d7e2; --accent-ink: #ffffff;
+  --warn: #2a5d9c; --warn-soft: #dde6f3; --wave: #b3a28a;
+  --dock-image: linear-gradient(#f08a24 0 3px, #f6c033 3px 6px, #b8235f 6px 9px, transparent 9px);
+  --radius: 6px; --radius-sm: 4px;
+  --shadow-panel: 4px 4px 0 #dccdb0;
+  --display-scale: .8;
+  --font-display: "Audiowide", var(--font-chord);
+  --digits: "VT323", var(--font-mono); --digits-scale: 1.3;
+}
+:root[data-skin="mixtape80"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="mixtape80"] {
+  --bg: #120d1c; --panel: #1a1428; --sheet: #1f1830; --dock: #150f21;
+  --ink: #f3ecfa; --muted: #ad9fc2; --line: #362a4e;
+  --accent: #ff5fae; --accent-soft: #42173a; --accent-ink: #1a0712;
+  --warn: #ffb547; --warn-soft: #3b2a12; --wave: #564871;
+  --dock-image: linear-gradient(#ff8a3d 0 3px, #ffd23f 3px 6px, #ff5fae 6px 9px, transparent 9px);
+  --shadow-panel: 0 0 0 1px #362a4e, 0 10px 30px -12px rgba(255, 95, 174, .45);
+}
+
+/* The page: Memphis confetti, behind everything. */
+:root[data-skin="mixtape80"] .decor[data-slot="page"] { display: block; background: url("memphis.svg"); }
+:root[data-skin="mixtape80"][data-theme="dark"] .decor[data-slot="page"] { background: url("memphis-dark.svg"); }
+/* The library: a record beside the title. */
+:root[data-skin="mixtape80"] .decor[data-slot="library-head"] {
+  display: block; width: 52px; height: 52px; flex: none; background: url("vinyl.svg") center / contain no-repeat;
+}
+/* The set: a tape beside its name. */
+:root[data-skin="mixtape80"] .decor[data-slot="set-head"] {
+  display: block; width: 40px; height: 26px; flex: none;
+  background: url("cassette.svg") center / contain no-repeat;
+}
+/* The song: the label's stripes under the title. */
+:root[data-skin="mixtape80"] .decor[data-slot="song-head"] {
+  display: block; width: 168px; height: 10px; margin: 6px 0 2px;
+  background: linear-gradient(to bottom, #f08a24 0 25%, #f6c033 25% 50%, var(--accent) 50% 75%, #2b9fa8 75%);
+  border-radius: 2px;
+}
+:root[data-skin="mixtape80"][data-theme="dark"] .decor[data-slot="song-head"] {
+  background: linear-gradient(to bottom, #ff8a3d 0 25%, #ffd23f 25% 50%, #ff5fae 50% 75%, #3de0e8 75%);
+  box-shadow: 0 0 14px rgba(255, 95, 174, .5);
+}
+/* The player: the tape itself, the set's name on its label (decoration, not information), the reels turning while it plays. */
+:root[data-skin="mixtape80"] .decor[data-slot="player"] {
+  display: block; position: relative; width: 92px; height: 59px; flex: none;
+  background: url("cassette.svg") center / contain no-repeat;
+}
+:root[data-skin="mixtape80"] .decor[data-slot="player"][data-set-title]::before {
+  content: attr(data-set-title); position: absolute; left: 10px; right: 8px; top: 6px;
+  font: 9.5px/1.1 "Permanent Marker", cursive; color: #1d3f8f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transform: rotate(-2deg);
+}
+:root[data-skin="mixtape80"] .decor[data-slot="player"] i {
+  position: absolute; top: 18px; width: 12px; height: 12px; background: url("reel.svg") center / contain no-repeat;
+}
+:root[data-skin="mixtape80"] .decor[data-slot="player"] i:first-child { left: 24px; }
+:root[data-skin="mixtape80"] .decor[data-slot="player"] i:last-child { left: 56px; }
+:root[data-skin="mixtape80"][data-playing] .decor[data-slot="player"] i { animation: m80-reel 1.6s linear infinite; }
+@keyframes m80-reel { to { transform: rotate(-360deg); } }

@@ -1,3 +1,7 @@
 /* The skins (spec 030, docs/skins.md): for the screen only, so paper is always the base's black on white. One line a
    skin; the pages load this file after app.css and never change when a skin is added. */
 @import url("spotlight/skin.css") screen;
+@import url("disco70/skin.css") screen;
+@import url("mixtape80/skin.css") screen;
+@import url("grunge90/skin.css") screen;
+@import url("y2k/skin.css") screen;

@@ -1,0 +1,59 @@
+/* Grunge 90: CDs, flannel, photocopies. Tokens for light and dark, then the decor slots. */
+@font-face { font-family: "Special Elite"; font-display: block; src: url("../_fonts/SpecialElite.woff2") format("woff2"); }
+@font-face { font-family: "Permanent Marker"; font-display: block; src: url("../_fonts/PermanentMarker.woff2") format("woff2"); }
+
+:root[data-skin="grunge90"], [data-skin-probe="grunge90"] {
+  --bg: #e2dccf; --panel: #efeadf; --sheet: #f7f4ec; --dock: #ebe5d8;
+  --ink: #1c1a17; --muted: #57514a; --line: #c4baa8;
+  --accent: #a0261d; --accent-soft: #efd3cc; --accent-ink: #ffffff;
+  --warn: #2f5f8a; --warn-soft: #dbe3ee; --wave: #a79d8c;
+  --dock-image: repeating-linear-gradient(90deg, rgba(0,0,0,.35) 0 6px, transparent 6px 14px, rgba(0,0,0,.2) 14px 16px, transparent 16px 28px), linear-gradient(#8f1f17 0 2px, #a0261d 2px 4px, #1c1a17 4px 6px, #a0261d 6px 8px);
+  --dock-image-size: 100% 8px;
+  --radius: 3px; --radius-sm: 2px;
+  --display-scale: .92;
+  --font-display: "Special Elite", var(--font-chord);
+}
+:root[data-skin="grunge90"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="grunge90"] {
+  --bg: #121210; --panel: #1a1a17; --sheet: #20201c; --dock: #161613;
+  --ink: #e9e5da; --muted: #a39d8f; --line: #36342d;
+  --accent: #e0564a; --accent-soft: #3a1714; --accent-ink: #160605;
+  --warn: #e8b04a; --warn-soft: #3a2a14; --wave: #505044;
+  --dock-image: repeating-linear-gradient(90deg, rgba(0,0,0,.35) 0 6px, transparent 6px 14px, rgba(0,0,0,.2) 14px 16px, transparent 16px 28px), linear-gradient(#b23a2e 0 2px, #c4453a 2px 4px, #1c1a17 4px 6px, #c4453a 6px 8px);
+}
+
+/* The page: photocopy grain and a coffee ring, behind everything. */
+:root[data-skin="grunge90"] .decor[data-slot="page"] {
+  display: block; background: url("noise.svg"), url("stain.svg") right -140px top -120px / 520px no-repeat;
+}
+:root[data-skin="grunge90"][data-theme="dark"] .decor[data-slot="page"] {
+  background: url("noise-light.svg"), url("stain-dark.svg") right -140px top -120px / 520px no-repeat;
+}
+/* The library: the set's name on a strip of masking tape (only when the set has one). */
+:root[data-skin="grunge90"] .decor[data-slot="library-head"][data-set-title] {
+  display: block; flex: none; position: relative; max-width: min(420px, 100%); padding: 6px 18px 5px; transform: rotate(-3deg); margin-top: 4px;
+  background: rgba(226, 211, 160, .92);
+  clip-path: polygon(0 8%, 4% 0, 9% 10%, 15% 2%, 22% 9%, 30% 1%, 38% 8%, 47% 0, 55% 9%, 63% 2%, 71% 10%, 79% 1%, 87% 9%, 94% 0, 100% 8%, 99% 92%, 95% 100%, 88% 91%, 80% 99%, 72% 90%, 64% 100%, 56% 91%, 47% 99%, 39% 90%, 31% 100%, 23% 92%, 15% 100%, 8% 91%, 2% 99%);
+}
+:root[data-skin="grunge90"] .decor[data-slot="library-head"][data-set-title]::before {
+  content: attr(data-set-title); display: block; font: 19px/1.2 "Permanent Marker", cursive; color: #1c1a17;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The set: a CD beside its name. */
+:root[data-skin="grunge90"] .decor[data-slot="set-head"] {
+  display: block; width: 30px; height: 30px; flex: none; background: url("cd.svg") center / contain no-repeat;
+}
+/* The song: a marker stroke under the title. */
+:root[data-skin="grunge90"] .decor[data-slot="song-head"] {
+  display: block; width: 220px; height: 9px; margin: 2px 0 4px; background: var(--accent); opacity: .85;
+  border-radius: 40% 60% 55% 45% / 60% 40% 60% 40%; transform: rotate(-.8deg);
+}
+/* The player: a CD spinning while it plays, the set's name in marker on it (decoration, not information). */
+:root[data-skin="grunge90"] .decor[data-slot="player"] {
+  display: block; position: relative; width: 58px; height: 58px; flex: none; background: url("cd.svg") center / contain no-repeat;
+}
+:root[data-skin="grunge90"] .decor[data-slot="player"][data-set-title]::before {
+  content: attr(data-set-title); position: absolute; left: 6px; right: 6px; top: 37px; text-align: center;
+  font: 8px/1 "Permanent Marker", cursive; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: rotate(-12deg);
+}
+:root[data-skin="grunge90"][data-playing] .decor[data-slot="player"] { animation: g90-spin 2.2s linear infinite; }
+@keyframes g90-spin { to { transform: rotate(360deg); } }

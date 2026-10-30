@@ -1,0 +1,62 @@
+/* Y2K: MP3 players, chrome, aqua, an equaliser. Tokens for light and dark, then the decor slots. */
+@font-face { font-family: "Orbitron"; font-display: block; font-weight: 600; src: url("../_fonts/Orbitron.woff2") format("woff2"); }
+
+:root[data-skin="y2k"], [data-skin-probe="y2k"] {
+  --bg: #e4ecf2; --panel: #f6f9fc; --sheet: #ffffff; --dock: #eef4f8;
+  --ink: #0f1d2a; --muted: #4a5b6a; --line: #c9d6e0;
+  --accent: #0a65c2; --accent-soft: #d6e8fa; --accent-ink: #ffffff;
+  --warn: #a8420a; --warn-soft: #fbe3d4; --wave: #97a9b8;
+  --dock-image: linear-gradient(rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 50%);
+  --radius: 14px; --radius-sm: 18px;
+  --shadow-panel: inset 0 1px 0 #ffffff, 0 8px 22px -14px rgba(20, 60, 100, .45);
+  --display-scale: .78;
+  --font-display: "Orbitron", var(--font-chord);
+}
+:root[data-skin="y2k"][data-theme="dark"], :root[data-theme="dark"] [data-skin-probe="y2k"] {
+  --bg: #070b14; --panel: #0e1522; --sheet: #121b2b; --dock: #0b111c;
+  --ink: #e8f1fb; --muted: #93a6bd; --line: #1f2c40;
+  --accent: #35d0ff; --accent-soft: #0d3446; --accent-ink: #021018;
+  --warn: #ffb02e; --warn-soft: #3a2a10; --wave: #3d4f66;
+  --dock-image: linear-gradient(rgba(53, 208, 255, .12), transparent 50%);
+  --shadow-panel: 0 0 0 1px #1f2c40, 0 10px 30px -16px rgba(53, 208, 255, .35);
+}
+
+/* The page: soft aqua bubbles. */
+:root[data-skin="y2k"] .decor[data-slot="page"] {
+  display: block;
+  background: radial-gradient(circle at 88% 6%, rgba(10, 101, 194, .14) 0 140px, transparent 141px),
+    radial-gradient(circle at 96% 28%, rgba(53, 208, 255, .16) 0 70px, transparent 71px),
+    radial-gradient(circle at 4% 92%, rgba(10, 101, 194, .10) 0 180px, transparent 181px);
+}
+:root[data-skin="y2k"][data-theme="dark"] .decor[data-slot="page"] {
+  background: radial-gradient(circle at 88% 6%, rgba(53, 208, 255, .10) 0 140px, transparent 141px),
+    radial-gradient(circle at 96% 28%, rgba(53, 208, 255, .07) 0 70px, transparent 71px),
+    radial-gradient(circle at 4% 92%, rgba(80, 120, 255, .08) 0 180px, transparent 181px);
+}
+/* The library: the player beside the title. */
+:root[data-skin="y2k"] .decor[data-slot="library-head"] { display: block; width: 34px; height: 54px; flex: none; background: url("player.svg") center / contain no-repeat; }
+/* The set: a small player beside its name. */
+:root[data-skin="y2k"] .decor[data-slot="set-head"] { display: block; width: 20px; height: 32px; flex: none; background: url("player.svg") center / contain no-repeat; }
+/* The song: a glossy chrome pill under the title. */
+:root[data-skin="y2k"] .decor[data-slot="song-head"] {
+  display: block; width: 180px; height: 8px; margin: 8px 0 4px; border-radius: 999px;
+  background: linear-gradient(90deg, #0a65c2, #35d0ff, #c6f3ff); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+/* The player: four equaliser bars, dancing while it plays. */
+:root[data-skin="y2k"] .decor[data-slot="player"] {
+  display: block; position: relative; width: 40px; height: 34px; flex: none;
+}
+:root[data-skin="y2k"] .decor[data-slot="player"]::before, :root[data-skin="y2k"] .decor[data-slot="player"]::after,
+:root[data-skin="y2k"] .decor[data-slot="player"] i {
+  content: ""; position: absolute; bottom: 0; width: 7px; height: 100%; border-radius: 2px; transform-origin: bottom;
+  background: linear-gradient(to top, var(--accent), #8fe6ff);
+}
+:root[data-skin="y2k"] .decor[data-slot="player"]::before { left: 0; transform: scaleY(.45); }
+:root[data-skin="y2k"] .decor[data-slot="player"] i:first-child { left: 10px; transform: scaleY(.8); }
+:root[data-skin="y2k"] .decor[data-slot="player"] i:last-child { left: 20px; transform: scaleY(.6); }
+:root[data-skin="y2k"] .decor[data-slot="player"]::after { left: 30px; transform: scaleY(.3); }
+:root[data-skin="y2k"][data-playing] .decor[data-slot="player"]::before { animation: y2k-eq .7s ease-in-out infinite alternate; }
+:root[data-skin="y2k"][data-playing] .decor[data-slot="player"] i:first-child { animation: y2k-eq .5s ease-in-out -.2s infinite alternate; }
+:root[data-skin="y2k"][data-playing] .decor[data-slot="player"] i:last-child { animation: y2k-eq .62s ease-in-out -.4s infinite alternate; }
+:root[data-skin="y2k"][data-playing] .decor[data-slot="player"]::after { animation: y2k-eq .8s ease-in-out -.1s infinite alternate; }
+@keyframes y2k-eq { from { transform: scaleY(.2); } to { transform: scaleY(1); } }
