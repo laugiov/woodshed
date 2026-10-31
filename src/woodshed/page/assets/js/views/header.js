@@ -143,19 +143,20 @@
     }
     function openTitle() {
       const s = store.get();
-      const parts = s.bandTitle || s.bandArtist ? [s.bandArtist, s.bandTitle || meta.title] : meta.title.includes(" - ") ? [meta.title.slice(0, meta.title.indexOf(" - ")), meta.title.slice(meta.title.indexOf(" - ") + 3)] : ["", meta.title];
+      const split = meta.title.includes(" - ") ? [meta.title.slice(0, meta.title.indexOf(" - ")), meta.title.slice(meta.title.indexOf(" - ") + 3)] : ["", meta.title];
+      const parts = [s.bandArtist || (s.bandTitle ? "" : split[0]), s.bandTitle || split[1]];
       naming = true;
       const artist = h("input", { type: "text", maxlength: "120", "data-testid": "title-artist", "aria-label": W.t("Artist"), placeholder: W.t("Artist") });
       const name = h("input", { type: "text", maxlength: "120", "data-testid": "title-name", "aria-label": W.t("Title"), placeholder: W.t("Title") });
       artist.value = parts[0];
       name.value = parts[1];
       const done = async (change) => {
-        naming = false;
         if (change) {
-          const band = await app.shareBand(change);
+          const band = await app.shareBand(change); // the form stays until the answer: no flash of the old title
           if (band) store.set({ bandTitle: band.title || "", bandArtist: band.artist || "" });
           else app.toast(W.t("The title was not saved."));
         }
+        naming = false;
         renderTitle(store.get());
         $("titleEdit").focus();
       };
@@ -201,6 +202,7 @@
       notesOpen = true;
       const area = h("textarea", { class: "notes-input", rows: "4", maxlength: "1000", "data-testid": "notes-input", "aria-label": W.t("Notes on this song"), placeholder: W.t("Who starts, how it ends, cues…") });
       area.value = store.get().bandNote;
+      const opened = area.value; // saved only if changed here: another device's note, come meanwhile, stays
       const insert = (label) => {
         const v = area.value;
         area.value = v + (v && !v.endsWith("\n") ? "\n" : "") + label + " ";
@@ -210,7 +212,7 @@
       const done = async (keep) => {
         if (!notesOpen) return;
         notesOpen = false;
-        if (keep && area.value !== store.get().bandNote) {
+        if (keep && area.value !== opened) {
           const band = await app.shareBand({ note: area.value });
           if (band) store.set({ bandNote: band.note || "" });
           else app.toast(W.t("The notes were not saved."));

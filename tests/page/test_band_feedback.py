@@ -108,7 +108,8 @@ def test_the_band_names_the_song_and_every_place_follows(browser: Browser, serve
     page.get_by_test_id("title-name").press("Enter")
     expect(page.get_by_test_id("title")).to_have_text("Les Imprévus - Pop song")
     expect(page).to_have_title("Les Imprévus - Pop song · woodshed")
-    assert page.evaluate("Woodshed.app.song.titleNow()") == "Les Imprévus - Pop song"  # the exports' title
+    chordpro = page.evaluate("Woodshed.exports.chordpro(Woodshed.app.song)")
+    assert "{title: Les Imprévus - Pop song}" in chordpro  # the exports carry the band's title
     home = song_page(browser, server.url)
     expect(home.get_by_test_id("song-link").first).to_contain_text("Les Imprévus - Pop song")
     expect(home.locator(f'[data-set-song="{SONG}"]')).to_contain_text("Pop song")

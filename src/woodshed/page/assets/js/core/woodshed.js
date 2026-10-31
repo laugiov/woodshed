@@ -82,7 +82,10 @@
   // A library row's title as the band named it (spec 031): "artist - title", else the recording's.
   W.shownTitle = (row) => {
     const b = (row && row.band) || {};
-    return b.title || b.artist ? [b.artist, b.title || row.title].filter(Boolean).join(" - ") : row.title;
+    if (!b.title && !b.artist) return row.title;
+    const t = String(row.title || "");
+    const name = b.title || (t.includes(" - ") ? t.slice(t.indexOf(" - ") + 3) : t); // an artist alone: its song name
+    return [b.artist, name].filter(Boolean).join(" - ");
   };
 
   // An iPhone or an iPad: iPadOS Safari says "Macintosh", only its touch points tell it apart.

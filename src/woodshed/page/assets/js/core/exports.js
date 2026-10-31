@@ -44,6 +44,7 @@
   // The song as published (schema v1), with corrections in place of the doubts they settle.
   function data(song) {
     const out = JSON.parse(JSON.stringify(song.song));
+    if (song.titleNow) out.title = song.titleNow(); // the band's own title and artist (spec 031)
     out.bars = song.bars.map((bar, u) => ({
       start: out.bars[u].start,
       end: out.bars[u].end,

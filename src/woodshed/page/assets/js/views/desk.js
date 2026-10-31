@@ -591,7 +591,7 @@
         } else {
           const shared = stem === "other"; // a four-stem page: guitars and keys on one separated track
           const who = shared ? "guitars and keys" : { piano: "keys" }[s.inst] || s.inst; // file names stay in English
-          const title = String(song.song.title || "song").replace(/[\\/:*?"<>|]+/g, " ").trim();
+          const title = String(app.shownTitle() || "song").replace(/[\\/:*?"<>|]+/g, " ").trim();
           const choice = (id, testid, label) => h("button", { type: "button", "data-track": id, "data-testid": testid, "aria-pressed": "false", onclick: () => app.setTrack(id) }, label);
           // Served, the files download under names that say what they are; from disk a browser does
           // not download a file:// link: it opens it, and the page says the files are already there.

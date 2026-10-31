@@ -79,7 +79,10 @@
     // The title shown: the band's own (artist - title), else the recording's; the exports use it too.
     app.shownTitle = () => {
       const s = store.get();
-      return s.bandTitle || s.bandArtist ? [s.bandArtist, s.bandTitle || meta.title].filter(Boolean).join(" - ") : meta.title;
+      if (!s.bandTitle && !s.bandArtist) return meta.title;
+      // An artist alone takes the recording's song name, not its artist again ("X - A - B").
+      const name = s.bandTitle || (meta.title.includes(" - ") ? meta.title.slice(meta.title.indexOf(" - ") + 3) : meta.title);
+      return [s.bandArtist, name].filter(Boolean).join(" - ");
     };
     song.titleNow = app.shownTitle;
 

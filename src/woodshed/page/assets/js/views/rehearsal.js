@@ -179,7 +179,7 @@
       const el = li >= 0 ? body.querySelector('.rh-line[data-li="' + li + '"]') : null;
       if (!el) return;
       el.classList.add("cur");
-      const at = Math.floor((el.offsetLeft - body.offsetLeft + 1) / step());
+      const at = Math.floor((el.getBoundingClientRect().left - body.getBoundingClientRect().left + body.scrollLeft + 1) / step());
       if (at !== page && at >= 0) turn(at);
     }
 
@@ -198,6 +198,10 @@
       if (e.target instanceof Element && e.target.closest("input, textarea")) return;
       e.stopPropagation();
       if (e.type !== "keydown") return;
+      if (e.repeat && e.key === " ") {
+        e.preventDefault(); // a pedal held down plays or pauses once
+        return;
+      }
       if (["ArrowRight", "ArrowDown", "PageDown"].includes(e.key)) turn(page + 1);
       else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) turn(page - 1);
       else if (e.key === "Escape") close();

@@ -14,7 +14,7 @@
       root.toggleAttribute("data-playing", !!s.playing); // the count-in included: the reels turn from the click
       root.toggleAttribute("data-stage", !!s.stage || !!s.rehearsal); // the rehearsal sheet is plain too
       for (const el of document.querySelectorAll(".decor")) {
-        name(el, "song-title", song.song.title);
+        name(el, "song-title", app.shownTitle());
         name(el, "set-title", s.setName); // read once when the page opens, from the library (none from a folder)
       }
     }
