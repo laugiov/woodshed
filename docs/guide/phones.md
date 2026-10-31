@@ -60,6 +60,16 @@ on their cassette or CD too.
 
 The singer's key for the band is in [For singers](singers.md#keep-the-key-for-the-band).
 
+## The rehearsal sheet
+
+**Rehearsal**, next to Stage mode, shows the whole song on one screen, like the chord sheets a band prints:
+the title, the key, the tempo and the capo, the song's notes, every part with simple chords over the words,
+the bars with no words as bar lines (`| G D | Am |`), a part played twice in a row written once ("Chorus ×2"),
+and the chord boxes at the bottom. The text takes the largest size that fits; on a phone the song runs over a
+few pages, turned with ‹ ›, the arrows or a pedal. The line the band is at is marked, and the next song of the
+set opens on the sheet too. **Triads / Usual / As heard** chooses how simple the chords are (Usual keeps 7ths,
+sus and slash chords); A− and A+ set the size. Escape or ✕ goes back to the page.
+
 ## Phones on the music stand
 
 While a phone follows, leads or shows the stage view, woodshed keeps its screen on: with the

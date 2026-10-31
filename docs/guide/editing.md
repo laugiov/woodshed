@@ -45,6 +45,17 @@ from that bar, `|` before the word on beat one of the next bar (see
 Shapes, keys, the stage view and every export follow what you type, and through the library the
 band's phones get it live.
 
+## The song's notes and title
+
+**+ Notes** under a song's title (on the library's computer and the band's phones) takes what the band must
+remember: "Start: drums count 4, then guitar", "End: stop on the 1", cues. The **Start:** and **End:** buttons
+start a line; Ctrl+Enter or Save keeps it. The notes show under the title, on stage (tap the line for all of
+them), on the rehearsal sheet and in the set list, on every device of the band; they stay with the song when
+it leaves the set.
+
+**✎** beside the title renames the song and its artist for the band: the library, the set list, the tab and
+the exports follow. **Back to the recording's title** undoes it.
+
 ## Parts: rename, join, start
 
 Rename the parts as your band calls them, join two, or start one on any bar.

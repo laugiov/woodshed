@@ -43,6 +43,10 @@ panel names it, with the barre chords it saves, and a button to put it on), and 
 in the bar: the strumming rhythm, read from the guitar's own track. When the song changes key, the
 shapes come grouped by key ("From bar 17: D♭ major"), with a word for the hands on a lift.
 
+With a capo on, the chart and stage mode show the shapes you play, the real chords one tap away: the switch
+"Real chords | Shapes, capo N" is the first control above the chart and sits on stage too. Each device keeps
+its choice, so two guitarists can play with different capos; the bass and the keys always read the real chords.
+
 Guitar and keys can read the words instead of the grid (the Lyrics view, and stage mode beside the
 big chord). Every line starts with a chord: bold where it changes, small and grey where it goes on
 from before ("Cm" over a line in a C minor vamp), so a line with no change never reads as "nothing

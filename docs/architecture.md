@@ -569,6 +569,23 @@ flowchart LR
 - The **set list** is `setlist.json` in the library: the order the band plays songs in. The home page shows each song's key (the band's key when there is one), tempo and length, the total, and the leader's note; `@media print` prints the set alone. A note is written from the set list, so it is the set's: `set_setlist` clears the note of every song that leaves the set (under the library's lock, a new revision pushed to the open pages), `set_band` keeps no note for a song out of the set (the same lock, so a note saved while its song leaves the set does not stay), and the start clears notes left on songs out of the set by 0.4.0 (`clear_notes_out_of_the_set`, called by `serve` once it holds the port, next to `clear_cut_uploads`: a second start refused as "already running" touches nothing). Only a missing `setlist.json` is an empty set: one that cannot be read or parsed clears nothing, and a library on a read-only disk starts with a line on stderr.
 - Started again while it runs: the port is taken, and if woodshed answers there (`running_here`, a GET of `/api/token` that never goes through a proxy), `serve` opens the browser on the running one and returns, touching nothing in the library. The uploads cut short by a stop are cleared only once this app holds the port (`Library.clear_cut_uploads`): the running one may be receiving one.
 
+### The band's words on a song (spec 031)
+
+`band` in a song's corrections file holds the band's key, its notes (`note`: lines kept, 1000 characters, 12
+lines; no longer cleared when the song leaves the set) and its own `title` and `artist` (the set name's rules,
+`corrections.shown_name`). The page folder never changes: it keys the rest. `/api/songs` rows carry `band`, so
+the library shows `W.shownTitle(row)`; the song page reads it through `app.useBand` and writes it with
+`app.shareBand`; `song.titleNow` gives the exports the band's title.
+
+### The rehearsal sheet (spec 031)
+
+`views/rehearsal.js` draws one song as a band's chord sheet over the page (`#rehearsal`, kept in the address and
+by `band.js` from song to song). Its model is the chart's own: `app.sections()`, `app.words.rows()` (each word
+with the chords it carries) and the bars no line holds (bar rows); a part equal to the one before collapses to
+"×N". Chords go through `W.chords.simplify(chord, level)` (Triads, Usual, As heard) then `app.nameFor` (shapes for
+a guitarist with a capo). The body is CSS columns of a fixed height: the largest size at which it fits is found
+by a binary search, and beyond 16 px it flows into pages one `clientWidth + column-gap` wide.
+
 ### The set list and its name
 
 `setlist.json` in the library holds the set's songs and, optionally, its name (`{"title": …, "songs": […]}`; keys

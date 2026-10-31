@@ -10,6 +10,25 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+### Added
+
+- **Rehearsal**, next to Stage mode: the whole song on one screen, as on a band's old chord sheets. The title,
+  the key, the tempo and the capo, the song's notes, the parts with simple chords over the words, the bars with
+  no words as bar lines (`| G D | Am |`), a part played twice in a row written once ("Chorus ×2"), and the chord
+  boxes. It fits the screen in columns, turns pages with the arrows or a pedal on a phone, marks the line the
+  band is at, and stays open from song to song of the set. Chords as Triads, Usual (the default) or As heard.
+- Notes on a song ("Start: drums count 4, then guitar", "End: stop on the 1"), on several lines: written on
+  the song's page, shown under its title, on stage and on the rehearsal sheet, and in the set list.
+- Rename a song and its artist from its page (✎ beside the title): the library, the set list, the tab and the
+  exports follow; the recording's title comes back in one click.
+
+### Changed
+
+- A guitarist with a capo now reads the shapes played by default, on the chart and on stage, with the switch
+  to the real chords first above the chart and on stage; the choice is remembered on each device.
+- A song's note now stays when the song leaves the set (it is the song's, no longer the set's): notes an older
+  version kept on songs out of the set show again.
+
 ## [0.7.0] - 2026-10-30
 
 ### Added
