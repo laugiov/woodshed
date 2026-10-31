@@ -12,7 +12,7 @@
     const name = (el, key, value) => (value ? el.setAttribute("data-" + key, value) : el.removeAttribute("data-" + key));
     function draw(s) {
       root.toggleAttribute("data-playing", !!s.playing); // the count-in included: the reels turn from the click
-      root.toggleAttribute("data-stage", !!s.stage);
+      root.toggleAttribute("data-stage", !!s.stage || !!s.rehearsal); // the rehearsal sheet is plain too
       for (const el of document.querySelectorAll(".decor")) {
         name(el, "song-title", song.song.title);
         name(el, "set-title", s.setName); // read once when the page opens, from the library (none from a folder)
@@ -20,7 +20,7 @@
     }
     draw(store.get());
     store.on((s, changed) => {
-      if (changed.has("playing") || changed.has("stage") || changed.has("setName")) draw(s);
+      if (changed.has("playing") || changed.has("stage") || changed.has("rehearsal") || changed.has("setName")) draw(s);
     });
     return {};
   };

@@ -61,8 +61,25 @@
     return { pc, quality, bass };
   }
 
+  // The chord as the rehearsal sheet writes it (spec 031): "heard" as the chart has it; "usual" drops what the ear
+  // rarely plays (9ths, add9) and keeps 7ths, sus, slash basses; "triads" keeps the third (or the sus, a power chord)
+  // and no bass. Every quality of the chord table has its place; one typed otherwise is read by its third.
+  const USUAL = { 9: "7", m9: "m7", maj9: "maj7", add9: "", madd9: "m" };
+  const TRIADS = { "": "", m: "m", 5: "5", 6: "", m6: "m", 7: "", m7: "m", maj7: "", 9: "", m9: "m", maj9: "", add9: "",
+    madd9: "m", sus2: "sus2", sus4: "sus4", "7sus4": "sus4", dim: "dim", dim7: "dim", m7b5: "dim", aug: "aug" };
+  const triad = (q) => (q in TRIADS ? TRIADS[q] : /^dim/.test(q) ? "dim" : /^(aug|\+)/.test(q) ? "aug" : /^m(?!aj)/.test(q) ? "m" : /sus2/.test(q) ? "sus2" : /sus/.test(q) ? "sus4" : "");
+  function simplify(c, level) {
+    if (level !== "usual" && level !== "triads") return c;
+    const out = Object.create(Object.getPrototypeOf(c));
+    for (const k of Object.getOwnPropertyNames(c)) Object.defineProperty(out, k, Object.getOwnPropertyDescriptor(c, k)); // its key region too
+    out.quality = level === "usual" ? (c.quality in USUAL ? USUAL[c.quality] : c.quality) : triad(c.quality);
+    if (level === "triads") delete out.bass;
+    return out;
+  }
+
   W.chords = {
     parse,
+    simplify,
     // The four qualities the analysis writes; every other one was typed by the band.
     analysed: (quality) => quality === "" || quality === "m" || quality === "7" || quality === "m7",
     // One identity for a chord everywhere: D and D/F# differ.

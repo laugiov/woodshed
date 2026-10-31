@@ -18,7 +18,7 @@
       <div class="plays band" id="band" hidden data-testid="band"></div>
       <button class="btn" id="wordsBtn" type="button" hidden data-testid="words-header" aria-haspopup="dialog"></button>
       <button class="btn" id="exportBtn" type="button" data-testid="export" aria-haspopup="menu">Export</button>
-      <button class="btn stage-btn" id="stageBtn" type="button" data-testid="stage-open" title="Full screen, readable from the music stand (S)">Stage mode</button>
+      <button class="btn" id="rehearsalBtn" type="button" data-testid="rehearsal-open" title="The whole song on one screen, for a band rehearsal">Rehearsal</button><button class="btn stage-btn" id="stageBtn" type="button" data-testid="stage-open" title="Full screen, readable from the music stand (S)">Stage mode</button>
     </div>
   </header>
 
@@ -134,6 +134,13 @@
 <div class="ed line-ed" id="lineEd" hidden role="dialog" aria-modal="true" aria-labelledby="lineEdTitle" data-testid="line-editor"></div>
 <div class="sr-only" aria-live="polite" id="srChord" translate="no"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden data-testid="toast"></div>
+<div class="rehearsal" id="rehearsal" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="rhTitle" data-testid="rehearsal">
+  <header class="rh-head"><h2 class="rh-title" id="rhTitle" data-testid="rh-title" translate="no"></h2><div class="rh-facts" id="rhFacts"></div><div class="rh-tools" id="rhTools"></div></header>
+  <div class="rh-notes" id="rhNotes" hidden data-testid="rh-notes"></div>
+  <div class="rh-body" id="rhBody"></div>
+  <div class="rh-boxes" id="rhBoxes" hidden data-testid="rh-boxes"></div>
+  <div class="rh-pager" id="rhPager" hidden data-testid="rh-pager"></div>
+</div>
 <div class="stage" id="stage" hidden tabindex="-1" data-testid="stage">
   <div class="stage-top"><span style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><b class="st-section" id="stSection" data-testid="stage-section"></b><button class="st-note" id="stNote" type="button" hidden data-testid="stage-note"></button><span id="stTop"></span><span class="map" id="stMap" aria-hidden="true"></span><span class="st-follow" role="status" data-testid="stage-following">Following the leader</span></span><span class="st-tools"><span class="st-view" id="stView"></span><span class="st-next-song" id="stNextSong" data-testid="stage-next-song"></span><button class="btn icon" type="button" data-theme-toggle data-testid="stage-theme"></button><button class="btn" id="stageExit" type="button" data-testid="stage-exit">Exit stage mode<span class="kbd-hint"> (Esc)</span></button></span></div>
   <div class="stage-mid">

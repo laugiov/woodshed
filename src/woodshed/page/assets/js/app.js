@@ -70,6 +70,7 @@
       bandTitle: "", // the band's own title and artist for this song, "" for the recording's
       bandArtist: "",
       canShare: false, // served by the library with its token: notes and title can be written from here
+      rehearsal: false, // the rehearsal sheet is open (views/rehearsal.js)
       wordsElsewhere: false, // a phone of the band: words are added from the computer
       editing: false, // the chart's bars open the bar editor (views/editor.js)
       canFix: false, // served with the library's token: a sung line can be fixed (views/lines.js)
@@ -954,6 +955,7 @@
     const words = W.views.words(app);
     app.openWords = () => words.open();
     W.views.barLines(app);
+    W.views.rehearsal(app); // the band's sheet, one song on one screen (spec 031)
     W.views.decor(app); // what a skin may draw: playing, stage, the names (spec 030)
     const views = [W.views.header(app), W.views.chart(app), W.views.desk(app), W.views.dock(app), W.views.stage(app), W.views.band(app), W.views.pitch(app)];
     const chart = views[1];

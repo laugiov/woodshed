@@ -276,3 +276,23 @@ def test_the_library_follows_the_tokens_and_reads_in_every_skin(
         if skin == "woodshed":
             assert leaks(fixed_colours(page)) == []
         context.close()
+
+
+@pytest.mark.parametrize("skin", ["woodshed", "mixtape80"])
+@pytest.mark.parametrize("theme", THEMES)
+def test_the_rehearsal_sheet_reads_in_a_skin(browser: Browser, pages_root: str, skin: str, theme: str) -> None:
+    from tests.page.conftest import VARIANTS, rewritten
+
+    context = browser.new_context(locale="en-US", viewport={"width": 1440, "height": 900}, reduced_motion="reduce")
+    context.add_init_script(
+        f"localStorage.setItem('woodshed:theme', '{theme}'); localStorage.setItem('woodshed:skin', '{skin}');"
+    )
+    page = context.new_page()
+    page.goto((rewritten("pop", pages_root, "lyrics", VARIANTS["lyrics"]) / "index.html").as_uri() + "#rehearsal")
+    page.wait_for_function(
+        "window.Woodshed && window.Woodshed.ready === true && !document.getElementById('rehearsal').hidden"
+    )
+    page.evaluate("document.fonts.ready")
+    page.add_style_tag(content="body > :not(#rehearsal) { visibility: hidden !important; }")  # the sheet alone
+    assert accepted(faint_texts(page), skin, theme) == []
+    context.close()
