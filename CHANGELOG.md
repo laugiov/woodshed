@@ -10,6 +10,8 @@ corrections and set list stay where they are.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-31
+
 ### Added
 
 - **Rehearsal**, next to Stage mode: the whole song on one screen, as on a band's old chord sheets. The title,
@@ -280,7 +282,8 @@ corrections and set list stay where they are.
   print for the music stand. A song's folder can be zipped and sent: it opens offline.
 - English or French, dark or light.
 
-[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/laugiov/woodshed/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/laugiov/woodshed/releases/tag/v0.8.0
 [0.7.0]: https://github.com/laugiov/woodshed/releases/tag/v0.7.0
 [0.6.0]: https://github.com/laugiov/woodshed/releases/tag/v0.6.0
 [0.5.1]: https://github.com/laugiov/woodshed/releases/tag/v0.5.1
