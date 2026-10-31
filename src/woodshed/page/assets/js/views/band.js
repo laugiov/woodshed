@@ -623,6 +623,8 @@
             }, text);
           }),
         ),
+        // The rehearsal sheet beside the band's modes (spec 031): a band's tool, and a phone keeps the chart in view.
+        $("rehearsalBtn"),
         // What the mode chosen does, as text: a phone has no hover for the buttons' titles.
         mode === "follow" ? null : h("span", { class: "band-hint", "data-testid": "band-hint" }, mode === "lead" ? W.t("This device plays for the whole band: the song, the place, the loop.") : W.t("This device plays on its own.")), // following: the banner says it
       );

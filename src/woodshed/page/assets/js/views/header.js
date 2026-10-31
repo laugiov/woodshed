@@ -193,10 +193,14 @@
         : lines.length
           ? h("button", { type: "button", class: "btn ghost notes-edit", "data-testid": "notes-edit", "aria-label": W.t("Edit the notes"), title: W.t("Edit the notes"), onclick: openNotes }, "✎")
           : h("button", { type: "button", class: "btn ghost notes-add", "data-testid": "notes-add", onclick: openNotes }, W.t("+ Notes"));
+      // No notes yet: "+ Notes" waits in the facts' row, not on a row of its own (a phone keeps the chart in view).
+      const waiting = $("facts").querySelector(".notes-add");
+      if (waiting) waiting.remove();
+      if (!lines.length && tool) $("facts").append(tool);
       clear($("songNotes"),
         lines.length ? h("div", { class: "band-note", "data-testid": "band-note" }, h("span", { class: "note-label" }, W.t("Notes")), lines.map((l) => h("p", { translate: "no" }, l))) : null,
-        tool);
-      $("songNotes").hidden = !lines.length && !tool;
+        lines.length ? tool : null);
+      $("songNotes").hidden = !lines.length;
     }
     function openNotes() {
       notesOpen = true;
@@ -239,7 +243,10 @@
     store.on((s, changed) => {
       if (changed.has("bandTitle") || changed.has("bandArtist") || changed.has("canShare")) renderTitle(s);
       if (changed.has("bandNote") || changed.has("canShare")) renderNotes(s);
-      if (changed.has("transpose") || changed.has("corrections")) renderFacts(s);
+      if (changed.has("transpose") || changed.has("corrections")) {
+        renderFacts(s);
+        renderNotes(s); // its "+ Notes" lives in the facts' row
+      }
       if (changed.has("inst")) renderInstruments(s);
       if (changed.has("inst") || changed.has("step")) renderPath(s);
     });
@@ -247,7 +254,6 @@
     return {
       render(s) {
         renderTitle(s);
-        renderNotes(s);
         // Served by `woodshed app`: the library is one level up. Opened from disk, there is none.
         $("backLink").hidden = location.protocol === "file:";
         const pending = song.view.pending;
@@ -260,6 +266,7 @@
           $("pending").hidden = false;
         }
         renderFacts(s);
+        renderNotes(s);
         renderInstruments(s);
         renderPath(s);
         renderCredits();

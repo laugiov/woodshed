@@ -133,6 +133,7 @@ def test_a_loop_wraps_back_to_its_first_bar(open_page: Any) -> None:
 @pytest.mark.parametrize("steps", [2, 5, -1])
 def test_transposing_respells_the_chart_like_python(open_page: Any, steps: int) -> None:
     o = open_page("pop")
+    o.js("Woodshed.app.store.set({ view: 'concert' })")  # the sounding chords (a guitarist with a capo reads shapes)
     button = "transpose-up" if steps > 0 else "transpose-down"
     for _ in range(abs(steps)):
         o.page.get_by_test_id(button).click()

@@ -175,8 +175,8 @@ def test_a6_space_on_a_redrawn_button_keeps_the_keyboard_on_it(
 
 def test_a6_space_on_shapes_with_a_capo_keeps_the_keyboard_on_it(open_page: Any) -> None:
     o = open_page("pop")
-    o.js("Woodshed.app.store.set({ capo: 2 })")
-    tab_to(o, "show-shapes", "edit-chart")
+    o.js("Woodshed.app.store.set({ capo: 2, view: 'concert' })")
+    tab_to(o, "show-shapes", "show-concert")  # the switch is the chart row's first control (spec 031)
     o.page.keyboard.press(" ")
     until(o, "Woodshed.app.store.get().view === 'shapes'")
     assert o.js(FOCUSED) == "show-shapes"
