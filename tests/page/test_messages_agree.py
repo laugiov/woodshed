@@ -253,15 +253,15 @@ def test_the_band_note_is_ink_with_a_muted_label(browser: Browser, server: app.A
         assert colours["note"] != colours["warn"]
         assert colours["note"] == colours["ink"]
         assert colours["label"] == colours["muted"]
-        expect(note.locator(".note-label")).to_have_text("Note:")
+        expect(note.locator(".note-label")).to_have_text("Notes")  # the song's notes, under its facts (spec 031)
         page.get_by_test_id("lang-fr").click()
-        expect(note.locator(".note-label")).to_have_text("Note\u00a0:")
+        expect(note.locator(".note-label")).to_have_text("Notes")
         assert problems == []
     finally:
         (server.library.root / app.CORRECTIONS_DIR / "pop.woodshed.json").unlink(missing_ok=True)
 
 
-def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, server: app.AppServer) -> None:
+def test_a_song_out_of_the_set_keeps_its_note_on_every_page(browser: Browser, server: app.AppServer) -> None:
     problems: list[str] = []
     try:
         server.library.set_band({"page": "pop.woodshed", "transpose": 2, "key": "D", "note": "starts on the chorus"})
@@ -270,7 +270,6 @@ def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, se
         home = opened(browser, server.url, problems)
         row = home.locator('[data-set-song="pop.woodshed"]')
         expect(row.get_by_test_id("set-note")).to_have_text("Note: starts on the chorus")  # labelled as in the page
-        expect(row.get_by_test_id("set-remove")).to_have_attribute("title", "Out of the set, and its note with it")
         ink, warn, said = home.evaluate(
             """() => ['--ink', '--warn'].map((v) => {
                 const s = document.createElement('span'); s.style.color = `var(${v})`;
@@ -281,11 +280,13 @@ def test_a_song_out_of_the_set_loses_its_note_on_every_page(browser: Browser, se
         home.route("**/api/songs", lambda route: None)  # the library's next answer is late: the page alone
         row.get_by_test_id("set-remove").click()
         expect(home.get_by_test_id("set-item")).to_have_count(1)
-        assert "note" not in server.library.corrections("pop.woodshed", "x1")["band"]
-        assert server.library.corrections("pop.woodshed", "x1")["band"]["transpose"] == 2  # the key stays
-        expect(song.get_by_test_id("band-note")).to_have_count(0)  # the open page hears it, no reload
-        home.get_by_test_id("set-add").first.click()  # back in the set: a fresh line for a note
-        expect(home.locator('[data-set-song="pop.woodshed"]').get_by_test_id("set-note")).to_have_text("+ Note")
+        band = server.library.corrections("pop.woodshed", "x1")["band"]
+        assert band["note"] == "starts on the chorus" and band["transpose"] == 2  # the song's, it stays (spec 031)
+        expect(song.get_by_test_id("band-note")).to_contain_text("starts on the chorus")
+        home.get_by_test_id("set-add").first.click()  # back in the set: its note comes with it
+        expect(home.locator('[data-set-song="pop.woodshed"]').get_by_test_id("set-note")).to_have_text(
+            "Note: starts on the chorus"
+        )
         assert problems == []
         home.context.close()
     finally:

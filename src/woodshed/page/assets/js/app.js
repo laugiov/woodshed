@@ -41,19 +41,46 @@
     W.app = app;
 
 
+    // This device's own choices, kept in the browser (storage off in a private window: this visit only).
+    const deviceGet = (key) => {
+      try {
+        return localStorage.getItem(key);
+      } catch (err) {
+        return null;
+      }
+    };
+    const deviceSet = (key, value) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (err) {
+        /* this visit only */
+      }
+    };
+    app.deviceGet = deviceGet;
+    app.deviceSet = deviceSet;
     const store = W.createStore({
       time: 0, beat: 0, playing: false, transpose: 0, capo: song.capoFor(0), inst: "guitar", pos: "open",
-      view: "concert", step: 1, loop: null, loopOn: false, trainer: false, countIn: false, bpm: songBpm,
+      // A guitarist with a capo reads the shapes played (spec 031), unless this device chose the sounding chords.
+      view: deviceGet("woodshed:chordview") === "concert" ? "concert" : "shapes", step: 1, loop: null, loopOn: false, trainer: false, countIn: false, bpm: songBpm,
       voiceType: null, stage: false, track: "mix", corrections: 0, click: false, chordSound: "guitar",
       sheet: null, // "grid" or "lyrics"; null: as suits the instrument
       pitchStatus: null, // the recording in the chart's key (views/pitch.js): none, off, preparing, on...
       bandKey: null, // the key the band plays this song in (semitones), once the library said; null: no library
-      bandNote: "", // the leader's note on this song
+      bandNote: "", // the song's notes, lines kept (spec 031)
+      bandTitle: "", // the band's own title and artist for this song, "" for the recording's
+      bandArtist: "",
+      canShare: false, // served by the library with its token: notes and title can be written from here
       wordsElsewhere: false, // a phone of the band: words are added from the computer
       editing: false, // the chart's bars open the bar editor (views/editor.js)
       canFix: false, // served with the library's token: a sung line can be fixed (views/lines.js)
     });
     app.store = store;
+    // The title shown: the band's own (artist - title), else the recording's; the exports use it too.
+    app.shownTitle = () => {
+      const s = store.get();
+      return s.bandTitle || s.bandArtist ? [s.bandArtist, s.bandTitle || meta.title].filter(Boolean).join(" - ") : meta.title;
+    };
+    song.titleNow = app.shownTitle;
 
     // Names: the chord as heard, moved by the transposition and, for capo shapes, down by the capo.
     // `u`: the bar a chord made on the fly belongs to (its key region, spec 012).
@@ -91,6 +118,17 @@
 
     const popups = W.views.popups(app);
     app.toast = popups.toast;
+    // The shapes, said once on a device the first time a guitarist has a capo (spec 031): where the switch is.
+    const capoHint = (s) => {
+      if (s.inst !== "guitar" || s.pos !== "open" || !(s.capo > 0) || deviceGet("woodshed:capohint")) return;
+      deviceSet("woodshed:capohint", "1");
+      app.toast(W.t("Capo {n}: the chart shows the shapes you play. Real chords: the switch at the top of the chart.", { n: s.capo }));
+    };
+    store.on((s, changed) => {
+      if (changed.has("view")) deviceSet("woodshed:chordview", s.view);
+      if (changed.has("capo") || changed.has("inst") || changed.has("pos")) capoHint(s);
+    });
+    setTimeout(() => capoHint(store.get()), 0);
 
     const barStart = (i) => (i >= song.bars.length ? song.bars[song.bars.length - 1].end : song.bars[Math.max(0, i)].start);
 
@@ -351,7 +389,7 @@
       const t = typeof band.transpose === "number" ? band.transpose : 0;
       const s = store.get();
       const fresh = s.bandKey === null ? t !== 0 : t !== s.bandKey;
-      store.set({ bandKey: t, bandNote: band.note || "" });
+      store.set({ bandKey: t, bandNote: band.note || "", bandTitle: band.title || "", bandArtist: band.artist || "" });
       if (!fresh || t === s.transpose) return;
       store.set({ transpose: t, capo: song.capoFor(t) });
       const follows = app.pitchFollows && app.pitchFollows();

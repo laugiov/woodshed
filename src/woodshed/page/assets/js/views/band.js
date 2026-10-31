@@ -107,6 +107,7 @@
       if (!r.ok || typeof r.data.token !== "string") return false;
       const changed = token !== null && token !== r.data.token;
       token = r.data.token;
+      store.set({ canShare: true }); // the song's notes and title can be written from here (spec 031)
       if (changed || (typeof r.data.boot === "string" && r.data.boot !== boot)) claimed = null;
       if (typeof r.data.boot === "string") boot = r.data.boot;
       if (changed && stream) {
@@ -121,7 +122,8 @@
       const q = new URLSearchParams(extra);
       if (store.get().stage) q.set("stage", "1");
       const query = q.toString();
-      location.href = "../" + encodeURIComponent(target) + "/index.html" + (query ? "?" + query : "");
+      // The rehearsal sheet stays open from song to song (spec 031).
+      location.href = "../" + encodeURIComponent(target) + "/index.html" + (query ? "?" + query : "") + (store.get().rehearsal ? "#rehearsal" : "");
     }
 
     const lost = () => W.t("Another device leads the band now: you follow it. The sound now plays on the device that leads.");
@@ -668,7 +670,7 @@
       const [set, songs] = await Promise.all([api("/api/setlist"), api("/api/songs")]);
       if (set.ok && Array.isArray(set.data.songs)) setlist = set.data.songs;
       if (set.ok && typeof set.data.title === "string") store.set({ setName: set.data.title }); // for a skin (spec 030)
-      if (songs.ok && Array.isArray(songs.data.songs)) for (const x of songs.data.songs) titles[x.folder] = x.title;
+      if (songs.ok && Array.isArray(songs.data.songs)) for (const x of songs.data.songs) titles[x.folder] = W.shownTitle(x);
       $("nextSong").addEventListener("click", (e) => {
         e.preventDefault();
         app.nextSong();

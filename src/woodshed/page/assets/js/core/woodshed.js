@@ -79,6 +79,12 @@
     return m + ":" + (sec < 10 ? "0" : "") + (tenths ? sec.toFixed(1) : String(sec));
   };
 
+  // A library row's title as the band named it (spec 031): "artist - title", else the recording's.
+  W.shownTitle = (row) => {
+    const b = (row && row.band) || {};
+    return b.title || b.artist ? [b.artist, b.title || row.title].filter(Boolean).join(" - ") : row.title;
+  };
+
   // An iPhone or an iPad: iPadOS Safari says "Macintosh", only its touch points tell it apart.
   W.iOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 })();

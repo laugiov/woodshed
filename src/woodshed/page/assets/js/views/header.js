@@ -47,7 +47,6 @@
           ? h("button", { type: "button", class: "warnfact", "data-goto": open[0].bar, "data-testid": "spots" }, spots === 1 ? W.t("1 spot to check by ear") : W.t("{n} spots to check by ear", { n: spots }))
           : h("span", { class: "okfact" }, W.t("Nothing to check by ear")),
         meta.analysis.chords_reliable ? null : h("span", { class: "warnfact", "data-testid": "unreliable" }, W.t("Little harmony found: chords may be wrong")),
-        s.bandNote ? h("span", { class: "band-note", "data-testid": "band-note" }, h("span", { class: "note-label" }, W.t("Note:")), " ", h("span", { translate: "no" }, s.bandNote)) : null,
       );
     }
 
@@ -131,15 +130,122 @@
       clear($("foot"), lines.map((l) => h("span", null, l)));
     }
 
+    // The song's own title and artist (spec 031): the band's, edited here, else the recording's.
+    let naming = false;
+    function renderTitle(s) {
+      if (naming) return;
+      const shown = app.shownTitle();
+      $("songTitle").textContent = shown;
+      document.title = shown + " · woodshed";
+      $("titleEdit").hidden = !s.canShare;
+      $("titleForm").hidden = true;
+      $("songTitle").hidden = false;
+    }
+    function openTitle() {
+      const s = store.get();
+      const parts = s.bandTitle || s.bandArtist ? [s.bandArtist, s.bandTitle || meta.title] : meta.title.includes(" - ") ? [meta.title.slice(0, meta.title.indexOf(" - ")), meta.title.slice(meta.title.indexOf(" - ") + 3)] : ["", meta.title];
+      naming = true;
+      const artist = h("input", { type: "text", maxlength: "120", "data-testid": "title-artist", "aria-label": W.t("Artist"), placeholder: W.t("Artist") });
+      const name = h("input", { type: "text", maxlength: "120", "data-testid": "title-name", "aria-label": W.t("Title"), placeholder: W.t("Title") });
+      artist.value = parts[0];
+      name.value = parts[1];
+      const done = async (change) => {
+        naming = false;
+        if (change) {
+          const band = await app.shareBand(change);
+          if (band) store.set({ bandTitle: band.title || "", bandArtist: band.artist || "" });
+          else app.toast(W.t("The title was not saved."));
+        }
+        renderTitle(store.get());
+        $("titleEdit").focus();
+      };
+      const form = $("titleForm");
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        done({ artist: artist.value, title: name.value });
+      };
+      form.onkeydown = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          done(null);
+        }
+      };
+      clear(form, artist, name,
+        h("button", { type: "submit", class: "btn primary" }, W.t("Save")),
+        h("button", { type: "button", class: "btn ghost", onclick: () => done(null) }, W.t("Cancel")),
+        h("button", { type: "button", class: "btn ghost", "data-testid": "title-reset", onclick: () => done({ artist: "", title: "" }) }, W.t("Back to the recording's title")));
+      form.hidden = false;
+      $("songTitle").hidden = true;
+      $("titleEdit").hidden = true;
+      name.focus();
+    }
+    $("titleEdit").addEventListener("click", openTitle);
+
+    // The song's notes (spec 031): who starts, how it ends; written once, on every device of the band.
+    let notesOpen = false;
+    function renderNotes(s) {
+      if (notesOpen) return;
+      const lines = s.bandNote ? s.bandNote.split("\n") : [];
+      const tool = !s.canShare
+        ? null
+        : lines.length
+          ? h("button", { type: "button", class: "btn ghost notes-edit", "data-testid": "notes-edit", "aria-label": W.t("Edit the notes"), title: W.t("Edit the notes"), onclick: openNotes }, "✎")
+          : h("button", { type: "button", class: "btn ghost notes-add", "data-testid": "notes-add", onclick: openNotes }, W.t("+ Notes"));
+      clear($("songNotes"),
+        lines.length ? h("div", { class: "band-note", "data-testid": "band-note" }, h("span", { class: "note-label" }, W.t("Notes")), lines.map((l) => h("p", { translate: "no" }, l))) : null,
+        tool);
+      $("songNotes").hidden = !lines.length && !tool;
+    }
+    function openNotes() {
+      notesOpen = true;
+      const area = h("textarea", { class: "notes-input", rows: "4", maxlength: "1000", "data-testid": "notes-input", "aria-label": W.t("Notes on this song"), placeholder: W.t("Who starts, how it ends, cues…") });
+      area.value = store.get().bandNote;
+      const insert = (label) => {
+        const v = area.value;
+        area.value = v + (v && !v.endsWith("\n") ? "\n" : "") + label + " ";
+        area.focus();
+        area.setSelectionRange(area.value.length, area.value.length);
+      };
+      const done = async (keep) => {
+        if (!notesOpen) return;
+        notesOpen = false;
+        if (keep && area.value !== store.get().bandNote) {
+          const band = await app.shareBand({ note: area.value });
+          if (band) store.set({ bandNote: band.note || "" });
+          else app.toast(W.t("The notes were not saved."));
+        }
+        renderNotes(store.get());
+      };
+      area.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          done(false);
+        } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) done(true);
+      });
+      const keepFocus = (e) => e.preventDefault(); // a quick insert leaves the cursor in the text
+      clear($("songNotes"), h("div", { class: "notes-editor" }, area, h("div", { class: "notes-tools" },
+        h("button", { type: "button", class: "btn", "data-testid": "notes-start", onmousedown: keepFocus, onclick: () => insert(W.t("Start:")) }, W.t("Start:")),
+        h("button", { type: "button", class: "btn", "data-testid": "notes-end", onmousedown: keepFocus, onclick: () => insert(W.t("End:")) }, W.t("End:")),
+        h("button", { type: "button", class: "btn primary", "data-testid": "notes-save", onclick: () => done(true) }, W.t("Save")),
+        h("button", { type: "button", class: "btn ghost", onclick: () => done(false) }, W.t("Cancel")))));
+      $("songNotes").hidden = false;
+      area.focus();
+    }
+
     store.on((s, changed) => {
-      if (changed.has("transpose") || changed.has("corrections") || changed.has("bandNote")) renderFacts(s);
+      if (changed.has("bandTitle") || changed.has("bandArtist") || changed.has("canShare")) renderTitle(s);
+      if (changed.has("bandNote") || changed.has("canShare")) renderNotes(s);
+      if (changed.has("transpose") || changed.has("corrections")) renderFacts(s);
       if (changed.has("inst")) renderInstruments(s);
       if (changed.has("inst") || changed.has("step")) renderPath(s);
     });
 
     return {
       render(s) {
-        $("songTitle").textContent = meta.title;
+        renderTitle(s);
+        renderNotes(s);
         // Served by `woodshed app`: the library is one level up. Opened from disk, there is none.
         $("backLink").hidden = location.protocol === "file:";
         const pending = song.view.pending;
@@ -271,10 +377,31 @@
       clear(box, out);
       app.unglueReminders(box);
     }
+    // The stage's top (spec 031): the song's notes in one line (all of them on a tap) and, for a guitarist with a
+    // capo, the same chord switch as the chart's. Drawn when they change, not on every beat.
+    let noteOpen = false;
+    $("stNote").addEventListener("click", () => {
+      noteOpen = !noteOpen;
+      renderTop(store.get());
+    });
+    function renderTop(s) {
+      const lines = s.bandNote ? s.bandNote.split("\n") : [];
+      $("stNote").hidden = !lines.length;
+      $("stNote").setAttribute("aria-expanded", String(noteOpen));
+      clear($("stNote"), (noteOpen ? lines : lines.slice(0, 1)).map((l) => h("span", { translate: "no" }, l)), !noteOpen && lines.length > 1 ? " …" : null);
+      const capo = s.inst === "guitar" && s.pos === "open" && s.capo > 0;
+      clear($("stView"), capo
+        ? h("span", { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
+          h("button", { type: "button", class: s.view === "concert" ? "on" : "", "aria-pressed": String(s.view === "concert"), "data-testid": "stage-show-concert", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
+          h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "aria-pressed": String(s.view === "shapes"), "data-testid": "stage-show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })))
+        : null);
+    }
     store.on((s, changed) => {
       const keys = ["beat", "playing", "transpose", "capo", "pos", "bpm", "inst", "sheet", "view", "corrections", "pitchStatus"];
       if (changed.has("stage") || (s.stage && keys.some((key) => changed.has(key)))) render(s);
+      if (["stage", "bandNote", "view", "capo", "inst", "pos"].some((key) => changed.has(key))) renderTop(s);
     });
+    renderTop(store.get());
     return { render };
   };
 

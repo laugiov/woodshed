@@ -47,8 +47,6 @@
         if (r.status === 403) toast(W.t("The library was restarted: reload this page."));
         else if (!r.ok) toast(W.t("The set list was not saved: {why}", { why: answer.error }));
         else {
-          // The library cleared the note of a song out of the set: dropped here too, no flash of it on a re-add.
-          for (const f of setlist) if (!answer.songs.includes(f) && info[f] && info[f].band) delete info[f].band.note;
           // The whole answer: the library kept what this save did not send (another device's name, say).
           setlist = answer.songs;
           setName = typeof answer.title === "string" ? answer.title : null;
@@ -224,7 +222,9 @@
   document.addEventListener("pointercancel", pressOver);
   document.addEventListener("contextmenu", pressOver);
   function noteEditor(folder, note) {
-    const input = h("input", { type: "text", class: "set-note-input", maxlength: "300", value: note, "aria-label": W.t("Note for {song}", { song: titles[folder] || folder }), "data-testid": "set-note-input" });
+    // The song's notes (spec 031), on lines: Enter saves, Shift+Enter starts a new line.
+    const input = h("textarea", { class: "set-note-input", rows: Math.min(6, Math.max(1, note.split("\n").length)), maxlength: "1000", value: note, "aria-label": W.t("Note for {song}", { song: titles[folder] || folder }), "data-testid": "set-note-input" });
+    input.value = note; // a textarea's text is its value, not an attribute
     let done = false;
     const finish = async (keep) => {
       if (done) return;
@@ -246,8 +246,10 @@
     };
     input.addEventListener("keydown", (e) => {
       if (e.isComposing) return; // Enter picks a word in an input method, it does not save
-      if (e.key === "Enter") finish(true);
-      else if (e.key === "Escape") finish(false);
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === "Escape") finish(false);
     });
     input.addEventListener("blur", () => finish(true));
     return input;
@@ -290,7 +292,7 @@
           : h("button", { type: "button", class: "set-note" + (band.note ? "" : " empty"), "data-testid": "set-note", onclick: () => {
               editing = folder;
               renderSet({ again: true, editor: true });
-            } }, band.note ? [h("span", { class: "note-label" }, W.t("Note:")), " ", h("span", { translate: "no" }, band.note)] : W.t("+ Note"));
+            } }, band.note ? [h("span", { class: "note-label" }, W.t("Note:")), " ", h("span", { translate: "no" }, band.note.split("\n")[0] + (band.note.includes("\n") ? " …" : ""))] : W.t("+ Note"));
         return h(
           "li",
           { "data-testid": "set-item", "data-set-song": folder },
@@ -306,7 +308,7 @@
               setlist.map((x, j) => h("option", { value: String(j), selected: j === k ? "" : null }, String(j + 1)))),
             h("button", { type: "button", class: "btn", "aria-label": W.t("Earlier in the set"), disabled: k === 0 ? "" : null, onclick: () => moveTo(folder, k - 1), "data-testid": "set-up" }, "↑"),
             h("button", { type: "button", class: "btn", "aria-label": W.t("Later in the set"), disabled: k === setlist.length - 1 ? "" : null, onclick: () => moveTo(folder, k + 1), "data-testid": "set-down" }, "↓"),
-            h("button", { type: "button", class: "btn", "aria-label": W.t("Out of the set"), title: band.note ? W.t("Out of the set, and its note with it") : null, onclick: () => saveSet((next) => next.filter((x) => x !== folder)), "data-testid": "set-remove" }, "✕"),
+            h("button", { type: "button", class: "btn", "aria-label": W.t("Out of the set"), onclick: () => saveSet((next) => next.filter((x) => x !== folder)), "data-testid": "set-remove" }, "✕"),
           ),
         );
       }),
@@ -348,7 +350,7 @@
     // plays, leads and follows, words are added from the computer (round 4).
     if (canUpload && song && song.complete && !song.words && !working)
       tags.push(h("a", { class: "tag add", href: link(song.folder) + "#words", "data-testid": "add-words" }, W.t("add the words")));
-    const t = titled(song ? song.title : job.name);
+    const t = titled(song ? W.shownTitle(song) : job.name);
     const band = (song && song.band) || {};
     const key = song ? band.key || song.key : null;
     return h(
@@ -464,7 +466,7 @@
     sixSet = true;
     info = {};
     for (const s of data.songs) {
-      titles[s.folder] = s.title;
+      titles[s.folder] = W.shownTitle(s); // the band's own title when it gave one (spec 031)
       info[s.folder] = s;
     }
     renderSet();
@@ -472,7 +474,7 @@
     const jobs = data.jobs;
     const byFolder = new Map(jobs.filter((j) => j.page).map((j) => [j.page, j]));
     const wanted = fold($("find").value);
-    const rows = data.songs.filter((s) => !wanted || fold(s.title).includes(wanted)).map((s) => row(s, byFolder.get(s.folder)));
+    const rows = data.songs.filter((s) => !wanted || fold(W.shownTitle(s)).includes(wanted)).map((s) => row(s, byFolder.get(s.folder)));
     for (const j of jobs) if (!j.page || !data.songs.some((s) => s.folder === j.page)) rows.unshift(row(null, j));
     if (wanted && !rows.length) rows.push(h("li", { class: "no-match muted", "data-testid": "no-match" }, W.t("No song matches this search.")));
     clear($("rows"), rows);

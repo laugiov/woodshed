@@ -740,15 +740,15 @@
         if (s.inst === "guitar" && s.pos === "open" && s.capo > 0) {
           clear(
             el,
-            sheetCtl,
-            wordsBtn,
-            editBtn,
             h(
               "div",
               { class: "seg-ctl", role: "group", "aria-label": W.t("Chart shows") },
               h("button", { type: "button", class: s.view === "concert" ? "on" : "", "aria-pressed": String(s.view === "concert"), "data-testid": "show-concert", onclick: () => store.set({ view: "concert" }) }, W.t("Real chords")),
               h("button", { type: "button", class: s.view === "shapes" ? "on" : "", "aria-pressed": String(s.view === "shapes"), "data-testid": "show-shapes", onclick: () => store.set({ view: "shapes" }) }, W.t("Shapes, capo {n}", { n: s.capo })),
-            ),
+            ), // first: the guitarist with a capo sees at once what the chart shows (spec 031)
+            sheetCtl,
+            wordsBtn,
+            editBtn,
             keyNote(s).slice(s.transpose ? 0 : 1), // the capo says where the chords sound already
           );
         } else clear(el, sheetCtl, wordsBtn, editBtn, keyNote(s));

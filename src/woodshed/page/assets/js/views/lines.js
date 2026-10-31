@@ -158,7 +158,7 @@
     function chips(r) {
       const s = store.get();
       return r.bars.filter((b) => !b.cont).map((b) => {
-        const names = song.bars[b.bar].chords.map((c) => W.prettyText(app.nameFor(c, 0, s, b.bar)));
+        const names = song.bars[b.bar].chords.map((c) => W.prettyText(app.nameFor(c, app.showShapes(s) ? s.capo : 0, s, b.bar)));
         return h("button", {
           type: "button", class: "bar-chip", "data-testid": "line-bar",
           "aria-label": W.t("Bar {n}: {chords}", { n: b.bar + 1, chords: names.join(", ") }),
