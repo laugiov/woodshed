@@ -11,6 +11,7 @@ import re
 import secrets
 import sys
 import time
+import unicodedata
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,9 @@ KNOWN_SECTIONS = {
     "words_more",
 }  # of a corrections file; any other is kept as it is
 LOCK_WAIT = 10.0  # seconds a write waits for another woodshed (the app, `woodshed lyrics`) writing the same file
-NOTE_MAX = 300  # the leader's note on a song: "capo 2, starts on the chorus"
+NOTE_MAX = 1000  # the song's notes: "Start: drums count 4, then guitar", line breaks counted
+NOTE_LINES = 12
+TITLE_MAX = 120  # the band's own title or artist for a song
 DOUBT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 EDITS_BARS_MAX = 1000
 EDITS_PARTS_MAX = 200
@@ -110,8 +113,29 @@ def _checked_edits(data: Any, removals: bool = False) -> dict[str, Any]:
     return out
 
 
+def shown_name(value: Any) -> str | None:
+    """A name a person gave (the set's, a song's title or artist): NFC, white space (tabs and new lines included)
+    collapsed to one space and trimmed; None when nothing is left. ValueError("text") when it is not text,
+    ValueError("character") for a control or format character."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("text")
+    kept = []
+    for ch in unicodedata.normalize("NFC", value):
+        category = unicodedata.category(ch)
+        if ch in "\t\n\r" or category == "Zs":
+            kept.append(" ")
+        elif category in ("Cc", "Cf", "Zl", "Zp"):
+            raise ValueError("character")
+        else:
+            kept.append(ch)
+    return " ".join(w for w in "".join(kept).split(" ") if w) or None
+
+
 def _checked_band(data: Any) -> dict[str, Any]:
-    """{"transpose", "key", "note"}, each optional: the band's key for a song and the leader's note."""
+    """{"transpose", "key", "note", "title", "artist"}, each optional: the band's key for a song, its notes (lines
+    kept, each trimmed, blank ones dropped) and its own title and artist (the set name's rules); empty: removed."""
     if not isinstance(data, dict):
         raise ValueError("band: a JSON object")
     out: dict[str, Any] = {}
@@ -126,9 +150,22 @@ def _checked_band(data: Any) -> dict[str, Any]:
         out["key"] = data["key"]
     if "note" in data:
         note = data["note"]
-        if not isinstance(note, str) or len(note) > NOTE_MAX:
-            raise ValueError(f"note: text, {NOTE_MAX} characters at most")
-        out["note"] = " ".join(note.split())  # one line in the set list
+        if not isinstance(note, str):
+            raise ValueError("note: text")
+        lines = [" ".join(line.split()) for line in note.splitlines()]
+        kept = "\n".join(line for line in lines if line)
+        if len(kept) > NOTE_MAX or kept.count("\n") >= NOTE_LINES:
+            raise ValueError("note: 1000 characters and 12 lines at most")
+        out["note"] = kept
+    for said in ("title", "artist"):
+        if said in data:
+            try:
+                name = shown_name(data[said])
+            except ValueError:
+                raise ValueError(f"{said}: text without control characters") from None
+            if name is not None and len(name) > TITLE_MAX:
+                raise ValueError(f"{said}: 120 characters at most")
+            out[said] = name or ""
     return out
 
 

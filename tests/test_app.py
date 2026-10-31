@@ -683,13 +683,13 @@ def test_started_again_while_it_runs_it_shows_the_running_one(
     assert store.read_text(encoding="utf-8") == kept  # and its band choices
 
 
-def test_a_start_clears_the_notes_left_out_of_the_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_start_keeps_the_notes_of_songs_out_of_the_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app.AppServer, "serve_forever", lambda self: None)  # started, then stopped at once
     store = tmp_path / "library" / app.CORRECTIONS_DIR / "One.woodshed.json"
     store.parent.mkdir(parents=True)
     store.write_text(json.dumps({"rev": 1, "by_key": {}, "band": {"note": "out of the set"}}), encoding="utf-8")
     app.serve(tmp_path / "library", Options(use_stems=False, open_page=False), port=0, open_browser=False)
-    assert "band" not in json.loads(store.read_text(encoding="utf-8"))
+    assert json.loads(store.read_text(encoding="utf-8"))["band"] == {"note": "out of the set"}
 
 
 def test_another_service_on_the_port_is_not_taken_for_woodshed(tmp_path: Path) -> None:

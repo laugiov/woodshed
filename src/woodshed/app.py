@@ -36,7 +36,6 @@ import sys
 import threading
 import time
 import traceback
-import unicodedata
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
@@ -161,26 +160,17 @@ class JobReporter(Reporter):
 
 
 def normalise_set_title(value: Any) -> str | None:
-    """The set's name as kept (spec 030): NFC, white space (tabs and new lines included) collapsed to one space and
-    trimmed; None when nothing is left. A control or format character, or a name over SET_TITLE_MAX characters, is
-    refused. The page applies the same rules (home/home.js), on the same cases (tests/set_name_cases.json)."""
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError("title: the set's name, as text")
-    kept = []
-    for ch in unicodedata.normalize("NFC", value):
-        category = unicodedata.category(ch)
-        if ch in "\t\n\r" or category == "Zs":
-            kept.append(" ")
-        elif category in ("Cc", "Cf", "Zl", "Zp"):
-            raise ValueError("title: a character that cannot be shown")
-        else:
-            kept.append(ch)
-    name = " ".join(w for w in "".join(kept).split(" ") if w)
-    if len(name) > SET_TITLE_MAX:
+    """The set's name as kept (spec 030): `corrections.shown_name` with 80 characters at most. The page applies the
+    same rules (home/home.js), on the same cases (tests/set_name_cases.json)."""
+    try:
+        name = corrections.shown_name(value)
+    except ValueError as exc:
+        raise ValueError(
+            "title: the set's name, as text" if str(exc) == "text" else "title: a character that cannot be shown"
+        ) from None
+    if name is not None and len(name) > SET_TITLE_MAX:
         raise ValueError("title: 80 characters at most")  # SET_TITLE_MAX
-    return name or None
+    return name
 
 
 class Library:
@@ -507,7 +497,6 @@ class Library:
             if doc is None and "songs" not in data:
                 raise WoodshedError("the set list cannot be read: save the set's songs again first")
             doc = doc or {}
-            left = [n for n in self._set_names() or [] if n not in (names or [])] if "songs" in data else []
             if "songs" in data:
                 doc["songs"] = names
             doc.setdefault("songs", [])
@@ -525,40 +514,7 @@ class Library:
             finally:
                 tmp.unlink(missing_ok=True)
             self.set_stamp = None  # read again: a save in the same instant may keep the time and the size
-            # A note is written from the set list: it is the set's note for that song, gone with it.
-            cleared = {folder: rev for folder in left if (rev := self._clear_note(folder)) is not None}
-        if self.on_band is not None:
-            for folder, rev in cleared.items():
-                self.on_band(folder, rev)  # the open pages read the song again
         return self.setlist_state()
-
-    def _clear_note(self, folder: str) -> int | None:
-        """Under the lock: the band's note on a song taken away; its new revision, or None if it had none."""
-        with corrections_lock(self._corrections_file(folder)):  # another woodshed on the library waits
-            stored = self._stored(folder)
-            if "note" not in stored["band"]:
-                return None
-            stored["band"].pop("note")
-            return self._write(folder, stored)
-
-    def clear_notes_out_of_the_set(self) -> None:
-        """At start, once the port is ours (serve): the notes 0.4.0 left on songs out of the set."""
-        names = self._set_names()
-        if names is None:  # a set list damaged by hand or unreadable: no note is lost on its account
-            return
-        with self.lock:
-            for file in sorted((self.root / CORRECTIONS_DIR).glob("*.woodshed.json")):
-                if file.stem in names:
-                    continue
-                try:
-                    self._clear_note(file.stem)
-                except OSError as exc:  # a library on a read-only disk still starts
-                    print(f"woodshed app: the notes of songs out of the set were not cleared: {exc}", file=sys.stderr)
-                    return
-
-    # Corrections: the chords picked by ear, kept by the library so every device of the band reads
-    # the same chart. Out of the page folders (a rebuild replaces them), per analysis of the song: a
-    # page left open on an older analysis never hides the corrections of the current one.
 
     def _page(self, folder: Any) -> str:
         if not isinstance(folder, str) or folder not in {p["folder"] for p in self.pages()}:
@@ -666,11 +622,12 @@ class Library:
             }
 
     def set_band(self, data: Any) -> dict[str, Any]:
-        """The band's own choices for a song, from any device: the key it plays in, the leader's note."""
+        """The band's own choices for a song, from any device: the key it plays in, its notes, its own title and
+        artist (spec 031). The notes are the song's: they stay when it leaves the set."""
         if not isinstance(data, dict):
             raise ValueError("band: a JSON object")
         folder = self._page(data.get("page"))
-        change = _checked_band({k: data[k] for k in ("transpose", "key", "note") if k in data})
+        change = _checked_band({k: data[k] for k in ("transpose", "key", "note", "title", "artist") if k in data})
         if ("transpose" in change) != ("key" in change):
             raise ValueError("transpose and key go together")
         with self.lock, corrections_lock(self._corrections_file(folder)):
@@ -679,10 +636,9 @@ class Library:
             if band.get("transpose") == 0:  # the recorded key again: nothing to say
                 band.pop("transpose", None)
                 band.pop("key", None)
-            names = self._set_names()
-            # A note is the set's: none for a song out of it (removed from the set while the note was written).
-            if not band.get("note") or (names is not None and folder not in names):
-                band.pop("note", None)
+            for said in ("note", "title", "artist"):  # emptied: gone (the recording's title again)
+                if not band.get(said):
+                    band.pop(said, None)
             stored["band"] = band
             rev = self._write(folder, stored)
         if self.renders is not None and "transpose" in change:  # the band's key, ready on every device
@@ -2667,7 +2623,6 @@ def serve(
                 webbrowser.open(url)
             return
         library.clear_cut_uploads()
-        library.clear_notes_out_of_the_set()
         updated = library.update_pages()
         if updated:
             print(f"woodshed app: {len(updated)} page(s) updated to this version's page", flush=True)

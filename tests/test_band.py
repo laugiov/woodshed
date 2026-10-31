@@ -293,24 +293,14 @@ def test_the_set_list_keeps_its_order_and_forgets_removed_pages(server: app.AppS
     assert json.loads(request(server, "GET", "/api/setlist")[2])["songs"] == ["One.woodshed"]
 
 
-def test_a_song_leaving_the_set_takes_its_note_with_it(server: app.AppServer) -> None:
+def test_a_song_leaving_the_set_keeps_its_note(server: app.AppServer) -> None:
+    """The note is the song's (spec 031): "drums count 4, then guitar" stays when the song leaves the set."""
     post(server, "/api/setlist", {"songs": ["One.woodshed", "Two.woodshed"]})
     post(server, "/api/band", {"page": "One.woodshed", "transpose": 2, "key": "D", "note": "starts on the chorus"})
-    post(server, "/api/band", {"page": "Two.woodshed", "note": "capo 2"})
-    follower = Stream(server)
-    try:
-        follower.next()
-        status, answer = post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
-        assert status == 200 and answer["songs"] == ["Two.woodshed"]
-        one = server.library.corrections("One.woodshed", "a1")
-        assert one["band"] == {"transpose": 2, "key": "D"}  # the note was the set's; the band's key stays
-        assert server.library.corrections("Two.woodshed", "a1")["band"] == {"note": "capo 2"}  # still in the set
-        event = follower.next()  # the open pages read the song again
-        assert isinstance(event, dict) and event["fixes"]["One.woodshed"] == one["rev"]
-    finally:
-        follower.close()
-    post(server, "/api/setlist", {"songs": ["Two.woodshed", "One.woodshed"]})
-    assert "note" not in server.library.corrections("One.woodshed", "a1")["band"]  # back in the set: no old note
+    status, answer = post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
+    assert status == 200 and answer["songs"] == ["Two.woodshed"]
+    band = server.library.corrections("One.woodshed", "a1")["band"]
+    assert band == {"transpose": 2, "key": "D", "note": "starts on the chorus"}
 
 
 def left_by_0_4_0(server: app.AppServer, folder: str, band: dict[str, Any]) -> None:
@@ -322,25 +312,13 @@ def left_by_0_4_0(server: app.AppServer, folder: str, band: dict[str, Any]) -> N
 
 def restarted(server: app.AppServer) -> app.Library:
     """The library opened again by a start that got the port (serve)."""
-    library = app.Library(server.library.root, Options(use_stems=False, open_page=False))
-    library.clear_notes_out_of_the_set()
-    return library
+    return app.Library(server.library.root, Options(use_stems=False, open_page=False))
 
 
-def test_notes_left_on_songs_out_of_the_set_are_cleared_at_start(server: app.AppServer) -> None:
+def test_a_start_keeps_every_note(server: app.AppServer) -> None:
     post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
-    for name in ("One.woodshed", "Two.woodshed"):
-        left_by_0_4_0(server, name, {"note": "from an older version"})
-    left_by_0_4_0(server, "Three.woodshed", {"transpose": -1, "key": "B", "note": "from an older version"})
-    later = restarted(server)
-    assert later.corrections("One.woodshed", "a1")["band"] == {}
-    assert later.corrections("Two.woodshed", "a1")["band"] == {"note": "from an older version"}
-    assert later.corrections("Three.woodshed", "a1")["band"] == {"transpose": -1, "key": "B"}
-    rev = later.corrections("One.woodshed", "a1")["rev"]
-    again = restarted(server)
-    assert again.corrections("One.woodshed", "a1")["rev"] == rev  # cleared once: nothing written again
-    (server.library.root / app.SETLIST).unlink()  # no set list at all: an empty set
-    assert restarted(server).corrections("Two.woodshed", "a1")["band"] == {}
+    left_by_0_4_0(server, "One.woodshed", {"note": "from an older version"})
+    assert restarted(server).corrections("One.woodshed", "a1")["band"] == {"note": "from an older version"}
 
 
 @pytest.mark.parametrize("saved", ["{not json", '{"songs": "Two.woodshed"}', "[]", None])
@@ -357,28 +335,10 @@ def test_a_set_list_that_cannot_be_read_clears_no_note(server: app.AppServer, sa
     assert later.corrections("One.woodshed", "a1")["band"] == {"note": "capo 2"}
 
 
-def test_a_library_that_cannot_be_written_still_starts(
-    server: app.AppServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    for name in ("One.woodshed", "Two.woodshed"):
-        left_by_0_4_0(server, name, {"note": "from an older version"})
-
-    def read_only(self: app.Library, folder: str, stored: dict[str, Any]) -> int:
-        raise PermissionError(13, "Read-only file system")
-
-    monkeypatch.setattr(app.Library, "_write", read_only)
-    later = restarted(server)  # no set list: both notes are out of the set
-    assert later.corrections("One.woodshed", "a1")["band"] == {"note": "from an older version"}
-    said = capsys.readouterr().err
-    assert said.count("woodshed app:") == 1 and "note" in said  # said once, not once per song
-
-
-def test_a_note_is_kept_only_for_a_song_in_the_set(server: app.AppServer) -> None:
+def test_a_note_is_kept_for_a_song_out_of_the_set(server: app.AppServer) -> None:
     post(server, "/api/setlist", {"songs": ["Two.woodshed"]})
-    status, saved = post(server, "/api/band", {"page": "One.woodshed", "transpose": 2, "key": "D", "note": "x"})
-    assert status == 200 and saved["band"] == {"transpose": 2, "key": "D"}  # left the set meanwhile: no note
-    _, saved = post(server, "/api/band", {"page": "Two.woodshed", "note": "capo 2"})
-    assert saved["band"] == {"note": "capo 2"}
+    status, saved = post(server, "/api/band", {"page": "One.woodshed", "note": "capo 2"})
+    assert status == 200 and saved["band"] == {"note": "capo 2"}
 
 
 @pytest.mark.parametrize(
@@ -589,7 +549,7 @@ def test_the_band_key_and_note_are_kept_with_the_corrections_for_every_device(se
     assert read["band"] == {"transpose": 3, "key": "Eb"} and read["fixes"] == {"3": [9, "m"], "7": [7, ""]}
     assert read["rev"] == saved["rev"]
     _, saved = post(server, "/api/band", {"page": "One.woodshed", "note": "  capo 2,\n starts on the chorus "})
-    assert saved["band"] == {"transpose": 3, "key": "Eb", "note": "capo 2, starts on the chorus"}
+    assert saved["band"] == {"transpose": 3, "key": "Eb", "note": "capo 2,\nstarts on the chorus"}  # lines kept
     post(server, "/api/corrections", fixes(fixes={"9": [4, "m"]}))  # a correction keeps the band's choices
     songs = {s["folder"]: s for s in json.loads(request(server, "GET", "/api/songs")[2])["songs"]}
     assert songs["One.woodshed"]["band"] == saved["band"] and "band" not in songs["Two.woodshed"]
@@ -605,7 +565,7 @@ def test_the_band_key_and_note_are_kept_with_the_corrections_for_every_device(se
         {"page": "One.woodshed", "key": "D"},  # a name without its key
         {"page": "One.woodshed", "transpose": 2, "key": "<b>"},
         {"page": "One.woodshed", "transpose": True, "key": "D"},
-        {"page": "One.woodshed", "note": "x" * 301},
+        {"page": "One.woodshed", "note": "x" * 1001},
         {"page": "../One.woodshed", "note": "x"},
         ["One.woodshed"],
     ],
