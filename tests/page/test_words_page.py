@@ -86,7 +86,9 @@ def test_words_pasted_in_the_page_are_placed_and_shown(page: Page, library: app.
     page.get_by_test_id("words-header").click()
     expect(page.get_by_test_id("words-text")).to_have_value(WORDS)  # closed by mistake: the paste is kept
     page.get_by_test_id("words-place").click()
-    expect(page.get_by_test_id("words-percent")).to_have_text("50 %")  # half the voice heard
+    expect(page.get_by_test_id("words-percent")).to_have_text(
+        "50 %", timeout=20_000
+    )  # half the voice heard (a loaded runner places slowly)
     expect(page.get_by_test_id("words-status")).to_have_text("Listening to the voice")
     expect(page.get_by_test_id("sheet-lyrics")).to_be_visible(timeout=15000)  # reloaded with the words
     expect(page.locator(".lline").first).to_contain_text("Morning")

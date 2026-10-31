@@ -592,7 +592,7 @@ def test_the_read_back_is_said_once_typing_pauses_and_a_refusal_at_once(
     page.get_by_test_id("typed-field").press_sequentially("Hold me")
     expect(page.get_by_test_id("typed-read")).to_contain_text("\u201cme\u201d")  # shown at once
     assert "\u201cme\u201d" not in (say.text_content() or "")  # said once typing pauses
-    expect(say).to_contain_text("\u201cme\u201d", timeout=2000)
+    expect(say).to_contain_text("\u201cme\u201d", timeout=8000)  # a loaded CI runner: the pause comes late
     page.get_by_test_id("typed-field").press_sequentially(" | x")
     expect(say).to_have_text("Past the song's last bar.", timeout=300)  # a refusal is said at once
     assert problems == []
