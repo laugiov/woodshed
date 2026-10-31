@@ -16,7 +16,7 @@ Chords, words and a part for each musician, on your own computer. Free, offline,
 </p>
 
 <p align="center">
-  <img src="docs/images/tour.gif" alt="A tour of woodshed: lyrics with chords, the chart, checking a chord by ear, bass, drums and keys parts, stage mode, phones, band mode, the library, exports" width="100%">
+  <img src="docs/images/tour.gif" alt="A tour of woodshed: lyrics with chords, the chart, checking a chord by ear, bass, drums and keys parts, stage mode, phones, band mode, the library, six styles, exports" width="100%">
 </p>
 
 > *Woodshedding*: musicians' slang for practising alone, hard, until you've got it.
@@ -32,7 +32,7 @@ Chords, words and a part for each musician, on your own computer. Free, offline,
 - **The singer's key, for everyone.** The chart, the shapes and the recording itself move to the key
   that suits the voice.
 - **Your band's look.** Name the set, then pick a style: the practice room, a 70s, 80s, 90s or 2000s
-  one, or Spotlight, the most contrast for a gig in the sun or a dark stage.
+  one, or Spotlight, the most contrast for a gig in the sun or a dark stage. [See it](docs/images/styles.png)
 - **The whole band on their phones.** One computer leads, every phone follows to the bar: stage
   mode, a set list, and exports for OnSong, MuseScore or the music stand.
 

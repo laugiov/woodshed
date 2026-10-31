@@ -124,6 +124,8 @@ The page speaks English or French (your browser's language at first), dark by de
 a sunny room: two buttons at the top, remembered, and switched without stopping the music. Chord
 names, titles and words are never translated.
 
+<img src="../images/styles.png" alt="The song page in the six styles: woodshed, Spotlight, Disco 70, Mixtape 80, Grunge 90 and Y2K" width="100%">
+
 The **Style** button beside them (four small squares) changes the whole look, on this device only:
 **woodshed**, **Spotlight** (the most contrast: black on white in the sun, white and yellow on black on
 a dark stage), **Disco 70**, **Mixtape 80**, **Grunge 90** and **Y2K**. Each works dark or light. The
